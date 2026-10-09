@@ -22,7 +22,8 @@ describe('deck rules', () => {
     const deck = buildDeck(leader, MODES.standard, rng);
     const ids = deckCardIds(deck);
     expect(legalModes(leader.id, ids)).toEqual(['standard']);
-    const kinds = (list: string[]) => checkDeck(leader.id, list, 'standard').issues.map((i) => i.kind);
+    const kinds = (list: string[]) =>
+      checkDeck(leader.id, list, 'standard').issues.map((i) => i.kind);
     expect(kinds(ids.slice(1))).toContain('location');
     expect(kinds(ids.slice(0, 10))).toContain('count');
     const p = ids[1];

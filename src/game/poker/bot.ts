@@ -60,7 +60,12 @@ function boardSize(v: Match): number {
 }
 
 /** Equity from this seat's view only. */
-export function estimateEquity(v: Match, seat: number, rng: Rng, trials = BOT.equityTrials): number {
+export function estimateEquity(
+  v: Match,
+  seat: number,
+  rng: Rng,
+  trials = BOT.equityTrials,
+): number {
   const h = v.hand!;
   const hole = h.holes[seat].filter((c) => !isHidden(c));
   const board = visibleBoard(v);
@@ -91,7 +96,8 @@ function bestTwo(hole: Card[], board: Card[]): Card[] {
   for (let a = 0; a < hole.length; a++)
     for (let b = a + 1; b < hole.length; b++) {
       const pair = [hole[a], hole[b]];
-      const score = board.length >= 3 ? evaluate([...pair, ...board]).score : preflopStrength(pair) * 1e7;
+      const score =
+        board.length >= 3 ? evaluate([...pair, ...board]).score : preflopStrength(pair) * 1e7;
       if (score > bestScore) {
         bestScore = score;
         best = pair;
@@ -190,7 +196,9 @@ function powerValue(v: Match, seat: number, def: CardDef, r: Read): number {
 function chooseExtraCosts(v: Match, seat: number, uid: string, count: number): ExtraCost[] | null {
   const h = v.hand!;
   const out: ExtraCost[] = [];
-  const hand = v.seats[seat].hand.filter((p) => p.uid !== uid).sort((a, b) => (a.def.tier ?? 0) - (b.def.tier ?? 0));
+  const hand = v.seats[seat].hand
+    .filter((p) => p.uid !== uid)
+    .sort((a, b) => (a.def.tier ?? 0) - (b.def.tier ?? 0));
   const excl = excludableCategories(v, seat);
   // Bluffers love exclusions (they bite only at showdown); flushes are the
   // cheapest category to give up for an unsuited hand.
@@ -200,7 +208,8 @@ function chooseExtraCosts(v: Match, seat: number, uid: string, count: number): E
   while (out.length < count) {
     if (prefer.length) out.push({ kind: 'exclude', category: prefer.shift()! });
     else if (shedIdx < hand.length) out.push({ kind: 'shed', uid: hand[shedIdx++].uid });
-    else if (debuff < h.holes[seat].length && !h.holes[seat][debuff].blinded) out.push({ kind: 'debuff', hole: debuff++ });
+    else if (debuff < h.holes[seat].length && !h.holes[seat][debuff].blinded)
+      out.push({ kind: 'debuff', hole: debuff++ });
     else return null;
   }
   return out;
@@ -239,7 +248,8 @@ function tryCast(v: Match, seat: number, r: Read, rng: Rng, inWindow: boolean): 
     const targetCast = castTargets(v, seat, def).slice(-1)[0]?.id ?? null;
     const costs = cost.extra > 0 ? chooseExtraCosts(v, seat, inst.uid, cost.extra) : [];
     if (costs === null) continue;
-    const feint = def.mods?.some((m) => m.kw === 'Feint') && value < 0.5 && rng.next() < p.bluff * 2;
+    const feint =
+      def.mods?.some((m) => m.kw === 'Feint') && value < 0.5 && rng.next() < p.bluff * 2;
     const action: Action = { type: 'cast', seat, uid: inst.uid, target, targetCast, costs, feint };
     if (!best || score > best.score) best = { action, score };
   }
@@ -255,7 +265,8 @@ function tryLeader(v: Match, seat: number, r: Read, rng: Rng): Action | null {
     const pseudo = leaderPseudoDef(s.leader, i);
     const value = powerValue(v, seat, pseudo, r);
     // Spend nerve when the ability is worth it; build nerve when running low.
-    const want = ab.nerve < 0 ? value > 0.8 && s.nerve >= -ab.nerve + 1 : s.nerve <= 4 && rng.next() < 0.5;
+    const want =
+      ab.nerve < 0 ? value > 0.8 && s.nerve >= -ab.nerve + 1 : s.nerve <= 4 && rng.next() < 0.5;
     if (!want) continue;
     let target: number | null = null;
     if (KEYWORD_SPECS[ab.effect.kw].target === 'opponent') {
@@ -280,7 +291,8 @@ function chooseCard(v: Match, seat: number): number {
   if (p?.kind !== 'choice' || opts.length === 0) return 0;
   const scoreWithout = (k: number) => {
     const rest = hole.filter((_, i) => i !== k && !isHidden(hole[i]));
-    if (board.length >= 3 && rest.length + board.length >= 5) return evaluate([...rest, ...board]).score;
+    if (board.length >= 3 && rest.length + board.length >= 5)
+      return evaluate([...rest, ...board]).score;
     return preflopStrength(rest.slice(0, 2)) * 1e7;
   };
   switch (p.choice) {
@@ -347,7 +359,9 @@ function pace(action: Action, v: Match, seat: number, rng: Rng): number {
     action.type === 'raise' ||
     action.type === 'cast' ||
     action.type === 'leader' ||
-    (action.type === 'call' && h && (betOptions(v, seat)?.callAmount ?? 0) > v.seats[seat].stack * 0.2)
+    (action.type === 'call' &&
+      h &&
+      (betOptions(v, seat)?.callAmount ?? 0) > v.seats[seat].stack * 0.2)
       ? BOT.slowActionMs
       : BOT.fastActionMs;
   return Math.round(lo + rng.next() * (hi - lo));
@@ -377,7 +391,8 @@ export function botAction(view: Match, seat: number, rng: Rng): Action | null {
       const opts = h.dealtIn.map((_, i) => i).filter((i) => i !== seat && inHand(h, i));
       if (opts.length) action = { type: 'freePeek', seat, target: threatTarget(view, seat, opts) };
     }
-    if (!action && rng.next() < 0.2 + persona.powerUse * 0.3) action = tryCast(view, seat, r, rng, false);
+    if (!action && rng.next() < 0.2 + persona.powerUse * 0.3)
+      action = tryCast(view, seat, r, rng, false);
     if (!action && rng.next() < 0.5) action = tryLeader(view, seat, r, rng);
     if (!action) action = betDecision(view, seat, r, rng);
   }

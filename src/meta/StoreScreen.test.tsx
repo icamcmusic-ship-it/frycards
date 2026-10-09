@@ -6,7 +6,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { POOL_V4 } from '../game/v3/cardpool';
+import { POOL } from '../game/poker/cardpool';
 import type { PackPull, PackType } from '../lib/supabase';
 
 const openInventoryPack = vi.fn();
@@ -61,7 +61,7 @@ vi.mock('./MetaContext', () => ({
 // Imported after the mocks are registered.
 const { StoreScreen } = await import('./StoreScreen');
 
-const cards = POOL_V4.filter((c) => c.type !== 'Leader');
+const cards = POOL.filter((c) => c.type !== 'Leader');
 const result = (offset: number) => ({
   data: {
     packs_opened: 1,

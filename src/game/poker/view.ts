@@ -52,9 +52,13 @@ export function viewFor(m: Match, seat: number): Match {
   if (h) {
     const src = m.hand!;
     h.holes = src.holes.map((cards, holder) => redactCards(cards, seat, holder));
-    h.deck = src.deck.map((c) => (c.knownTo.includes(seat) ? { ...c, knownTo: [] } : HIDDEN_CARD(-1)));
+    h.deck = src.deck.map((c) =>
+      c.knownTo.includes(seat) ? { ...c, knownTo: [] } : HIDDEN_CARD(-1),
+    );
     h.board = src.board.map((c) => (c.facedown ? HIDDEN_CARD(-1) : { ...c, knownTo: [] }));
-    h.board2 = src.board2 ? src.board2.map((c) => (c.facedown ? HIDDEN_CARD(-1) : { ...c, knownTo: [] })) : null;
+    h.board2 = src.board2
+      ? src.board2.map((c) => (c.facedown ? HIDDEN_CARD(-1) : { ...c, knownTo: [] }))
+      : null;
     h.burn = src.burn.map(() => HIDDEN_CARD(-1));
     h.muck = redactCards(src.muck, seat, null);
     for (const c of h.casts) {

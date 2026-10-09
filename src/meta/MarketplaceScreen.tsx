@@ -20,8 +20,8 @@ import {
 import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
 import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
-import { POOL_BY_ID } from '../game/v3/cardpool';
-import { CardDef } from '../game/v3/cards';
+import { POOL_BY_ID } from '../game/poker/cardpool';
+import { CardDef } from '../game/poker/cards';
 import { CardFace } from '../components/CardFaceV4';
 import { RARITY_CHIP, RARITY_ORDER } from './rarity';
 import { quicksellPrice, fmtCredits } from './economy';
@@ -93,6 +93,7 @@ function defFor(cardId: string): CardDef {
   return (
     POOL_BY_ID[cardId] || {
       id: cardId,
+      colors: [],
       name: cardId,
       type: 'Unit' as CardDef['type'],
       rarity: 'Common' as CardDef['rarity'],

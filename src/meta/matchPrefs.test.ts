@@ -36,9 +36,9 @@ beforeEach(() => {
 });
 
 describe('loadCpuSpeed', () => {
-  test('unset falls back to NORMAL, not SLOW', () => {
+  test('unset falls back to 1×, the table pace', () => {
     expect(loadCpuSpeed()).toBe(DEFAULT_CPU_SPEED);
-    expect(CPU_SPEEDS[loadCpuSpeed()].label).toBe('NORMAL');
+    expect(CPU_SPEEDS[loadCpuSpeed()].label).toBe('1×');
   });
 
   test('a stored choice round-trips, by label', () => {
@@ -49,21 +49,24 @@ describe('loadCpuSpeed', () => {
     }
   });
 
-  // v26 inserted CINEMATIC at the slow end of the ladder, so every index a
-  // player had stored before it now names a different speed. A migration that
-  // is wrong here is invisible: the match simply plays at a pace nobody chose.
-  test('a legacy v17-v25 index migrates to the speed it used to mean', () => {
+  // The retired match screen stored CINEMATIC / SLOW / NORMAL / FAST (and,
+  // before v26, bare indexes). None of them may silently become INSTANT.
+  test('a retired label or legacy index maps onto the poker ladder', () => {
     for (const [stored, label] of [
-      ['0', 'SLOW'],
-      ['1', 'NORMAL'],
-      ['2', 'FAST'],
+      ['CINEMATIC', '1×'],
+      ['SLOW', '1×'],
+      ['NORMAL', '1×'],
+      ['FAST', '2×'],
+      ['0', '1×'],
+      ['1', '1×'],
+      ['2', '2×'],
     ] as const) {
       store.set(CPU_SPEED_KEY, stored);
       expect(CPU_SPEEDS[loadCpuSpeed()].label, `legacy ${stored}`).toBe(label);
     }
   });
 
-  test('junk, out-of-range and fractional values fall back to NORMAL', () => {
+  test('junk, out-of-range and fractional values fall back to 1×', () => {
     for (const bad of ['', 'brisk', '-1', '3', '99', '1.5', 'NaN']) {
       store.set(CPU_SPEED_KEY, bad);
       expect(loadCpuSpeed(), `stored ${JSON.stringify(bad)}`).toBe(DEFAULT_CPU_SPEED);
@@ -93,23 +96,21 @@ test('the speed ladder is ordered slow → fast and every entry is labelled', ()
 });
 
 /**
- * The v26 ladder gained a fourth rung (CINEMATIC) and three player-facing
- * strings kept advertising the three-rung v17 one — so the slowest speed in
- * the game was undiscoverable from the two controls that cycle to it and from
- * the page that documents them. The tooltips are now BUILT from the ladder;
- * the prose in How to Play cannot be, so it gets pinned here instead.
+ * A page that spells the speed ladder out in prose must name every rung —
+ * the v26 ladder once shipped with a rung no page mentioned. Tooltips are
+ * built from CPU_SPEEDS; prose is pinned here.
  */
 test('every rung of the ladder is named in the pages that document it', () => {
   for (const rel of [
     'src/components/HowToPlay.tsx',
-    'src/components/GameV4.tsx',
+    'src/components/PokerTable.tsx',
     'src/meta/SettingsScreen.tsx',
   ]) {
     const src = readFileSync(join(process.cwd(), rel), 'utf8');
     // A file either renders the ladder from CPU_SPEEDS (nothing to drift) or
     // spells it out in prose. Only the second kind is checked — and it is
     // checked for EVERY rung, which is exactly what v26 missed.
-    const spellsItOut = /NORMAL \/ FAST/.test(src);
+    const spellsItOut = /1× \/ 2×/.test(src);
     if (!spellsItOut) continue;
     for (const { label } of CPU_SPEEDS) {
       expect(src, `${rel} names the speed ladder but omits ${label}`).toContain(label);

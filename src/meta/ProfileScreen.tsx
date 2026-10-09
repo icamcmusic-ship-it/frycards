@@ -24,11 +24,11 @@ import {
 } from './ui';
 import { RoleBadge } from './RoleBadge';
 import { fmtCredits } from './economy';
-import { POOL_V4 } from '../game/v3/cardpool';
+import { POOL } from '../game/poker/cardpool';
 import { cn, winRatePct } from '../lib/utils';
 import { SafeImage } from './SafeImage';
 import { CardFace } from '../components/CardFaceV4';
-import { POOL_BY_ID } from '../game/v3/cardpool';
+import { POOL_BY_ID } from '../game/poker/cardpool';
 
 export function ProfileScreen({
   onBack,
@@ -411,7 +411,7 @@ function CreatorTools() {
   const [cardFoil, setCardFoil] = useState(false);
   const [role, setRole] = useState<PlayerRole>('player');
 
-  const cardKnown = POOL_V4.some((c) => c.id === cardId);
+  const cardKnown = POOL.some((c) => c.id === cardId);
 
   const handleSearch = async () => {
     if (!query.trim() || searching) return;
@@ -618,7 +618,7 @@ function CreatorTools() {
                   className={`${input} w-48 placeholder:text-[var(--c-steel)]/50`}
                 />
                 <datalist id="creator-card-ids">
-                  {POOL_V4.map((c) => (
+                  {POOL.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>

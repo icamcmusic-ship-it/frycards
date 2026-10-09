@@ -14,7 +14,12 @@ function castOnFlop(kw: string, mods: { kw: string }[] = []): Match {
   const spec = KEYWORD_SPECS[kw as keyof typeof KEYWORD_SPECS];
   const def = power(
     { kw: kw as never, n: spec.numbered ? 1 : undefined },
-    { tier: 3, colors: [spec.color ?? 'Ember'].filter(Boolean) as never, subtype: kw === 'Snuff' ? 'Quick' : 'Slow', mods: mods as never },
+    {
+      tier: 3,
+      colors: [spec.color ?? 'Ember'].filter(Boolean) as never,
+      subtype: kw === 'Snuff' ? 'Quick' : 'Slow',
+      mods: mods as never,
+    },
   );
   const uid = give(m, seat, def);
   const before = chipsInPlay(m);
@@ -49,7 +54,11 @@ describe('every keyword resolves without breaking the table', () => {
   it('Straddle doubles the blind pre-flop and gives the straddler the option', () => {
     const m = rigHand(table(4), { button: 0 });
     const seat = m.hand!.toAct!;
-    const uid = give(m, seat, power({ kw: 'Straddle' }, { colors: ['Ember'], mods: [{ kw: 'Quickstrike' }] }));
+    const uid = give(
+      m,
+      seat,
+      power({ kw: 'Straddle' }, { colors: ['Ember'], mods: [{ kw: 'Quickstrike' }] }),
+    );
     act(m, { type: 'cast', seat, uid });
     expect(m.hand!.currentBet).toBe(200);
     expect(m.hand!.straddler).toBe(seat);

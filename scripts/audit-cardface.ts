@@ -4,8 +4,9 @@
  * The card templates are laid out in absolute pixels at four fixed sizes, and
  * two of their boxes are positioned independently: the flavor block is pinned
  * to the BOTTOM of the text box (`mt-auto` under the dashed rule) while the
- * Might/Grit — or Resolve — stat plate is `position: absolute` in the card's
- * bottom-right corner. `PLATE_CLEARANCE` is the padding that is supposed to
+ * stat plate — a power's chip cost, or a Leader's starting nerve (FryCards
+ * Poker; it held Might/Grit or Resolve in the retired MTG-style game) — is
+ * `position: absolute` in the card's bottom-right corner. `PLATE_CLEARANCE` is the padding that is supposed to
  * keep them apart. Nothing checked that it did, and on the full-bleed
  * templates it did not: flavor text rendered underneath the stat plate on
  * every Full-Art and Mythic card whose flavor ran to the full width of its
@@ -24,7 +25,16 @@ import { chromium } from 'playwright';
 import { blockSupabase } from './lib/block-remote-media';
 
 const BASE = process.env.AUDIT_BASE ?? 'http://localhost:3000';
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Full-Art', 'Mythic'];
+const RARITIES = [
+  'Common',
+  'Uncommon',
+  'Rare',
+  'Super-Rare',
+  'Ultra-Rare',
+  'Full-Art',
+  'Alt-Art',
+  'Mythic',
+];
 const SIZES = ['full', 'standard', 'compact', 'micro'];
 
 interface Overlap {

@@ -6,7 +6,7 @@ import { RoleBadge } from './RoleBadge';
 import { PopButton, UnavailableShowcaseTile } from './ui';
 import { SafeImage } from './SafeImage';
 import { CardFace } from '../components/CardFaceV4';
-import { POOL_BY_ID } from '../game/v3/cardpool';
+import { POOL_BY_ID } from '../game/poker/cardpool';
 import { cn, winRatePct } from '../lib/utils';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 

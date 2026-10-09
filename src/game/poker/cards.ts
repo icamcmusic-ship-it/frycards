@@ -17,14 +17,7 @@ import type { Keyword } from './keywords';
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Item' | 'Event';
 
 export type Rarity =
-  | 'Common'
-  | 'Uncommon'
-  | 'Rare'
-  | 'Super-Rare'
-  | 'Ultra-Rare'
-  | 'Full-Art'
-  | 'Alt-Art'
-  | 'Mythic';
+  'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Ultra-Rare' | 'Full-Art' | 'Alt-Art' | 'Mythic';
 
 /**
  * Item subtypes:

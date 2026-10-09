@@ -6,7 +6,14 @@ import type { CardDef } from './cards';
 import { POOL_BY_ID, poolByType } from './cardpool';
 import { MODES, type ModeId } from './constants';
 import { buildDeck } from './deck';
-import { applyInPlace, createMatch, personaFor, type Action, type Match, type PCard } from './engine';
+import {
+  applyInPlace,
+  createMatch,
+  personaFor,
+  type Action,
+  type Match,
+  type PCard,
+} from './engine';
 import type { Card } from './evaluator';
 import { rngOn } from './rng';
 
@@ -16,7 +23,10 @@ export function cards(s: string): Card[] {
     .trim()
     .split(/\s+/)
     .filter(Boolean)
-    .map((x) => ({ r: '23456789TJQKA'.indexOf(x[0].toUpperCase()) + 2, s: 'shdc'.indexOf(x[1].toLowerCase()) }));
+    .map((x) => ({
+      r: '23456789TJQKA'.indexOf(x[0].toUpperCase()) + 2,
+      s: 'shdc'.indexOf(x[1].toLowerCase()),
+    }));
 }
 
 export function pcards(s: string, idBase = 100): PCard[] {
@@ -43,8 +53,18 @@ export function table(seats = 3, mode: ModeId = 'standard', seed = 7): Match {
 }
 
 /** Force the next hand's Location rule to Plain Table (or another rule). */
-export function forceRule(m: Match, id: NonNullable<CardDef['rule']>['id'] = 'plain', param?: number): void {
-  const card: CardDef = { id: `__test_${id}`, name: id, type: 'Location', colors: [], rule: { id, param } };
+export function forceRule(
+  m: Match,
+  id: NonNullable<CardDef['rule']>['id'] = 'plain',
+  param?: number,
+): void {
+  const card: CardDef = {
+    id: `__test_${id}`,
+    name: id,
+    type: 'Location',
+    colors: [],
+    rule: { id, param },
+  };
   m.bag.unshift({ card });
 }
 
@@ -52,7 +72,13 @@ export function forceRule(m: Match, id: NonNullable<CardDef['rule']>['id'] = 'pl
  * upcoming deck (board cards are dealt after a burn each street). */
 export function rigHand(
   m: Match,
-  opts: { holes?: string[]; deck?: string; button?: number; rule?: NonNullable<CardDef['rule']>['id']; param?: number } = {},
+  opts: {
+    holes?: string[];
+    deck?: string;
+    button?: number;
+    rule?: NonNullable<CardDef['rule']>['id'];
+    param?: number;
+  } = {},
 ): Match {
   forceRule(m, opts.rule ?? 'plain', opts.param);
   if (opts.button !== undefined) {
@@ -94,10 +120,7 @@ export function give(m: Match, seat: number, def: CardDef | string): string {
 }
 
 /** A synthetic power card for focused tests. */
-export function power(
-  effect: CardDef['effect'],
-  opts: Partial<CardDef> = {},
-): CardDef {
+export function power(effect: CardDef['effect'], opts: Partial<CardDef> = {}): CardDef {
   return {
     id: `__p_${effect?.kw}_${opts.tier ?? 1}_${(opts.mods ?? []).map((x) => x.kw).join('')}`,
     name: `Test ${effect?.kw}`,

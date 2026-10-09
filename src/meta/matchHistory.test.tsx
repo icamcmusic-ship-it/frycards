@@ -18,11 +18,12 @@ const record = (seed: number) => ({
   seed,
   finishedAt: 1_700_000_000_000 + seed,
   won: seed % 2 === 0,
-  turns: 20,
+  place: seed % 2 === 0 ? 1 : 3,
+  seats: 6,
+  mode: 'standard' as const,
+  hands: 40,
   humanLabel: 'Mer-King — Randomized Build',
-  cpuLabel: 'Void Mother — Randomized Build',
-  humanVitality: 12,
-  cpuVitality: 0,
+  cpuLabel: 'Void Mother, Legendary Diver',
 });
 
 beforeEach(() => localStorage.clear());
@@ -69,35 +70,38 @@ describe('summarizeMatchHistory', () => {
     ...record(1),
     ...over,
   });
-  test('counts wins, form, play/draw split and groups by deck', async () => {
+  test('counts first places, average place, form and groups by deck', async () => {
     const { summarizeMatchHistory } = await import('./matchHistory');
     const s = summarizeMatchHistory([
-      rec({ won: true, firstPlayer: 'P1', humanDeck: 'FRY1:a:x' }),
-      rec({ won: false, firstPlayer: 'P2', humanDeck: 'FRY1:a:x' }),
-      rec({ won: true, firstPlayer: 'P2', humanDeck: 'FRY1:b:y', humanLabel: 'B' }),
-      rec({ won: true }),
+      rec({ won: true, place: 1, humanDeck: 'FRY2:a' }),
+      rec({ won: false, place: 4, humanDeck: 'FRY2:a' }),
+      rec({ won: true, place: 1, humanDeck: 'FRY2:b', humanLabel: 'B' }),
+      // A record from the retired two-player game: a loss counts as 2nd.
+      { seed: 9, finishedAt: 1, won: false, turns: 12, humanLabel: 'Old', cpuLabel: 'CPU' },
     ]);
     expect(s.games).toBe(4);
-    expect(s.wins).toBe(3);
-    expect(s.winPct).toBe(75);
-    expect(s.form).toEqual(['W', 'L', 'W', 'W']);
-    expect(s.onPlay).toEqual({ games: 1, wins: 1 });
-    expect(s.onDraw).toEqual({ games: 2, wins: 1 });
-    expect(s.byDeck[0]).toMatchObject({ key: 'FRY1:a:x', games: 2, wins: 1 });
+    expect(s.wins).toBe(2);
+    expect(s.winPct).toBe(50);
+    expect(s.form).toEqual([1, 4, 1, 2]);
+    expect(s.avgPlace).toBe(2);
+    expect(s.byDeck[0]).toMatchObject({ key: 'FRY2:a', games: 2, wins: 1, avgPlace: 2.5 });
     expect(s.byDeck).toHaveLength(3);
   });
   test('an empty history is all zeros', async () => {
     const { summarizeMatchHistory } = await import('./matchHistory');
-    expect(summarizeMatchHistory([])).toMatchObject({ games: 0, wins: 0, winPct: 0, form: [] });
+    expect(summarizeMatchHistory([])).toMatchObject({
+      games: 0,
+      wins: 0,
+      winPct: 0,
+      avgPlace: 0,
+      form: [],
+    });
   });
-  test('the report carries the seed and both deck codes', async () => {
+  test('the report carries the place, seed and deck code', async () => {
     const { formatMatchReport } = await import('./matchHistory');
-    const text = formatMatchReport(
-      rec({ seed: 42, humanDeck: 'FRY1:a:x', cpuDeck: 'FRY1:b:y', firstPlayer: 'P2' }),
-    );
+    const text = formatMatchReport(rec({ seed: 42, place: 2, humanDeck: 'FRY2:a' }));
+    expect(text).toContain('2nd of 6');
     expect(text).toContain('Seed: 42');
-    expect(text).toContain('FRY1:a:x');
-    expect(text).toContain('FRY1:b:y');
-    expect(text).toContain('First player: opponent');
+    expect(text).toContain('FRY2:a');
   });
 });

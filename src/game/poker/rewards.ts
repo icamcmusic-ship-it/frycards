@@ -25,7 +25,11 @@ export function placementReward(place: number, seats: number, mode: ModeId): Pla
   const f = placeFactor(place, seats);
   const mult = MODES[mode].rewardMult;
   const calc = ([lo, span]: number[]) => Math.round((lo + span * f) * mult);
-  return { credits: calc(REWARD_BASE.credits), xp: calc(REWARD_BASE.xp), bpXp: calc(REWARD_BASE.bpXp) };
+  return {
+    credits: calc(REWARD_BASE.credits),
+    xp: calc(REWARD_BASE.xp),
+    bpXp: calc(REWARD_BASE.bpXp),
+  };
 }
 
 export function ordinal(n: number): string {

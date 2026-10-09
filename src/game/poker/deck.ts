@@ -21,7 +21,8 @@ export interface DeckDef {
   powers: CardDef[];
 }
 
-export type DeckIssueKind = 'leader' | 'location' | 'count' | 'copies' | 'tier5' | 'colour' | 'unknown';
+export type DeckIssueKind =
+  'leader' | 'location' | 'count' | 'copies' | 'tier5' | 'colour' | 'unknown';
 
 export interface DeckIssue {
   kind: DeckIssueKind;
@@ -49,11 +50,16 @@ export function checkDeck(leaderId: string, cardIds: string[], mode: ModeId): De
   const m = MODES[mode];
   const issues: DeckIssue[] = [];
   const leader = POOL_BY_ID[leaderId];
-  if (!leader || leader.type !== 'Leader') issues.push({ kind: 'leader', message: 'Pick a Leader.' });
+  if (!leader || leader.type !== 'Leader')
+    issues.push({ kind: 'leader', message: 'Pick a Leader.' });
   const identity: Color[] = leader ? cardColors(leader) : [];
   const unknown = cardIds.filter((id) => !POOL_BY_ID[id]);
   if (unknown.length)
-    issues.push({ kind: 'unknown', message: `${unknown.length} card(s) aren't in the card pool.`, cards: unknown });
+    issues.push({
+      kind: 'unknown',
+      message: `${unknown.length} card(s) aren't in the card pool.`,
+      cards: unknown,
+    });
   const defs = cardIds.map((id) => POOL_BY_ID[id]).filter(Boolean);
   const locations = defs.filter((d) => d.type === 'Location');
   const powers = defs.filter(isPower);

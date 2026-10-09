@@ -21,7 +21,9 @@ describe('evaluate', () => {
     const a = evaluate(cards('Ah Kd 7s 7c 2d 9h 3s')).score;
     const b = evaluate(cards('Qh Jd 7s 7c 2d 9h 3s')).score;
     expect(a).toBeGreaterThan(b);
-    expect(evaluate(cards('As 2c Kd Qh Jc Tc 3d')).score).toBe(evaluate(cards('Ad 4c Kd Qh Jc Tc 3d')).score);
+    expect(evaluate(cards('As 2c Kd Qh Jc Tc 3d')).score).toBe(
+      evaluate(cards('Ad 4c Kd Qh Jc Tc 3d')).score,
+    );
   });
 
   it('a wild hole card counts as any suit', () => {
@@ -55,8 +57,22 @@ describe('attainable categories (hand exclusions)', () => {
 describe('equity', () => {
   it('aces are a big favourite heads-up and win less multiway', () => {
     const rng = rngOn({ rng: 3 });
-    const hu = equity({ hole: cards('As Ah'), board: [], boardSize: 5, opponents: [[]], trials: 600, rng });
-    const five = equity({ hole: cards('As Ah'), board: [], boardSize: 5, opponents: [[], [], [], [], []], trials: 600, rng });
+    const hu = equity({
+      hole: cards('As Ah'),
+      board: [],
+      boardSize: 5,
+      opponents: [[]],
+      trials: 600,
+      rng,
+    });
+    const five = equity({
+      hole: cards('As Ah'),
+      board: [],
+      boardSize: 5,
+      opponents: [[], [], [], [], []],
+      trials: 600,
+      rng,
+    });
     expect(hu).toBeGreaterThan(0.75);
     expect(five).toBeLessThan(hu);
   });

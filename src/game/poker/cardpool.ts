@@ -60,9 +60,16 @@ const pick = <T>(seed: string, salt: string, arr: readonly T[]): T =>
 const HOME_WEIGHT = 4;
 
 /** Weighted pick by KEYWORD_WEIGHT (constants.ts), favouring home colours. */
-function pickKw<T extends Keyword>(seed: string, salt: string, arr: readonly T[], colors: Color[] = []): T {
+function pickKw<T extends Keyword>(
+  seed: string,
+  salt: string,
+  arr: readonly T[],
+  colors: Color[] = [],
+): T {
   const w = arr.map(
-    (k) => (KEYWORD_WEIGHT[k] ?? 1) * (colors.length && isHomeKeyword(k, colors) && KEYWORD_SPECS[k].color ? HOME_WEIGHT : 1),
+    (k) =>
+      (KEYWORD_WEIGHT[k] ?? 1) *
+      (colors.length && isHomeKeyword(k, colors) && KEYWORD_SPECS[k].color ? HOME_WEIGHT : 1),
   );
   const total = w.reduce((a, b) => a + b, 0);
   let r = ((hash(`${seed}:${salt}`) % 100000) / 100000) * total;
@@ -78,7 +85,8 @@ function pickKw<T extends Keyword>(seed: string, salt: string, arr: readonly T[]
 // ---------------------------------------------------------------------------
 const LEGAL_PAIRS: [Color, Color][] = [];
 for (const p of Object.values(LEADER_COLORS)) {
-  if (!LEGAL_PAIRS.some((q) => q.includes(p[0]) && q.includes(p[1]))) LEGAL_PAIRS.push([p[0], p[1]]);
+  if (!LEGAL_PAIRS.some((q) => q.includes(p[0]) && q.includes(p[1])))
+    LEGAL_PAIRS.push([p[0], p[1]]);
 }
 
 export function fallbackColors(c: Pick<CardTemplate, 'id' | 'type' | 'rarity'>): Color[] {
@@ -110,7 +118,7 @@ export function rollTier(seed: string, rarity?: string): number {
   const rt = RARITY_TIER[rarity ?? 'Common'] ?? 0;
   const w = TIER_PYRAMID.map((base, i) => Math.max(1, base * (1 + RARITY_BIAS * rt * (i - 1))));
   const total = w.reduce((a, b) => a + b, 0);
-  let r = (hash(`${seed}:tier`) % 10000) / 10000 * total;
+  let r = ((hash(`${seed}:tier`) % 10000) / 10000) * total;
   for (let i = 0; i < w.length; i++) {
     r -= w[i];
     if (r < 0) return i + 1;
@@ -156,7 +164,13 @@ function numberFor(kw: Keyword, tier: number): number | undefined {
   return KEYWORD_SPECS[kw].numbered ? tierN(kw, tier) : undefined;
 }
 
-function modAllowed(m: ModifierKeyword, eff: EffectKeyword, type: PowerType, tier: number, subtype?: CardSubtype): boolean {
+function modAllowed(
+  m: ModifierKeyword,
+  eff: EffectKeyword,
+  type: PowerType,
+  tier: number,
+  subtype?: CardSubtype,
+): boolean {
   const s = KEYWORD_SPECS[eff];
   switch (m) {
     case 'Roulette':
@@ -194,7 +208,9 @@ function mapPower(c: CardTemplate, o: CardOverrides = {}): CardDef {
     subtype = roll(seed, 'event-sub', 5) < 2 ? 'Quick' : 'Slow';
   }
 
-  const effKw = (o.effect?.kw as EffectKeyword | undefined) ?? pickKw(seed, 'effect', effectPool(type, colors, tier), colors);
+  const effKw =
+    (o.effect?.kw as EffectKeyword | undefined) ??
+    pickKw(seed, 'effect', effectPool(type, colors, tier), colors);
   if (effKw === 'Snuff' && type === 'Event') subtype = 'Quick';
   if (o.subtype) subtype = o.subtype;
   const effect: KwRef = { kw: effKw, n: o.effect?.n ?? numberFor(effKw, tier) };
@@ -207,7 +223,9 @@ function mapPower(c: CardTemplate, o: CardOverrides = {}): CardDef {
     // Commons get simple, reliable effects; Mythics get odd, high-variance ones.
     const r = roll(seed, 'mod-count', 100);
     const count = r < 55 - rt * 4 ? 0 : r < 92 - rt * 2 ? 1 : 2;
-    const pool = modifiersForColors(colors).filter((m) => modAllowed(m, effKw, type, tier, subtype));
+    const pool = modifiersForColors(colors).filter((m) =>
+      modAllowed(m, effKw, type, tier, subtype),
+    );
     const chaos: ModifierKeyword[] = ['Roulette', 'Gambit', 'Resonant', 'Bait'];
     for (let i = 0; i < count && pool.length > 0; i++) {
       const highVariance = rt >= 5 && roll(seed, `mod-chaos-${i}`, 2) === 0;
@@ -259,11 +277,21 @@ export function powerText(def: CardDef): string {
 // ---------------------------------------------------------------------------
 function leaderEffects(color: Color, tier: number): EffectKeyword[] {
   return effectsForColors([color]).filter(
-    (k) => KEYWORD_SPECS[k].target !== 'cast' && KEYWORD_SPECS[k].color === color && (MIN_TIER[k] ?? 1) <= tier,
+    (k) =>
+      KEYWORD_SPECS[k].target !== 'cast' &&
+      KEYWORD_SPECS[k].color === color &&
+      (MIN_TIER[k] ?? 1) <= tier,
   );
 }
 
-function ability(seed: string, salt: string, color: Color, tier: number, nerve: number, chipCost?: number): LeaderAbility {
+function ability(
+  seed: string,
+  salt: string,
+  color: Color,
+  tier: number,
+  nerve: number,
+  chipCost?: number,
+): LeaderAbility {
   const pool = leaderEffects(color, tier);
   const kw = pool.length > 0 ? pickKw(seed, salt, pool) : 'Redraw';
   const effect: KwRef = { kw, n: numberFor(kw, tier) };
@@ -282,7 +310,14 @@ function mapLeader(c: CardTemplate, o: CardOverrides = {}): CardDef {
   const colors = colorsOf(c);
   const spendNerve = -(2 + roll(seed, 'spend', 2)); // -2 or -3
   const minus = ability(seed, 'leader-minus', colors[0], 4, spendNerve);
-  const plus = ability(seed, 'leader-plus', colors[1] ?? colors[0], 2, 1, roll(seed, 'risk', 2) ? 0.5 : 1);
+  const plus = ability(
+    seed,
+    'leader-plus',
+    colors[1] ?? colors[0],
+    2,
+    1,
+    roll(seed, 'risk', 2) ? 0.5 : 1,
+  );
   const abilities = [minus, plus];
   return {
     id: c.id,
@@ -387,6 +422,11 @@ export function poolHasKeyword(kw: string): CardDef[] {
 /** Text for a numbered keyword on a card, for tooltips. */
 export function kwRefText(ref: KwRef): string {
   const spec = KEYWORD_SPECS[ref.kw];
-  const n = ref.n === undefined ? 'N' : CHIP_KEYWORDS.has(ref.kw) ? `${fmtUnits(ref.n)} chip unit(s)` : `${ref.n}`;
+  const n =
+    ref.n === undefined
+      ? 'N'
+      : CHIP_KEYWORDS.has(ref.kw)
+        ? `${fmtUnits(ref.n)} chip unit(s)`
+        : `${ref.n}`;
   return spec.text(n);
 }

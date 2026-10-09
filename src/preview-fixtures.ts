@@ -48,7 +48,7 @@
  *
  * Dev-only: nothing in `src/main.tsx`'s import graph reaches this file.
  */
-import { POOL_V4 } from './game/v3/cardpool';
+import { POOL } from './game/poker/cardpool';
 
 /** Stable ISO timestamps — `new Date()` here would make two runs of the audit
  * differ in ways that have nothing to do with the layout. */
@@ -59,7 +59,7 @@ const PREVIEW_USER = 'preview';
 const OTHER_USER = '00000000-0000-4000-8000-000000000001';
 const THIRD_USER = '00000000-0000-4000-8000-000000000002';
 
-const cards = POOL_V4.filter((c) => c.type !== 'Leader');
+const cards = POOL.filter((c) => c.type !== 'Leader');
 const cardAt = (i: number) => cards[i % cards.length];
 
 // ---------------------------------------------------------------------------

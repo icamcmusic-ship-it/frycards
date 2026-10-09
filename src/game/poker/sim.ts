@@ -54,7 +54,13 @@ export function cpuTableSetup(opts: {
  * actions taken (for the replay log). `maxSteps` guards against a stuck loop. */
 export function runBots(
   m: Match,
-  opts: { botSeed: number; humanSeats?: number[]; maxSteps?: number; autoStart?: boolean; stopAtHandEnd?: boolean },
+  opts: {
+    botSeed: number;
+    humanSeats?: number[];
+    maxSteps?: number;
+    autoStart?: boolean;
+    stopAtHandEnd?: boolean;
+  },
 ): Action[] {
   const log: Action[] = [];
   const humans = new Set(opts.humanSeats ?? []);
@@ -62,7 +68,7 @@ export function runBots(
   for (let step = 0; step < (opts.maxSteps ?? 200000); step++) {
     const w = waitingOn(m);
     if (w.kind === 'over') break;
-    let action: Action | null = null;
+    let action: Action | null;
     if (w.kind === 'start') {
       if (!opts.autoStart) break;
       if (opts.stopAtHandEnd && m.hand?.done) break;
@@ -72,7 +78,8 @@ export function runBots(
       const bot = seats.find((s) => !humans.has(s));
       if (bot === undefined) break;
       action = botAction(viewFor(m, bot), bot, rng);
-      if (!action) action = w.kind === 'window' ? { type: 'pass', seat: bot } : { type: 'fold', seat: bot };
+      if (!action)
+        action = w.kind === 'window' ? { type: 'pass', seat: bot } : { type: 'fold', seat: bot };
     }
     applyInPlace(m, action);
     log.push(action);
@@ -80,7 +87,10 @@ export function runBots(
   return log;
 }
 
-export function simulateMatch(setup: MatchSetup, botSeed: number): { match: Match; actions: Action[] } {
+export function simulateMatch(
+  setup: MatchSetup,
+  botSeed: number,
+): { match: Match; actions: Action[] } {
   const match = createMatch(setup);
   const actions = runBots(match, { botSeed, autoStart: true });
   return { match, actions };

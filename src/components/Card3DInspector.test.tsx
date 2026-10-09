@@ -9,7 +9,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { Card3DInspector } from './Card3DInspector';
-import { POOL_V4 } from '../game/v3/cardpool';
+import { POOL } from '../game/poker/cardpool';
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -25,7 +25,7 @@ beforeEach(() => {
   })) as unknown as typeof window.matchMedia;
 });
 
-const def = POOL_V4.find((c) => c.type === 'Unit')!;
+const def = POOL.find((c) => c.type === 'Unit')!;
 
 test('has a 44px close X that closes exactly once', async () => {
   const onClose = vi.fn();

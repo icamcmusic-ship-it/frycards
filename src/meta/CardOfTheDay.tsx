@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { POOL_V4 } from '../game/v3/cardpool';
+import { POOL } from '../game/poker/cardpool';
 import { CardFace } from '../components/CardFaceV4';
 import { Card3DInspector } from '../components/Card3DInspector';
 import { cardOfTheDay, setBuildWith } from './cardOfTheDay';
@@ -11,7 +11,7 @@ import { cardOfTheDay, setBuildWith } from './cardOfTheDay';
  * learn the card pool.
  */
 export function CardOfTheDay({ onBuild }: { onBuild?: () => void } = {}) {
-  const card = useMemo(() => cardOfTheDay(POOL_V4), []);
+  const card = useMemo(() => cardOfTheDay(POOL), []);
   const [open, setOpen] = useState(false);
   if (!card) return null;
   return (

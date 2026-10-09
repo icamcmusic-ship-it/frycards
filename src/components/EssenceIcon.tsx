@@ -1,6 +1,6 @@
 /**
  * Icon glyphs for the seven Fry Cards v5.0 Essence Types (see
- * `src/game/v3/colors.ts`). Source SVGs live in `src/assets/essence/` and
+ * `src/game/poker/colors.ts`). Source SVGs live in `src/assets/essence/` and
  * are single-color line-art (black fill/stroke), so we render them as a CSS
  * mask tinted to whatever `color` the pip needs (its `COLOR_PIP` fg, a
  * chip's text color, etc.) rather than as a plain `<img>` — that's what
@@ -15,7 +15,7 @@ import lightUrl from '../assets/essence/light.svg';
 import shadowUrl from '../assets/essence/shadow.svg';
 import voidUrl from '../assets/essence/void.svg';
 import type { CSSProperties } from 'react';
-import type { Color } from '../game/v3/colors';
+import type { Color } from '../game/poker/colors';
 
 export const ESSENCE_ICON_URL: Record<Color, string> = {
   Ember: emberUrl,

@@ -17,23 +17,33 @@ import {
   CardReadingPanel,
   cardRuleLines,
   costSummary,
+  faceChips,
   holdKeywordIntros,
   kwList,
+  printedCostUnits,
   resetKeywordIntros,
 } from './CardFaceV4';
-import type { CardDef } from '../game/v3/cards';
+import type { CardDef } from '../game/poker/cards';
+import { COST_LADDER_UNITS, NERVE } from '../game/poker/constants';
+import { fmtUnits } from '../game/poker/keywords';
+import { LOCATION_TEMPLATES } from '../game/poker/locations';
 
 afterEach(cleanup);
 
+const SIZES = ['micro', 'compact', 'standard', 'full'] as const;
+
+/** A 3-star Light Unit: "Peek 1" plus a "Warded" modifier. */
 const UNIT: CardDef = {
   id: 'test_unit',
   name: 'Tidal Vanguard',
   type: 'Unit',
   rarity: 'Rare',
-  might: 3,
-  grit: 4,
-  keywords: ['Aerial', 'Warded'],
-  cost: { generic: 1, pips: { Tide: 2 } },
+  colors: ['Light'],
+  tier: 3,
+  effect: { kw: 'Peek', n: 1 },
+  mods: [{ kw: 'Warded' }],
+  keywords: ['Peek', 'Warded'],
+  flavor: 'It watches the river card before the dealer does.',
 };
 
 const EVENT: CardDef = {
@@ -41,25 +51,90 @@ const EVENT: CardDef = {
   name: 'Undertow',
   type: 'Event',
   subtype: 'Quick',
-  cost: { generic: 0, pips: { Tide: 1 } },
-  onInvoke: { action: 'damage', target: 'enemyUnit', value: 2 },
+  colors: ['Tide'],
+  tier: 4,
+  effect: { kw: 'Windfall' },
+  mods: [],
+  keywords: ['Windfall'],
+  flavor: 'The tide gives, once.',
 };
 
+const LEADER: CardDef = {
+  id: 'test_leader',
+  name: 'Mer King',
+  type: 'Leader',
+  colors: ['Tide', 'Root'],
+  abilities: [
+    { nerve: -2, effect: { kw: 'Windfall' }, text: '-2 nerve: Windfall.' },
+    {
+      nerve: 1,
+      effect: { kw: 'Bulwark', n: 1 },
+      chipCost: 0.5,
+      text: '+1 nerve, pay ½: Bulwark 1.',
+    },
+  ],
+  keywords: ['Windfall', 'Bulwark'],
+  flavor: 'The crown is wet but the hands are steady.',
+};
+
+const LOCATION: CardDef = {
+  id: 'test_location',
+  name: 'Smoky Backroom',
+  type: 'Location',
+  colors: [],
+  rule: { id: 'highStakes', param: 2 },
+  keywords: [],
+  flavor: 'Nobody remembers who set the blinds.',
+};
+
+const tierMark = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-fc="tier"]');
+const plate = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-fc="stats"]');
+
 describe('CardFace', () => {
-  test('renders the printed name and stats', () => {
-    render(<CardFace def={UNIT} />);
+  test('renders the printed name and the tier mark in the masthead', () => {
+    const { container } = render(<CardFace def={UNIT} />);
     expect(screen.getByText('Tidal Vanguard')).toBeTruthy();
-    // Printed Might and Grit both appear on a unit face.
-    expect(screen.getAllByText('3').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('4').length).toBeGreaterThan(0);
+    // Three stars for a 3★ Unit; the accessible name carries the tier too.
+    expect(tierMark(container)!.textContent).toBe('★★★');
+    expect(container.firstElementChild!.getAttribute('aria-label')).toMatch(/tier 3/);
   });
 
-  test('live stats replace the printed ones on the battlefield', () => {
-    // A buffed, damaged body: Might 5 (printed 3), Grit 1 of 4. Rendering the
-    // PRINTED numbers here is exactly the class of bug no geometry sweep sees.
-    render(<CardFace def={UNIT} size="full" live={{ atk: 5, hp: 1, maxHp: 4 }} />);
-    expect(screen.getAllByText('5').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('1').length).toBeGreaterThan(0);
+  test('the tier mark uses the type’s own glyph, compacted at micro', () => {
+    const { container, unmount } = render(<CardFace def={EVENT} size="full" />);
+    expect(tierMark(container)!.textContent).toBe('ϟϟϟϟ');
+    unmount();
+    const micro = render(<CardFace def={UNIT} size="micro" />);
+    expect(tierMark(micro.container)!.textContent).toBe('3★');
+  });
+
+  test('Leaders and Locations print no tier mark', () => {
+    for (const def of [LEADER, LOCATION]) {
+      const { container, unmount } = render(<CardFace def={def} size="full" />);
+      expect(tierMark(container)).toBeNull();
+      unmount();
+    }
+  });
+
+  test('the chip-cost plate sits bottom-right and prints the tier’s cost', () => {
+    const { container } = render(<CardFace def={UNIT} size="full" />);
+    const p = plate(container)!;
+    expect(p).toBeTruthy();
+    expect(p.className).toMatch(/bottom-1/);
+    expect(p.className).toMatch(/right-1/);
+    expect(printedCostUnits(UNIT)).toBe(COST_LADDER_UNITS[3]);
+    expect(p.textContent).toContain(fmtUnits(COST_LADDER_UNITS[3]));
+    // Tier 4+ also asks for a second cost, marked with a "+".
+    cleanup();
+    const ev = render(<CardFace def={EVENT} size="full" />);
+    expect(plate(ev.container)!.textContent).toContain(`${fmtUnits(COST_LADDER_UNITS[4])}+`);
+  });
+
+  test('a Leader’s plate shows its starting nerve; a Location has none', () => {
+    const { container, unmount } = render(<CardFace def={LEADER} size="full" />);
+    expect(plate(container)!.textContent).toContain(String(NERVE.start));
+    unmount();
+    const loc = render(<CardFace def={LOCATION} size="full" />);
+    expect(plate(loc.container)).toBeNull();
   });
 
   test('fires onClick when the card is activated', () => {
@@ -90,19 +165,48 @@ describe('CardFace', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  test('renders every keyword it carries', () => {
+  test('prints keyword chips with their numbers ("Peek 1")', () => {
+    expect(faceChips(UNIT).map((c) => c.label)).toEqual(['Peek 1', 'Warded']);
+    expect(kwList(UNIT)).toEqual(['Peek', 'Warded']);
     render(<CardFace def={UNIT} size="full" />);
-    for (const kw of kwList(UNIT)) {
-      expect(screen.getAllByText(new RegExp(kw, 'i')).length).toBeGreaterThan(0);
-    }
+    expect(screen.getAllByText('Peek 1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Warded').length).toBeGreaterThan(0);
   });
 
-  test('renders an event without unit stats', () => {
+  test('a Leader prints both nerve abilities: spend and build', () => {
+    render(<CardFace def={LEADER} size="full" />);
+    expect(screen.getAllByText('-2').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('+1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Windfall/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Bulwark 1/).length).toBeGreaterThan(0);
+    expect(cardRuleLines(LEADER)).toContain('-2 nerve: Windfall.');
+  });
+
+  test('a Location prints its table rule as a chip', () => {
+    const name = LOCATION_TEMPLATES.highStakes.name;
+    expect(faceChips(LOCATION).map((c) => c.label)).toEqual([name]);
+    render(<CardFace def={LOCATION} size="full" />);
+    expect(screen.getAllByText(name).length).toBeGreaterThan(0);
+    expect(cardRuleLines(LOCATION)[0]).toMatch(/×2/);
+  });
+
+  test('renders an event with its rules lines', () => {
     render(<CardFace def={EVENT} size="full" />);
     expect(screen.getByText('Undertow')).toBeTruthy();
-    // The rules text comes from the shared describeEffect path, so if the
-    // face and the engine ever disagree about what a card does, this fails.
-    expect(cardRuleLines(EVENT).length).toBeGreaterThan(0);
+    expect(cardRuleLines(EVENT).some((l) => l.startsWith('Windfall —'))).toBe(true);
+    expect(cardRuleLines(EVENT)).toContain('Quick: castable in response windows.');
+  });
+
+  test('flavor text is visible at every size, micro included', () => {
+    for (const def of [UNIT, EVENT, LEADER, LOCATION]) {
+      for (const size of SIZES) {
+        const { container, unmount } = render(<CardFace def={def} size={size} />);
+        const flavor = container.querySelector('[data-fc="flavor"]');
+        expect(flavor, `${def.type} at ${size}`).toBeTruthy();
+        expect(flavor!.textContent).toContain(def.flavor!);
+        unmount();
+      }
+    }
   });
 
   test('a badge renders when supplied', () => {
@@ -111,18 +215,23 @@ describe('CardFace', () => {
   });
 
   test('every size tier renders without throwing', () => {
-    for (const size of ['micro', 'compact', 'standard', 'full'] as const) {
-      const { unmount } = render(<CardFace def={UNIT} size={size} />);
-      unmount();
+    for (const def of [UNIT, EVENT, LEADER, LOCATION]) {
+      for (const size of SIZES) {
+        const { unmount } = render(<CardFace def={def} size={size} />);
+        unmount();
+      }
     }
   });
 });
 
 describe('cost summary', () => {
-  test('describes a mixed cost', () => {
+  test('describes the tier and its chip cost', () => {
     const summary = costSummary(UNIT);
     expect(summary).toBeTruthy();
-    expect(summary!).toMatch(/Tide/);
+    expect(summary!).toMatch(/^3 stars: costs 2 chip unit/);
+    expect(costSummary(EVENT)!).toMatch(/second cost/);
+    expect(costSummary(LEADER)).toBeNull();
+    expect(costSummary(LOCATION)).toBeNull();
   });
 });
 
@@ -130,13 +239,15 @@ describe('CardReadingPanel', () => {
   test('keeps long mechanics, keyword reminders and flavor outside card clamps', () => {
     const def: CardDef = {
       ...UNIT,
-      onInvoke: EVENT.onInvoke,
+      mods: [{ kw: 'Warded' }, { kw: 'Fuse', n: 1 }],
+      keywords: ['Peek', 'Warded', 'Fuse'],
       flavor: 'A long story worth reading in full.',
     };
     const { container } = render(<CardReadingPanel def={def} />);
     expect(screen.getByRole('region', { name: 'Complete card rules' })).toBeTruthy();
-    for (const line of cardRuleLines(def)) expect(screen.getByText(line)).toBeTruthy();
-    expect(screen.getByText('Aerial:')).toBeTruthy();
+    for (const line of cardRuleLines(def))
+      expect(screen.getAllByText(line).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Peek/).length).toBeGreaterThan(0);
     expect(screen.getByText(def.flavor!)).toBeTruthy();
     expect(container.querySelector('[style*="line-clamp"]')).toBeNull();
   });
@@ -220,7 +331,7 @@ describe('keyword intro channel', () => {
   });
 
   test('a keyword already seen is never introduced again', () => {
-    window.localStorage.setItem('frycards_seen_keywords', JSON.stringify(['Aerial', 'Warded']));
+    window.localStorage.setItem('frycards_seen_keywords', JSON.stringify(['Peek', 'Warded']));
     render(<CardFace def={UNIT} size="full" introduceKeywords />);
     tick(20000);
     expect(popovers()).toHaveLength(0);

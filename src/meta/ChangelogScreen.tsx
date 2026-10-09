@@ -18,6 +18,19 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'FryCards Poker (v35)',
+    date: 'October 2026',
+    items: [
+      'FRYCARDS IS A POKER GAME NOW. Matches are pot-limit Texas Hold\u2019em freezeouts for 2 to 6 seats against CPU players, with blinds that rise on a clock. Pick QUICK (~12 min), STANDARD (~25 min) or DEEP (~40 min). The old card battler \u2014 Essence, Wellsprings, Vitality, the Clash \u2014 is retired.',
+      'YOUR DECK BENDS THE POKER. A deck is a Leader, one Location and 16, 24 or 36 power cards: Units \u2605, Items \u2699 and Events \u03df. Casting is public \u2014 everyone sees the card \u2014 and its chips go into the pot, so every cast is also a bluff. Peek at a hole card, redraw your own, drain a rival\u2019s stack, or fake it with a Feint.',
+      'LOCATIONS ARE THE TABLE\u2019S WEATHER. Every seat\u2019s Location joins a shared rotation with a two-hand forecast: Bomb Pot, Pineapple, Fog, Happy Hour, Tilt Zone and twelve more, plus a Plain Table each cycle.',
+      'NERVE AND LEADERS. Every seat has a public nerve meter. Your Leader\u2019s two abilities spend or build it, once per hand. Hit zero and you tilt: your Leader locks and powers cost more.',
+      'REWARDS PAY BY PLACE. Finish 1st for 100 credits in Standard, down to 40 for last \u2014 never by chip count. Quick pays half, Deep one and a half.',
+      'YOUR COLLECTION IS SAFE. Every card keeps its rarity, name, art and flavor text \u2014 and flavor text is now always shown on the card. Old 60-card decks and deck links no longer work: build a new deck in the Deck Builder.',
+      'NEW TO POKER? How to Play now teaches Hold\u2019em from zero (hand ranks, betting rounds, blinds, pot-limit, side pots), and your first practice game has a coach that explains one idea at a time. Playing cards by Kenney (kenney.nl).',
+    ],
+  },
+  {
     version: 'The Shop Floor (v31)',
     date: 'October 2026',
     items: [
@@ -30,19 +43,6 @@ export const ENTRIES: ChangelogEntry[] = [
       'NEW: CPU DIFFICULTY. Pick EASY, NORMAL or HARD in Settings. Easy misses attacks and blocks and never holds an answer; Hard plans two turns of combat and always keeps a reaction up. Rewards are the same at every level.',
       'BALANCE: SENTINEL OF THE NETHER PIT IS BACK IN THE GAME. Its removal ability costs 2 Resolve again instead of 3. The extra point was added when our testing read Sentinel as the strongest Leader; measured properly on nine deck recipes it was the weakest. Nothing else changed: a fresh 16,000-game check found no keyword far enough out of line to touch.',
       'SETTINGS: HAND ORDER can be set from Settings now, and the MOTION setting finally reaches the match board, card effects, the Showroom and pack opening — REDUCED calms them all, and FULL overrides your device’s setting.',
-    ],
-  },
-  {
-    version: 'The Keyboard Pass (v30)',
-    date: 'August 2026',
-    items: [
-      'FIX \u2014 EVERY POP-UP IN THE GAME LEAKED YOUR KEYBOARD. Fifteen dialogs \u2014 the mulligan, the concede confirm, the shed picker, both card zoom views, and nine more across the menus \u2014 let the Tab key walk straight out of them and onto the page behind, which is only hidden to look at. From the opening mulligan you could Tab onto the board and reach the CONCEDE button. Focus now stays inside a dialog until you close it, everywhere, and a test stops the next one shipping without it.',
-      'THE WHOLE GAME IS NOW PLAYABLE FROM THE KEYBOARD, AND WE CHECKED. Every screen and the match board are walked with the Tab key on every release: every button has to be reachable, has to show a focus ring when you get there, and focus is never allowed to get stuck. All 29 screens and the board pass at 100%.',
-      'SKIP TO MAIN II NOW WARNS YOU. Leaving the Clash without attacking throws away the whole combat step, and the button read simply \u201cnext\u201d. It counts your ready attackers now \u2014 SKIP TO MAIN II \u25b8 \u00b7 3 CAN ATTACK \u2014 the same way END TURN already warns about unspent essence and an unplayed Wellspring.',
-      'THE SPACE SHORTCUT IS WHERE THE BUTTON IS. Space presses whatever the clash bar is offering \u2014 attack, guard, resolve, end turn \u2014 and the hint for it was parked at the far left of the bar, hundreds of pixels from the button it refers to, and stayed up in states where the key did nothing. It is a small SPACE tag on the button itself now, and How to Play finally explains both it and what Escape cancels.',
-      'THE OPPONENT\u2019S MOVES ARE READ OUT. If you use a screen reader, the summary of the opponent\u2019s turn was announced and not one of the moves in it \u2014 the whole turn played in silence. Each move is announced as it happens now.',
-      'FIX \u2014 TWO OF OUR OWN TEST TOOLS WERE PRESSING THE WRONG BUTTON. The automated match driver has \u201cbeen exercising\u201d the narration speed dial since one patch and the Leader ability pills since another; both clicks were landing somewhere else entirely, so neither control had ever actually been tested. Found by counting which controls the driver offers against which it presses \u2014 948 offers and zero presses for one of them.',
-      'BALANCE: no card changed, eleventh pass running. 190,464 fresh AI games \u2014 the usual eight cohorts, run four times over four completely different sets of test decks \u2014 plus 1,200 fuzzed and 600 chaos matches: ZERO rule violations, control cohorts identical to last patch to the decimal. The question left open last patch is answered: Mer-King and Avatar of the Abyss really are the top two Leaders \u2014 first and second in all four draws \u2014 but by how much is still pure deck roll, so nothing is being changed on it.',
     ],
   },
 ];

@@ -3,6 +3,8 @@ import {
   DEFAULT_FILTERS,
   MAX_PRESETS,
   activeFilterCount,
+  cardMatchesFilters,
+  compareCards,
   deletePreset,
   isPresetList,
   quicksellConfirmText,
@@ -12,6 +14,7 @@ import {
   suggestPresetName,
 } from './collectionFilters';
 import { quicksellPrice } from './economy';
+import { POOL } from '../game/poker/cardpool';
 
 describe('sanitizeFilters', () => {
   test('fills defaults for anything missing or foreign', () => {
@@ -19,8 +22,89 @@ describe('sanitizeFilters', () => {
     expect(sanitizeFilters({ view: 'bogus', rarity: 'Plaid', sort: 7 })).toEqual(DEFAULT_FILTERS);
   });
   test('keeps valid values', () => {
-    const f = sanitizeFilters({ view: 'spares', rarity: 'Rare', type: 'Unit', sort: 'Cost' });
-    expect(f).toMatchObject({ view: 'spares', rarity: 'Rare', type: 'Unit', sort: 'Cost' });
+    const f = sanitizeFilters({
+      view: 'spares',
+      rarity: 'Rare',
+      type: 'Unit',
+      sort: 'Tier',
+      tier: '3',
+      keyword: 'Peek',
+      rule: 'highStakes',
+    });
+    expect(f).toMatchObject({
+      view: 'spares',
+      rarity: 'Rare',
+      type: 'Unit',
+      sort: 'Tier',
+      tier: '3',
+      keyword: 'Peek',
+      rule: 'highStakes',
+    });
+  });
+  test('a preset saved under the MTG-style game loads safely', () => {
+    const legacy = {
+      view: 'all',
+      type: 'Unit',
+      color: 'Ember',
+      keyword: 'Aerial', // retired keyword
+      sort: 'Cost', // retired sort
+      cost: '3',
+      might: 4,
+      grit: '2',
+      essence: 'Ember',
+    };
+    const f = sanitizeFilters(legacy);
+    expect(f).toEqual({
+      ...DEFAULT_FILTERS,
+      view: 'all',
+      type: 'Unit',
+      color: 'Ember',
+      sort: 'Tier',
+    });
+    expect(Object.keys(f).sort()).toEqual(Object.keys(DEFAULT_FILTERS).sort());
+  });
+  test('bad tier and rule values fall back; a numeric tier is accepted', () => {
+    expect(sanitizeFilters({ tier: '7', rule: 'sanctum' })).toMatchObject({
+      tier: 'All',
+      rule: 'All',
+    });
+    expect(sanitizeFilters({ tier: 2 }).tier).toBe('2');
+  });
+});
+
+describe('cardMatchesFilters / compareCards', () => {
+  const any = { ...DEFAULT_FILTERS };
+  test('tier filters match only powers of that tier', () => {
+    const hits = POOL.filter((c) => cardMatchesFilters(c, { ...any, tier: '4' }));
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((c) => c.tier === 4 && ['Unit', 'Item', 'Event'].includes(c.type))).toBe(
+      true,
+    );
+  });
+  test('the Location-rule filter matches only Locations printing that rule', () => {
+    const loc = POOL.find((c) => c.type === 'Location' && c.rule)!;
+    const hits = POOL.filter((c) => cardMatchesFilters(c, { ...any, rule: loc.rule!.id }));
+    expect(hits).toContain(loc);
+    expect(hits.every((c) => c.type === 'Location' && c.rule?.id === loc.rule!.id)).toBe(true);
+  });
+  test('keyword and colour filters read the poker card', () => {
+    const peek = POOL.filter((c) => cardMatchesFilters(c, { ...any, keyword: 'Peek' }));
+    expect(peek.length).toBeGreaterThan(0);
+    // Peek is Light-gated.
+    expect(peek.every((c) => c.colors.includes('Light'))).toBe(true);
+    const leader = POOL.find((c) => c.type === 'Leader')!;
+    expect(cardMatchesFilters(leader, { ...any, color: leader.colors[0] })).toBe(true);
+    expect(cardMatchesFilters(leader, { ...any, color: 'Colorless' })).toBe(false);
+  });
+  test('Tier sorts ascending with tierless cards last; Rarity sorts highest first', () => {
+    const byTier = [...POOL].sort(compareCards('Tier'));
+    const tiers = byTier.map((c) => c.tier ?? 99);
+    expect(tiers).toEqual([...tiers].sort((a, b) => a - b));
+    expect(byTier[byTier.length - 1].tier).toBeUndefined();
+    const byRarity = [...POOL].sort(compareCards('Rarity'));
+    expect(byRarity[0].rarity).toBe('Mythic');
+    const byName = [...POOL].sort(compareCards('Name'));
+    expect(byName[0].name.localeCompare(byName[1].name)).toBeLessThanOrEqual(0);
   });
 });
 
@@ -31,8 +115,9 @@ describe('activeFilterCount', () => {
       activeFilterCount({ ...DEFAULT_FILTERS, view: 'all', sort: 'Rarity', rarity: 'Rare' }),
     ).toBe(1);
     expect(
-      activeFilterCount({ ...DEFAULT_FILTERS, type: 'Unit', color: 'Ember', keyword: 'Swift' }),
+      activeFilterCount({ ...DEFAULT_FILTERS, type: 'Unit', color: 'Ember', keyword: 'Kindle' }),
     ).toBe(3);
+    expect(activeFilterCount({ ...DEFAULT_FILTERS, tier: '2', rule: 'fog' })).toBe(2);
   });
 });
 
@@ -66,6 +151,9 @@ describe('presets', () => {
     expect(suggestPresetName(f, [])).toBe('Rare · Ember');
     expect(suggestPresetName(f, [{ name: 'Rare · Ember', filters: f }])).toBe('Rare · Ember 2');
     expect(suggestPresetName(DEFAULT_FILTERS, [])).toBe('My filter');
+    expect(suggestPresetName({ ...DEFAULT_FILTERS, tier: '3', keyword: 'Peek' }, [])).toBe(
+      'Peek · Tier 3',
+    );
   });
 });
 

@@ -1,108 +1,155 @@
 import { describe, expect, test } from 'vitest';
-import { checkProducibleColors, drawTestHand, seededShuffle } from './goldfish';
-import { POOL_BY_ID, POOL_LEADERS } from '../game/v3/cardpool';
-import { buildDeck, randomArchetype } from '../game/v3/decks';
-import { createGame, firstPlayerForSeed, mulberry32 } from '../game/v3/engine';
-import { LEADER_COLORS } from '../game/v3/colors';
+import {
+  drawTestHand,
+  isCastableInformation,
+  isCastableRevive,
+  powerCards,
+  seededShuffle,
+  simulateOpenings,
+} from './goldfish';
+import { POOL, POOL_BY_ID } from '../game/poker/cardpool';
+import { buildDeck, deckCardIds, deckDefFromCustom } from '../game/poker/deck';
+import { createMatch } from '../game/poker/engine';
+import { MODES } from '../game/poker/constants';
+import { rngOn } from '../game/poker/rng';
+import type { CardDef } from '../game/poker/cards';
 
-const deck = buildDeck(randomArchetype(mulberry32(1337)));
+const leader = POOL_BY_ID['ethereal_sea_witch']; // Tide / Light: revive and information both legal
+const deck = buildDeck(leader, MODES.standard, rngOn({ rng: 1337 }));
+const ids = deckCardIds(deck);
 
 describe('seededShuffle', () => {
   test('same seed, same order', () => {
-    expect(seededShuffle(deck.cards, 42)).toEqual(seededShuffle(deck.cards, 42));
+    expect(seededShuffle(ids, 42)).toEqual(seededShuffle(ids, 42));
   });
 
   test('different seeds diverge', () => {
-    expect(seededShuffle(deck.cards, 42)).not.toEqual(seededShuffle(deck.cards, 43));
+    expect(seededShuffle(ids, 42)).not.toEqual(seededShuffle(ids, 43));
   });
 
   test('it is a permutation, not a sample', () => {
-    const shuffled = seededShuffle(deck.cards, 7);
-    expect(shuffled).toHaveLength(deck.cards.length);
-    expect([...shuffled].sort()).toEqual([...deck.cards].sort());
+    const shuffled = seededShuffle(ids, 7);
+    expect(shuffled).toHaveLength(ids.length);
+    expect([...shuffled].sort()).toEqual([...ids].sort());
   });
 });
 
 describe('drawTestHand', () => {
-  test('is the opening hand a real match deals P1 on that seed', () => {
-    for (const seed of [1, 99, 123456]) {
-      const game = createGame(deck, deck, POOL_BY_ID, {
-        seed,
-        firstPlayer: firstPlayerForSeed(seed),
-      });
-      const shown = drawTestHand(deck.cards, POOL_BY_ID, seed).cards.map((c) => c.id);
-      expect(game.players.P1.hand.map((c) => c.def.id)).toEqual(shown);
+  test('is the opening power hand a real match deals the first seat on that seed', () => {
+    for (const mode of ['quick', 'standard', 'deep'] as const) {
+      const d = buildDeck(leader, MODES[mode], rngOn({ rng: 5 }));
+      const list = deckCardIds(d);
+      for (const seed of [1, 99, 123456]) {
+        const def = deckDefFromCustom(leader.id, list, 'Test');
+        const m = createMatch({
+          seed,
+          mode,
+          seats: [
+            { name: 'A', human: true, deck: def },
+            { name: 'B', human: false, deck: def },
+          ],
+        });
+        const shown = drawTestHand(list, POOL_BY_ID, seed, mode).cards.map((c) => c.id);
+        expect(m.seats[0].hand.map((p) => p.def.id)).toEqual(shown);
+      }
     }
   });
 
-  test('deals the opening hand size and is reproducible from its seed', () => {
-    const a = drawTestHand(deck.cards, POOL_BY_ID, 99);
-    const b = drawTestHand(deck.cards, POOL_BY_ID, 99);
-    expect(a.cards).toHaveLength(7);
+  test('deals the opening hand size for the format and is reproducible from its seed', () => {
+    const a = drawTestHand(ids, POOL_BY_ID, 99);
+    const b = drawTestHand(ids, POOL_BY_ID, 99);
+    expect(a.cards).toHaveLength(MODES.standard.handStart);
     expect(a.cards.map((c) => c.id)).toEqual(b.cards.map((c) => c.id));
     expect(a.seed).toBe(99);
+    expect(drawTestHand(ids, POOL_BY_ID, 99, 'quick').cards).toHaveLength(MODES.quick.handStart);
+    expect(drawTestHand(ids, POOL_BY_ID, 99, 'deep').cards).toHaveLength(MODES.deep.handStart);
   });
 
-  test('reports the average cost of the hand it actually dealt', () => {
-    const hand = drawTestHand(deck.cards, POOL_BY_ID, 5);
-    const manual =
-      hand.cards.reduce(
-        (s, c) =>
-          s +
-          (c.cost
-            ? c.cost.generic + Object.values(c.cost.pips).reduce((x, y) => x + (y ?? 0), 0)
-            : 0),
-        0,
-      ) / hand.cards.length;
-    expect(hand.averageCost).toBeCloseTo(manual, 2);
+  test('never deals the Location — only powers go in the hand', () => {
+    for (let seed = 0; seed < 30; seed++) {
+      expect(drawTestHand(ids, POOL_BY_ID, seed).cards.every((c) => c.type !== 'Location')).toBe(
+        true,
+      );
+    }
+    expect(powerCards(ids, POOL_BY_ID)).toHaveLength(MODES.standard.powers);
+  });
+
+  test('reports the average tier and Units of the hand it actually dealt', () => {
+    const hand = drawTestHand(ids, POOL_BY_ID, 5);
+    const manual = hand.cards.reduce((s, c) => s + (c.tier ?? 0), 0) / hand.cards.length;
+    expect(hand.averageTier).toBeCloseTo(manual, 2);
+    expect(hand.units).toBe(hand.cards.filter((c) => c.type === 'Unit').length);
+    expect(hand.noUnits).toBe(hand.units === 0);
   });
 
   test('an empty deck does not divide by zero', () => {
     const hand = drawTestHand([], POOL_BY_ID, 1);
     expect(hand.cards).toEqual([]);
-    expect(hand.averageCost).toBe(0);
+    expect(hand.averageTier).toBe(0);
     expect(hand.noUnits).toBe(true);
   });
 
   test('unknown card ids are dropped rather than crashing', () => {
-    const hand = drawTestHand(['not_a_card', ...deck.cards], POOL_BY_ID, 3);
+    const hand = drawTestHand(['not_a_card', ...ids], POOL_BY_ID, 3);
     expect(hand.cards.every((c) => !!c)).toBe(true);
   });
 });
 
-describe('checkProducibleColors', () => {
-  test('an auto-built deck can produce every colour it asks for', () => {
-    // buildDeck filters on colour identity, so this is the invariant the
-    // warning exists to catch a violation of.
-    const check = checkProducibleColors(deck.leaderId, deck.cards, POOL_BY_ID);
-    expect(check.unproducible).toEqual([]);
-    for (const c of LEADER_COLORS[deck.leaderId] ?? []) {
-      expect(check.producible).toContain(c);
+describe('castable revive / information', () => {
+  test('a revive keyword counts only below the second-cost tier', () => {
+    const redraw = (tier: number): CardDef => ({
+      id: 'r',
+      name: 'r',
+      type: 'Event',
+      colors: [],
+      tier,
+      effect: { kw: 'Redraw' },
+    });
+    expect(isCastableRevive(redraw(2))).toBe(true);
+    expect(isCastableRevive(redraw(4))).toBe(false);
+    expect(isCastableInformation(redraw(2))).toBe(false);
+  });
+});
+
+describe('simulateOpenings', () => {
+  test('is pure and seeded', () => {
+    const a = simulateOpenings(ids, POOL_BY_ID, 'standard', { trials: 200, seed: 9 });
+    const b = simulateOpenings(ids, POOL_BY_ID, 'standard', { trials: 200, seed: 9 });
+    expect(a).toEqual(b);
+  });
+
+  test('odds only grow hand over hand, and cards seen follow the format', () => {
+    const s = simulateOpenings(ids, POOL_BY_ID, 'standard', { trials: 300, hands: 5 });
+    expect(s.byHand.map((h) => h.seen)).toEqual([4, 5, 6, 7, 8]);
+    for (let i = 1; i < s.byHand.length; i++) {
+      expect(s.byHand[i].revive).toBeGreaterThanOrEqual(s.byHand[i - 1].revive);
+      expect(s.byHand[i].information).toBeGreaterThanOrEqual(s.byHand[i - 1].information);
+      expect(s.byHand[i].unit).toBeGreaterThanOrEqual(s.byHand[i - 1].unit);
     }
+    expect(s.byHand[0].unit).toBe(s.openingWithUnit);
+    expect(s.averageOpeningTier).toBeGreaterThanOrEqual(1);
+    expect(s.averageOpeningTier).toBeLessThanOrEqual(5);
   });
 
-  test('flags a colour the deck demands but cannot produce', () => {
-    const leader = POOL_LEADERS[0];
-    const identity = LEADER_COLORS[leader.id] ?? [];
-    // Find any card whose pips sit entirely outside this Leader's identity —
-    // the shape an imported deck code could smuggle in.
-    const offColor = Object.values(POOL_BY_ID).find(
-      (c) =>
-        c.type !== 'Leader' &&
-        Object.entries(c.cost?.pips ?? {}).some(
-          ([col, n]) => !!n && !identity.includes(col as never),
-        ),
-    );
-    expect(offColor).toBeTruthy();
-    const check = checkProducibleColors(leader.id, [offColor!.id], POOL_BY_ID);
-    expect(check.unproducible.length).toBeGreaterThan(0);
+  test('a deck of nothing but Units always opens with one', () => {
+    const units = POOL.filter((c) => c.type === 'Unit')
+      .slice(0, 12)
+      .flatMap((c) => [c.id, c.id]);
+    const s = simulateOpenings(units, POOL_BY_ID, 'standard', { trials: 50 });
+    expect(s.openingWithUnit).toBe(1);
   });
 
-  test('a Sanctum adds its own produced colour to the producible set', () => {
-    const sanctum = Object.values(POOL_BY_ID).find((c) => c.type === 'Location' && c.produces);
-    expect(sanctum).toBeTruthy();
-    const check = checkProducibleColors(null, [sanctum!.id], POOL_BY_ID);
-    expect(check.producible).toContain(sanctum!.produces);
-    expect(check.sanctums).toBe(1);
+  test('a deck with no revive power never finds one', () => {
+    const noRevive = powerCards(ids, POOL_BY_ID)
+      .filter((c) => !isCastableRevive(c))
+      .map((c) => c.id);
+    const s = simulateOpenings(noRevive, POOL_BY_ID, 'standard', { trials: 50 });
+    expect(s.byHand.every((h) => h.revive === 0)).toBe(true);
+  });
+
+  test('an empty deck returns zeros', () => {
+    const s = simulateOpenings([], POOL_BY_ID, 'quick');
+    expect(s.openingWithUnit).toBe(0);
+    expect(s.byHand.every((h) => h.seen === 0 && h.unit === 0)).toBe(true);
   });
 });

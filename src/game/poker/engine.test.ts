@@ -168,7 +168,8 @@ describe('casting', () => {
     const a = give(m, 0, power({ kw: 'Kindle', n: 0.5 }, { colors: ['Ember'] }));
     const b = give(m, 0, power({ kw: 'Kindle', n: 0.5 }, { colors: ['Ember'], id: 'k2' }));
     act(m, { type: 'cast', seat: 0, uid: a, target: 1 });
-    while (waitingOn(m).kind === 'window') act(m, { type: 'pass', seat: (waitingOn(m) as { seats: number[] }).seats[0] });
+    while (waitingOn(m).kind === 'window')
+      act(m, { type: 'pass', seat: (waitingOn(m) as { seats: number[] }).seats[0] });
     expect(() => act(m, { type: 'cast', seat: 0, uid: b, target: 1 })).toThrow(IllegalAction);
   });
 
@@ -213,7 +214,11 @@ describe('casting', () => {
 
   it('Snuff cancels a cast in its response window', () => {
     const m = rigHand(table(3), { button: 0 });
-    const snuff = give(m, 1, power({ kw: 'Snuff' }, { subtype: 'Quick', tier: 3, colors: ['Void'] }));
+    const snuff = give(
+      m,
+      1,
+      power({ kw: 'Snuff' }, { subtype: 'Quick', tier: 3, colors: ['Void'] }),
+    );
     const uid = give(m, 0, power({ kw: 'Siphon', n: 1 }, { tier: 2 }));
     act(m, { type: 'cast', seat: 0, uid });
     expect(waitingOn(m)).toMatchObject({ kind: 'window', seats: [1] });
@@ -224,14 +229,22 @@ describe('casting', () => {
 
   it('Feint fizzles in secret; Call Out catches it and refunds the caller', () => {
     const m = rigHand(table(3), { button: 0 });
-    const feint = give(m, 0, power({ kw: 'Siphon', n: 1 }, { tier: 2, mods: [{ kw: 'Feint' }, { kw: 'Quickstrike' }] }));
+    const feint = give(
+      m,
+      0,
+      power({ kw: 'Siphon', n: 1 }, { tier: 2, mods: [{ kw: 'Feint' }, { kw: 'Quickstrike' }] }),
+    );
     const potBefore = m.hand!.dead;
     act(m, { type: 'cast', seat: 0, uid: feint, feint: true });
     expect(m.hand!.casts[0].status).toBe('resolved');
     expect(m.hand!.dead).toBe(potBefore + 1 * UNIT); // nothing siphoned
     expect(viewFor(m, 1).hand!.casts[0].feinted).toBe(false);
     act(m, { type: 'call', seat: 0 });
-    const call = give(m, 1, power({ kw: 'Call Out' }, { colors: ['Light'], mods: [{ kw: 'Quickstrike' }] }));
+    const call = give(
+      m,
+      1,
+      power({ kw: 'Call Out' }, { colors: ['Light'], mods: [{ kw: 'Quickstrike' }] }),
+    );
     const nerve = m.seats[0].nerve;
     const stack = m.seats[1].stack;
     act(m, { type: 'cast', seat: 1, uid: call, targetCast: m.hand!.casts[0].id });
@@ -241,8 +254,19 @@ describe('casting', () => {
 
   it('caps Units at two and five stars a hand', () => {
     const m = rigHand(table(3), { button: 0 });
-    const u3 = give(m, 0, power({ kw: 'Decoy' }, { type: 'Unit', subtype: undefined, tier: 3, mods: [{ kw: 'Quickstrike' }] }));
-    const u3b = give(m, 0, power({ kw: 'Decoy' }, { type: 'Unit', subtype: undefined, tier: 3, id: 'u3b' }));
+    const u3 = give(
+      m,
+      0,
+      power(
+        { kw: 'Decoy' },
+        { type: 'Unit', subtype: undefined, tier: 3, mods: [{ kw: 'Quickstrike' }] },
+      ),
+    );
+    const u3b = give(
+      m,
+      0,
+      power({ kw: 'Decoy' }, { type: 'Unit', subtype: undefined, tier: 3, id: 'u3b' }),
+    );
     act(m, { type: 'cast', seat: 0, uid: u3 });
     expect(canCast(m, 0, u3b)).toMatchObject({ ok: false });
   });
@@ -327,7 +351,8 @@ describe('match flow', () => {
     const first = match.seats[match.placements![0]];
     const last = match.seats[match.placements![2]];
     if (!match.capped) expect(first.busted).toBe(false);
-    if (last.busted && match.seats.filter((s) => s.busted).length > 1) expect(last.bustOrder).toBe(1);
+    if (last.busted && match.seats.filter((s) => s.busted).length > 1)
+      expect(last.bustOrder).toBe(1);
   });
 
   it('createMatch refuses fewer than two seats', () => {

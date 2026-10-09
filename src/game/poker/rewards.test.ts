@@ -3,7 +3,9 @@ import { ordinal, placementReward } from './rewards';
 
 describe('placement rewards', () => {
   it('pays 100/76/61/49/43/40 at six seats in Standard', () => {
-    expect([1, 2, 3, 4, 5, 6].map((p) => placementReward(p, 6, 'standard').credits)).toEqual([100, 76, 61, 49, 43, 40]);
+    expect([1, 2, 3, 4, 5, 6].map((p) => placementReward(p, 6, 'standard').credits)).toEqual([
+      100, 76, 61, 49, 43, 40,
+    ]);
   });
   it('heads-up is win/loss, and modes scale it', () => {
     expect(placementReward(1, 2, 'standard').credits).toBe(100);

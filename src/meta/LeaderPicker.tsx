@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { POOL_LEADERS } from '../game/v3/cardpool';
-import { LEADER_COLORS } from '../game/v3/colors';
+import { POOL_LEADERS } from '../game/poker/cardpool';
+import { cardColors, COLOR_IDENTITY } from '../game/poker/colors';
 import { COLOR_PIP } from './colors';
 import { EssenceIcon } from '../components/EssenceIcon';
 import { SafeImage } from './SafeImage';
@@ -16,8 +16,10 @@ const DECK_BOX_MAX_RARITY_IDX = RARITIES.indexOf('Rare');
 
 /**
  * Full-screen Leader picker for the one-time Deck Box: the player chooses
- * which Leader to build around (Rare rarity or below only) before `claim_deck_box`
- * grants that Leader + its deterministic legal 60-card deck. Leader roster
+ * which Leader to build around (Rare rarity or below only) before
+ * `claim_deck_box` grants that Leader and a starter deck of its cards. Each
+ * tile shows what the Leader brings to a poker table: its two colours (which
+ * decide the cards a deck may hold) and its two nerve abilities. The roster
  * comes straight from POOL_LEADERS (populated at boot by App.tsx's
  * applyCardPool call) so there's no duplicate hand-rolled Leader list to
  * keep in sync.
@@ -129,12 +131,14 @@ export function LeaderPicker({
                   </div>
                   <div className="px-2 pb-2">
                     <div className="heading-font text-xs truncate">{leader.name}</div>
-                    {(LEADER_COLORS[leader.id] ?? []).length > 0 && (
+                    {cardColors(leader).length > 0 && (
                       <div
-                        className="flex items-center gap-1 mt-0.5"
-                        title={`Essence identity: ${(LEADER_COLORS[leader.id] ?? []).join(' / ')}`}
+                        className="flex items-center gap-1 mt-0.5 flex-wrap"
+                        title={cardColors(leader)
+                          .map((c) => `${c}: ${COLOR_IDENTITY[c]}`)
+                          .join('\n')}
                       >
-                        {(LEADER_COLORS[leader.id] ?? []).map((c) => (
+                        {cardColors(leader).map((c) => (
                           <span
                             key={c}
                             className="inline-flex items-center gap-0.5 text-[8px] font-black text-[var(--c-steel)]"
@@ -149,6 +153,21 @@ export function LeaderPicker({
                           </span>
                         ))}
                       </div>
+                    )}
+                    {(leader.abilities ?? []).length > 0 && (
+                      <ul
+                        className="mt-1 list-none space-y-0.5"
+                        aria-label={`${leader.name}'s nerve abilities`}
+                      >
+                        {(leader.abilities ?? []).map((a) => (
+                          <li
+                            key={a.text}
+                            className="text-[9px] font-black leading-tight text-[var(--c-ink)]"
+                          >
+                            › {a.text}
+                          </li>
+                        ))}
+                      </ul>
                     )}
                     {leader.flavor && (
                       <p className="text-[9px] font-bold text-[var(--c-steel)] mt-0.5 line-clamp-2">

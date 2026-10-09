@@ -47,7 +47,13 @@ import {
   preflopStrength,
   type Card,
 } from './evaluator';
-import { CHIP_KEYWORDS, KEYWORD_SPECS, keywordLabel, type EffectKeyword, type Keyword } from './keywords';
+import {
+  CHIP_KEYWORDS,
+  KEYWORD_SPECS,
+  keywordLabel,
+  type EffectKeyword,
+  type Keyword,
+} from './keywords';
 import { buildCycle, ruleName, type ScheduledLocation } from './locations';
 import { poolByType } from './cardpool';
 import { rngOn, shuffle, type Rng } from './rng';
@@ -359,7 +365,13 @@ export function aliveSeats(m: Match): number[] {
 }
 
 /** Next seat clockwise (dir 1) or counter-clockwise (dir -1) matching pred. */
-function nextSeat(m: Match, from: number, pred: (i: number) => boolean, dir = 1, inclusive = false): number | null {
+function nextSeat(
+  m: Match,
+  from: number,
+  pred: (i: number) => boolean,
+  dir = 1,
+  inclusive = false,
+): number | null {
   const n = m.seats.length;
   for (let k = inclusive ? 0 : 1; k <= n; k++) {
     const i = (((from + dir * k) % n) + n) % n;
@@ -416,9 +428,13 @@ function adjustNerve(m: Match, seat: number, delta: number, why?: string): void 
   const before = s.nerve;
   s.nerve = Math.max(0, Math.min(NERVE.max, s.nerve + delta * mult));
   if (s.nerve !== before && why) {
-    say(m, `${s.name} ${s.nerve > before ? 'gains' : 'loses'} ${Math.abs(s.nerve - before)} nerve (${why}).`);
+    say(
+      m,
+      `${s.name} ${s.nerve > before ? 'gains' : 'loses'} ${Math.abs(s.nerve - before)} nerve (${why}).`,
+    );
   }
-  if (before > 0 && s.nerve === 0) say(m, `${s.name} is TILTED — Leader locked until nerve recovers.`);
+  if (before > 0 && s.nerve === 0)
+    say(m, `${s.name} is TILTED — Leader locked until nerve recovers.`);
 }
 
 export function tilted(s: Seat): boolean {
@@ -511,7 +527,9 @@ export function createMatch(setup: MatchSetup): Match {
 function nextLocation(m: Match): ScheduledLocation {
   if (m.bag.length === 0) {
     const alive = aliveSeats(m);
-    const house = poolByType('Location').filter((d) => !alive.some((i) => m.seats[i].location.id === d.id));
+    const house = poolByType('Location').filter(
+      (d) => !alive.some((i) => m.seats[i].location.id === d.id),
+    );
     m.bag = buildCycle(
       alive.map((i) => ({ card: m.seats[i].location, owner: i })),
       house,
@@ -782,7 +800,13 @@ function act(m: Match, seat: number, kind: 'fold' | 'check' | 'call' | 'raise', 
     say(m, `${label} ${verb} ${fmtChips(target)}${s.stack === 0 ? ' — ALL IN' : ''}.`);
     // Bait: a raise after a Bait cast refunds its chips.
     for (const c of h.casts) {
-      if (c.street === h.street && !c.baitRefunded && c.chipsPaid > 0 && c.seat !== seat && hasModRef(c, 'Bait')) {
+      if (
+        c.street === h.street &&
+        !c.baitRefunded &&
+        c.chipsPaid > 0 &&
+        c.seat !== seat &&
+        hasModRef(c, 'Bait')
+      ) {
         c.baitRefunded = true;
         const got = takeFromPot(m, c.seat, c.chipsPaid);
         say(m, `Bait: ${seatName(m, c.seat)} takes back ${fmtChips(got)}.`);
@@ -865,8 +889,14 @@ function goToStreet(m: Match, street: Street): void {
       h.board2.push(c2);
     }
   }
-  const shown = h.board.filter((c) => !c.facedown).map(cardLabel).join(' ');
-  say(m, `${street.toUpperCase()}: ${shown}${h.board2 ? ` · second board ${h.board2.map(cardLabel).join(' ')}` : ''}`);
+  const shown = h.board
+    .filter((c) => !c.facedown)
+    .map(cardLabel)
+    .join(' ');
+  say(
+    m,
+    `${street.toUpperCase()}: ${shown}${h.board2 ? ` · second board ${h.board2.map(cardLabel).join(' ')}` : ''}`,
+  );
 
   // Start-of-street effects: Entropic, Thriving Units, Fused casts.
   for (const t of h.entropic) {
@@ -875,7 +905,9 @@ function goToStreet(m: Match, street: Street): void {
   for (const u of h.units) {
     if (!hasKw(u.def, 'Thriving') || !inHand(h, u.seat) || !u.def.effect) continue;
     const base = u.def.effect.n ?? 1;
-    u.n = (u.n ?? base) + Math.max(CHIP_KEYWORDS.has(u.def.effect.kw) ? 0.5 : 1, base * THRIVING_GROWTH);
+    u.n =
+      (u.n ?? base) +
+      Math.max(CHIP_KEYWORDS.has(u.def.effect.kw) ? 0.5 : 1, base * THRIVING_GROWTH);
     const cast = h.casts.find((c) => c.id === u.castId);
     if (cast) {
       say(m, `${u.def.name} thrives.`);
@@ -898,7 +930,13 @@ function goToStreet(m: Match, street: Street): void {
   if (street === 'flop' && h.rule.id === 'pineapple') {
     const queue = h.dealtIn.map((_, i) => i).filter((i) => inHand(h, i) && h.holes[i].length > 2);
     if (queue.length) {
-      h.pending = { kind: 'choice', seat: queue[0], choice: 'pineapple', keep: 2, queue: queue.slice(1) };
+      h.pending = {
+        kind: 'choice',
+        seat: queue[0],
+        choice: 'pineapple',
+        keep: 2,
+        queue: queue.slice(1),
+      };
     }
   }
 
@@ -958,7 +996,10 @@ function buildPots(h: Hand): Pot[] {
   for (const L of levels) {
     let amount = 0;
     for (let i = 0; i < n; i++) amount += Math.max(0, Math.min(h.committed[i], L) - prev);
-    pots.push({ amount, eligible: [...Array(n).keys()].filter((i) => live(i) && h.committed[i] >= L) });
+    pots.push({
+      amount,
+      eligible: [...Array(n).keys()].filter((i) => live(i) && h.committed[i] >= L),
+    });
     prev = L;
   }
   // Folded seats' chips above the top live level join the last pot.
@@ -992,7 +1033,9 @@ function split(m: Match, amount: number, winners: number[], gains: number[]): vo
   const h = m.hand!;
   // Odd chips go to the first winner clockwise from the button.
   const ordered = [...winners].sort(
-    (a, b) => ((a - h.button + m.seats.length) % m.seats.length) - ((b - h.button + m.seats.length) % m.seats.length),
+    (a, b) =>
+      ((a - h.button + m.seats.length) % m.seats.length) -
+      ((b - h.button + m.seats.length) % m.seats.length),
   );
   const share = Math.floor(amount / winners.length);
   let rem = amount - share * winners.length;
@@ -1050,7 +1093,8 @@ function finishHand(m: Match): void {
       : [{ b: h.board }];
     const prelim = buildPots(h);
     const winnerSet = new Set<number>();
-    for (const p of prelim) for (const bd of boards) for (const w of winnersOf(h, p.eligible, bd.b)) winnerSet.add(w);
+    for (const p of prelim)
+      for (const bd of boards) for (const w of winnersOf(h, p.eligible, bd.b)) winnerSet.add(w);
     applyRefunds(m, [...winnerSet], gains, true);
     const pots = buildPots(h);
     for (const p of pots) {
@@ -1086,8 +1130,13 @@ function finishHand(m: Match): void {
       }
     }
     for (const r of potResults) {
-      const names = r.winners.map((w) => `${seatName(m, w)} (${describeSeatHand(h, w, r.board === 2 ? h.board2! : h.board)})`);
-      say(m, `${names.join(' & ')} win${r.winners.length === 1 ? 's' : ''} ${fmtChips(r.amount)}${r.board ? ` on board ${r.board}` : ''}.`);
+      const names = r.winners.map(
+        (w) => `${seatName(m, w)} (${describeSeatHand(h, w, r.board === 2 ? h.board2! : h.board)})`,
+      );
+      say(
+        m,
+        `${names.join(' & ')} win${r.winners.length === 1 ? 's' : ''} ${fmtChips(r.amount)}${r.board ? ` on board ${r.board}` : ''}.`,
+      );
     }
     for (const w of winnersAll) adjustNerve(m, w, NERVE.winShowdown, 'won at showdown');
     if (lastAgg !== null && !winnersAll.includes(lastAgg) && !madeHand(h, lastAgg))
@@ -1100,7 +1149,8 @@ function finishHand(m: Match): void {
       const paid = transfer(m, v.to, v.from, Math.round(v.n * UNIT));
       gains[v.to] -= paid;
       gains[v.from] += paid;
-      if (paid) say(m, `Venomous: ${seatName(m, v.to)} pays ${seatName(m, v.from)} ${fmtChips(paid)}.`);
+      if (paid)
+        say(m, `Venomous: ${seatName(m, v.to)} pays ${seatName(m, v.from)} ${fmtChips(paid)}.`);
     }
   }
   for (const g of h.gambit) {
@@ -1108,11 +1158,20 @@ function finishHand(m: Match): void {
       const paid = transfer(m, g.seat, winnersAll[0], g.owed * 2);
       gains[g.seat] -= paid;
       gains[winnersAll[0]] += paid;
-      if (paid) say(m, `Gambit lost: ${seatName(m, g.seat)} pays ${seatName(m, winnersAll[0])} ${fmtChips(paid)}.`);
+      if (paid)
+        say(
+          m,
+          `Gambit lost: ${seatName(m, g.seat)} pays ${seatName(m, winnersAll[0])} ${fmtChips(paid)}.`,
+        );
     }
   }
   for (const b of h.bounty) {
-    if (m.seats[b.to].stack === 0 && winnersAll.length && b.from !== winnersAll[0] && m.seats[b.from].stack > 0) {
+    if (
+      m.seats[b.to].stack === 0 &&
+      winnersAll.length &&
+      b.from !== winnersAll[0] &&
+      m.seats[b.from].stack > 0
+    ) {
       const paid = transfer(m, winnersAll[0], b.from, Math.round(b.n * UNIT));
       if (paid) say(m, `Bounty: ${seatName(m, b.from)} collects ${fmtChips(paid)}.`);
     }
@@ -1134,7 +1193,9 @@ function finishHand(m: Match): void {
     no: h.no,
     location: h.location.card.name,
     board: h.board.map(cardLabel).join(' '),
-    summary: winnersAll.map((w) => `${seatName(m, w)} +${fmtChips(Math.max(0, delta[w]))}`).join(', ') || 'no winner',
+    summary:
+      winnersAll.map((w) => `${seatName(m, w)} +${fmtChips(Math.max(0, delta[w]))}`).join(', ') ||
+      'no winner',
   });
 
   // Busts: seats at zero are out. Same-hand busts rank by starting stack.
@@ -1157,12 +1218,17 @@ function applyRefunds(m: Match, winners: number[], gains: number[], showdown: bo
     if (!h.dealtIn[i] || winners.includes(i)) continue;
     let claim = 0;
     if (h.bulwark[i] > 0) claim += Math.round(h.bulwark[i] * UNIT);
-    if (showdown && h.insurance[i] > 0 && m.seats[i].stack === 0) claim += Math.round(h.insurance[i] * UNIT);
+    if (showdown && h.insurance[i] > 0 && m.seats[i].stack === 0)
+      claim += Math.round(h.insurance[i] * UNIT);
     claim = Math.min(claim, h.committed[i] + h.powerPaid[i]);
     if (claim <= 0) continue;
     const got = takeFromPot(m, i, claim);
     gains[i] += got;
-    if (got) say(m, `${seatName(m, i)} recovers ${fmtChips(got)} (${h.bulwark[i] ? 'Bulwark' : 'Insurance'}).`);
+    if (got)
+      say(
+        m,
+        `${seatName(m, i)} recovers ${fmtChips(got)} (${h.bulwark[i] ? 'Bulwark' : 'Insurance'}).`,
+      );
   }
 }
 
@@ -1194,7 +1260,9 @@ function endMatch(m: Match, byClock: boolean): void {
   m.phase = 'over';
   m.capped = byClock;
   const alive = m.seats.filter((s) => !s.busted).sort((a, b) => b.stack - a.stack || a.idx - b.idx);
-  const out = m.seats.filter((s) => s.busted).sort((a, b) => (b.bustOrder ?? 0) - (a.bustOrder ?? 0));
+  const out = m.seats
+    .filter((s) => s.busted)
+    .sort((a, b) => (b.bustOrder ?? 0) - (a.bustOrder ?? 0));
   m.placements = [...alive, ...out].map((s) => s.idx);
   m.placements.forEach((idx, k) => (m.seats[idx].place = k + 1));
   say(
@@ -1251,13 +1319,23 @@ export function castCost(m: Match, seat: number, def: CardDef): CastCost {
 export function excludableCategories(m: Match, seat: number): number[] {
   const h = m.hand!;
   if (h.exclusions[seat].length >= MAX_EXCLUSIONS) return [];
-  const board = h.board;
+  // Attainability as the seat itself can judge it: a Fog card still face-down
+  // and a hole card it has blinded are unknown to it (and are r = 0 in its
+  // view), so the engine and every seat's view agree on the options.
+  const known = (c: PCard) => c.r !== 0 && !c.facedown && !c.blinded;
+  const board = h.board.filter(known);
   const last = h.rule.id === 'shortBoard' ? 4 : 5;
-  const can = attainableCategories(h.holes[seat], board, last - board.length);
+  const can = attainableCategories(h.holes[seat].filter(known), board, last - board.length);
   return EXCLUDABLE.filter((c) => can.has(c) && !h.exclusions[seat].includes(c));
 }
 
-function validateExtra(m: Match, seat: number, uid: string | null, extra: ExtraCost[], need: number): void {
+function validateExtra(
+  m: Match,
+  seat: number,
+  uid: string | null,
+  extra: ExtraCost[],
+  need: number,
+): void {
   const h = m.hand!;
   if (extra.length !== need) throw new IllegalAction(`This cast needs ${need} non-chip cost(s)`);
   const shed = new Set<string>();
@@ -1271,7 +1349,8 @@ function validateExtra(m: Match, seat: number, uid: string | null, extra: ExtraC
       shed.add(e.uid);
     } else if (e.kind === 'debuff') {
       const c = h.holes[seat][e.hole];
-      if (!c || c.blinded || debuffed.has(e.hole)) throw new IllegalAction('Pick a hole card to blind');
+      if (!c || c.blinded || debuffed.has(e.hole))
+        throw new IllegalAction('Pick a hole card to blind');
       debuffed.add(e.hole);
     } else {
       if (!can.includes(e.category) || excluded.has(e.category))
@@ -1279,7 +1358,8 @@ function validateExtra(m: Match, seat: number, uid: string | null, extra: ExtraC
       excluded.add(e.category);
     }
   }
-  if (h.exclusions[seat].length + excluded.size > MAX_EXCLUSIONS) throw new IllegalAction('At most two exclusions per hand');
+  if (h.exclusions[seat].length + excluded.size > MAX_EXCLUSIONS)
+    throw new IllegalAction('At most two exclusions per hand');
 }
 
 function payExtra(m: Match, seat: number, extra: ExtraCost[]): void {
@@ -1296,7 +1376,10 @@ function payExtra(m: Match, seat: number, extra: ExtraCost[]): void {
       say(m, `${s.name} blinds one of their hole cards for the street.`);
     } else {
       h.exclusions[seat].push(e.category);
-      say(m, `${s.name} excludes ${CATEGORY_NAMES[e.category]} — they cannot win a showdown with it.`);
+      say(
+        m,
+        `${s.name} excludes ${CATEGORY_NAMES[e.category]} — they cannot win a showdown with it.`,
+      );
     }
   }
 }
@@ -1382,7 +1465,12 @@ export function castTargets(m: Match, seat: number, def: CardDef): CastRecord[] 
   }
   if (def.effect?.kw === 'Call Out') {
     return h.casts.filter(
-      (c) => c.seat !== seat && c.status === 'resolved' && !c.calledOut && !hasModRef(c, 'Warded') && !c.leader,
+      (c) =>
+        c.seat !== seat &&
+        c.status === 'resolved' &&
+        !c.calledOut &&
+        !hasModRef(c, 'Warded') &&
+        !c.leader,
     );
   }
   return [];
@@ -1409,8 +1497,10 @@ export function canCast(m: Match, seat: number, uid: string): CastCheck {
   if (p?.kind === 'choice') return { ok: false, why: 'Waiting on a choice' };
   if (p) {
     if (!p.seats.includes(seat)) return { ok: false, why: 'Not your window' };
-    if (!responseAllowed(h, def)) return { ok: false, why: 'Only Quick Events and Ambush cards respond' };
-    if (def.effect?.kw === 'Snuff' && p.kind !== 'response') return { ok: false, why: 'Snuff answers a cast' };
+    if (!responseAllowed(h, def))
+      return { ok: false, why: 'Only Quick Events and Ambush cards respond' };
+    if (def.effect?.kw === 'Snuff' && p.kind !== 'response')
+      return { ok: false, why: 'Snuff answers a cast' };
   } else {
     if (h.toAct !== seat) return { ok: false, why: 'Not your turn' };
     if (def.effect?.kw === 'Snuff') return { ok: false, why: 'Snuff can only answer a cast' };
@@ -1426,28 +1516,42 @@ export function canCast(m: Match, seat: number, uid: string): CastCheck {
     const out = unitsOut(h, seat);
     const stars = out.reduce((a, u) => a + (u.def.tier ?? 0), 0);
     if (out.length >= CAPS.unitCount) return { ok: false, why: 'Two Units already out' };
-    if (stars + (def.tier ?? 0) > CAPS.unitStars) return { ok: false, why: 'Units cap at 5 stars a hand' };
+    if (stars + (def.tier ?? 0) > CAPS.unitStars)
+      return { ok: false, why: 'Units cap at 5 stars a hand' };
   } else if (def.type === 'Item') {
-    if (h.itemCount[seat] >= CAPS.itemCount) return { ok: false, why: 'Two Items already this hand' };
-    if (h.itemGears[seat] + (def.tier ?? 0) > CAPS.itemGears) return { ok: false, why: 'Items cap at 5 gears a hand' };
+    if (h.itemCount[seat] >= CAPS.itemCount)
+      return { ok: false, why: 'Two Items already this hand' };
+    if (h.itemGears[seat] + (def.tier ?? 0) > CAPS.itemGears)
+      return { ok: false, why: 'Items cap at 5 gears a hand' };
   } else if (def.type === 'Event') {
-    if (h.eventsThisStreet[seat] >= CAPS.eventsPerStreet) return { ok: false, why: 'Two Events already this street' };
-    if (h.eventBolts[seat] + (def.tier ?? 0) > CAPS.eventBolts) return { ok: false, why: 'Events cap at 5 bolts a hand' };
+    if (h.eventsThisStreet[seat] >= CAPS.eventsPerStreet)
+      return { ok: false, why: 'Two Events already this street' };
+    if (h.eventBolts[seat] + (def.tier ?? 0) > CAPS.eventBolts)
+      return { ok: false, why: 'Events cap at 5 bolts a hand' };
   }
   const eff = effectiveEffect(h, def);
   if (!eff) return { ok: false, why: 'Nothing to copy yet' };
   if (eff.kw === 'Straddle') {
-    if (h.street !== 'preflop' || h.currentBet !== h.bb || h.lastAggressor !== null || h.acted[seat] || h.straddler !== null)
+    if (
+      h.street !== 'preflop' ||
+      h.currentBet !== h.bb ||
+      h.lastAggressor !== null ||
+      h.acted[seat] ||
+      h.straddler !== null
+    )
       return { ok: false, why: 'Straddle: pre-flop, before any raise or action' };
   }
-  if ((eff.kw === 'Redraw' || eff.kw === 'Windfall') && h.deck.length < 8) return { ok: false, why: 'Deck too thin' };
-  if (eff.kw === 'Exhume' && h.muck.length === 0) return { ok: false, why: 'Nothing in the muck yet' };
+  if ((eff.kw === 'Redraw' || eff.kw === 'Windfall') && h.deck.length < 8)
+    return { ok: false, why: 'Deck too thin' };
+  if (eff.kw === 'Exhume' && h.muck.length === 0)
+    return { ok: false, why: 'Nothing in the muck yet' };
   if (needsOpponentTarget(h, def) && legalTargets(m, seat, def).length === 0)
     return { ok: false, why: 'No legal target' };
   if ((eff.kw === 'Call Out' || eff.kw === 'Snuff') && castTargets(m, seat, def).length === 0)
     return { ok: false, why: 'No cast to answer' };
   const cost = castCost(m, seat, def);
-  if (cost.extra > 0 && extraOptions(m, seat, uid) < cost.extra) return { ok: false, why: 'Cannot pay the second cost' };
+  if (cost.extra > 0 && extraOptions(m, seat, uid) < cost.extra)
+    return { ok: false, why: 'Cannot pay the second cost' };
   return { ok: true, cost };
 }
 
@@ -1467,7 +1571,8 @@ function cast(m: Match, a: Extract<Action, { type: 'cast' }>): void {
   // Targets.
   let target: number | null = null;
   if (needsOpponentTarget(h, def)) {
-    if (a.target == null || !legalTargets(m, a.seat, def).includes(a.target)) throw new IllegalAction('Pick a legal target');
+    if (a.target == null || !legalTargets(m, a.seat, def).includes(a.target))
+      throw new IllegalAction('Pick a legal target');
     target = a.target;
   }
   let targetCast: number | null = null;
@@ -1478,7 +1583,8 @@ function cast(m: Match, a: Extract<Action, { type: 'cast' }>): void {
     targetCast = pickId!;
   }
   validateExtra(m, a.seat, a.uid, a.costs ?? [], cost.extra);
-  if (a.feint && !hasKw(def, 'Feint')) throw new IllegalAction('Only Feint cards can fizzle on purpose');
+  if (a.feint && !hasKw(def, 'Feint'))
+    throw new IllegalAction('Only Feint cards can fizzle on purpose');
 
   // Pay: the card leaves the hand, chips go into the pot (Jackpot Pit: the jackpot).
   s.hand.splice(k, 1);
@@ -1521,9 +1627,16 @@ function cast(m: Match, a: Extract<Action, { type: 'cast' }>): void {
   };
   h.casts.push(rec);
   if (def.type === 'Unit') h.units.push({ uid: inst.uid, def, seat: a.seat, castId: rec.id });
-  const at = rec.veiled ? ' at a hidden target' : target !== null ? ` at ${seatName(m, target)}` : '';
+  const at = rec.veiled
+    ? ' at a hidden target'
+    : target !== null
+      ? ` at ${seatName(m, target)}`
+      : '';
   const price = paid ? ` for ${fmtChips(paid)}` : cost.gambitOwed ? ' on a Gambit' : '';
-  say(m, `${s.name} casts ${def.name} (${def.effect ? keywordLabel(def.effect.kw, def.effect.n) : ''})${at}${price}.`);
+  say(
+    m,
+    `${s.name} casts ${def.name} (${def.effect ? keywordLabel(def.effect.kw, def.effect.n) : ''})${at}${price}.`,
+  );
   if (target !== null && h.toll[target] > 0 && KEYWORD_SPECS[eff.kw].hostile) {
     const tollPaid = transfer(m, a.seat, target, Math.round(h.toll[target] * UNIT));
     if (tollPaid) say(m, `Toll: ${s.name} pays ${seatName(m, target)} ${fmtChips(tollPaid)}.`);
@@ -1555,7 +1668,8 @@ function leaderAbility(m: Match, a: Extract<Action, { type: 'leader' }>): void {
   let target: number | null = null;
   if (KEYWORD_SPECS[ab.effect.kw].target === 'opponent') {
     const pseudo = leaderPseudoDef(s.leader, a.ability);
-    if (a.target == null || !legalTargets(m, a.seat, pseudo).includes(a.target)) throw new IllegalAction('Pick a legal target');
+    if (a.target == null || !legalTargets(m, a.seat, pseudo).includes(a.target))
+      throw new IllegalAction('Pick a legal target');
     target = a.target;
   }
   h.leaderUsed[a.seat] = true;
@@ -1583,7 +1697,10 @@ function leaderAbility(m: Match, a: Extract<Action, { type: 'leader' }>): void {
   };
   h.casts.push(rec);
   if (target !== null && KEYWORD_SPECS[ab.effect.kw].hostile) h.hostileHit[target] = true;
-  say(m, `${s.name} uses their Leader: ${ab.text}${target !== null ? ` → ${seatName(m, target)}` : ''}`);
+  say(
+    m,
+    `${s.name} uses their Leader: ${ab.text}${target !== null ? ` → ${seatName(m, target)}` : ''}`,
+  );
   openResponseWindow(m, rec);
 }
 
@@ -1608,7 +1725,13 @@ export function canUseLeader(m: Match, seat: number, i: number): CastCheck {
   if (ab.chipCost && s.stack < ab.chipCost * UNIT) return { ok: false, why: 'Not enough chips' };
   const pseudo = leaderPseudoDef(s.leader, i);
   const kw = ab.effect.kw;
-  if (kw === 'Straddle' && (h.street !== 'preflop' || h.currentBet !== h.bb || h.lastAggressor !== null || h.straddler !== null))
+  if (
+    kw === 'Straddle' &&
+    (h.street !== 'preflop' ||
+      h.currentBet !== h.bb ||
+      h.lastAggressor !== null ||
+      h.straddler !== null)
+  )
     return { ok: false, why: 'Straddle: pre-flop, before any raise' };
   if (kw === 'Exhume' && h.muck.length === 0) return { ok: false, why: 'Nothing in the muck yet' };
   if (KEYWORD_SPECS[kw].target === 'opponent' && legalTargets(m, seat, pseudo).length === 0)
@@ -1682,7 +1805,8 @@ function closeWindow(m: Match): void {
 function passWindow(m: Match, seat: number): void {
   const h = m.hand!;
   const p = h.pending;
-  if (!p || p.kind === 'choice' || !p.seats.includes(seat)) throw new IllegalAction('Nothing to pass');
+  if (!p || p.kind === 'choice' || !p.seats.includes(seat))
+    throw new IllegalAction('Nothing to pass');
   p.seats = p.seats.filter((x) => x !== seat);
   if (p.seats.length === 0) closeWindow(m);
 }
@@ -1841,7 +1965,13 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
       h.holes[seat].push(c);
       say(m, `${s.name} takes a third hole card.`);
       say(m, `Windfall: you received ${cardLabel(c)}. Keep your best two.`, seat);
-      queueChoice(m, { kind: 'choice', seat, choice: 'windfall', keep: h.holes[seat].length - 1, queue: [] });
+      queueChoice(m, {
+        kind: 'choice',
+        seat,
+        choice: 'windfall',
+        keep: h.holes[seat].length - 1,
+        queue: [],
+      });
       return;
     }
     case 'Redraw':
@@ -1897,14 +2027,16 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
       const seen = readCards(m, seat, t, n);
       for (const c of seen) revealToSeat(m, c, seat);
       say(m, `${s.name} peeks at ${rec.veiled ? 'a hidden seat' : seatName(m, t)}.`);
-      if (seen.length) say(m, `Peek: ${seatName(m, t)} holds ${seen.map(cardLabel).join(', ')}.`, seat);
+      if (seen.length)
+        say(m, `Peek: ${seatName(m, t)} holds ${seen.map(cardLabel).join(', ')}.`, seat);
       return;
     }
     case 'Mark': {
       if (t === null) return;
       const seen = readCards(m, seat, t, 1);
       for (const c of seen) revealToSeat(m, c, seat);
-      if (seen.length) say(m, `Mark: you'll track ${seatName(m, t)}'s ${cardLabel(seen[0])} this hand.`, seat);
+      if (seen.length)
+        say(m, `Mark: you'll track ${seatName(m, t)}'s ${cardLabel(seen[0])} this hand.`, seat);
       return;
     }
     case 'Reveal': {
@@ -1921,7 +2053,10 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
       if (!target) return;
       target.calledOut = true;
       if (target.feinted) {
-        say(m, `Call Out! ${seatName(m, target.seat)}'s ${target.def.name} was a Feint — it fizzled.`);
+        say(
+          m,
+          `Call Out! ${seatName(m, target.seat)}'s ${target.def.name} was a Feint — it fizzled.`,
+        );
         adjustNerve(m, target.seat, NERVE.calledOutFizzle, 'caught feinting');
         const back = takeFromPot(m, seat, rec.chipsPaid);
         if (back) say(m, `${s.name}'s Call Out is refunded (${fmtChips(back)}).`);
@@ -1962,7 +2097,10 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
     case 'Venomous':
       if (t !== null) {
         h.venom.push({ from: seat, to: t, n });
-        say(m, `${seatName(m, t)} is poisoned: if they win a pot, they pay ${s.name} ${fmtChips(chips)}.`);
+        say(
+          m,
+          `${seatName(m, t)} is poisoned: if they win a pot, they pay ${s.name} ${fmtChips(chips)}.`,
+        );
       }
       return;
     case 'Burn': {
@@ -2070,7 +2208,8 @@ function freePeek(m: Match, seat: number, target: number): void {
   const h = m.hand!;
   if (!h.freePeeks.includes(seat)) throw new IllegalAction("No Dealer's Choice peek available");
   if (h.toAct !== seat || h.pending) throw new IllegalAction('On your turn');
-  if (target === seat || !inHand(h, target)) throw new IllegalAction('Pick a seat still in the hand');
+  if (target === seat || !inHand(h, target))
+    throw new IllegalAction('Pick a seat still in the hand');
   h.freePeeks = h.freePeeks.filter((x) => x !== seat);
   const seen = readCards(m, seat, target, 1);
   for (const c of seen) revealToSeat(m, c, seat);
@@ -2174,7 +2313,9 @@ export function replay(setup: MatchSetup, actions: Action[]): Match {
 export function standings(m: Match): number[] {
   if (m.placements) return m.placements;
   const alive = m.seats.filter((s) => !s.busted).sort((a, b) => b.stack - a.stack);
-  const out = m.seats.filter((s) => s.busted).sort((a, b) => (b.bustOrder ?? 0) - (a.bustOrder ?? 0));
+  const out = m.seats
+    .filter((s) => s.busted)
+    .sort((a, b) => (b.bustOrder ?? 0) - (a.bustOrder ?? 0));
   return [...alive, ...out].map((s) => s.idx);
 }
 
@@ -2184,4 +2325,3 @@ export function chipsInPlay(m: Match): number {
   const table = h && !h.done ? potTotal(h) : 0;
   return m.seats.reduce((a, s) => a + s.stack, 0) + table + m.jackpot;
 }
-

@@ -130,14 +130,24 @@ const M = (
 
 export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
   // -- Ember: pressure and chaos --
-  Straddle: E('Straddle', 'Ember', 'self', () =>
-    'Before the flop, before any raise: double the big blind this hand. You act last pre-flop.',
+  Straddle: E(
+    'Straddle',
+    'Ember',
+    'self',
+    () =>
+      'Before the flop, before any raise: double the big blind this hand. You act last pre-flop.',
   ),
-  Kindle: E('Kindle', 'Ember', 'opponent', (n) => `Drain ${n} from a target's stack into the pot.`, {
-    hostile: true,
-    stackable: true,
-    fusable: true,
-  }),
+  Kindle: E(
+    'Kindle',
+    'Ember',
+    'opponent',
+    (n) => `Drain ${n} from a target's stack into the pot.`,
+    {
+      hostile: true,
+      stackable: true,
+      fusable: true,
+    },
+  ),
   Tax: E('Tax', 'Ember', 'table', (n) => `Every opponent still in the hand antes ${n} more.`, {
     stackable: true,
     fusable: true,
@@ -149,7 +159,11 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
     (n) => `Mark a target. If they bust this hand, you collect ${n} from the winner.`,
     { hostile: true },
   ),
-  Roulette: M('Roulette', 'Ember', () => 'The effect hits a random seat still in the hand — maybe you.'),
+  Roulette: M(
+    'Roulette',
+    'Ember',
+    () => 'The effect hits a random seat still in the hand — maybe you.',
+  ),
   Gambit: M(
     'Gambit',
     'Ember',
@@ -157,29 +171,44 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
   ),
 
   // -- Tide: receiving and flow --
-  Windfall: E('Windfall', 'Tide', 'self', () =>
-    'Receive a third hole card, then keep your best two.',
+  Windfall: E(
+    'Windfall',
+    'Tide',
+    'self',
+    () => 'Receive a third hole card, then keep your best two.',
   ),
   Redraw: E('Redraw', null, 'self', () => 'Replace one of your hole cards with the next card.'),
   Foresee: E('Foresee', 'Tide', 'self', (n) => `Look at the top ${n} card(s) of the deck.`, {
     stackable: true,
   }),
-  Mimic: E('Mimic', 'Tide', 'cast', () =>
-    'Cast a copy of the last power cast at the table (full faces are public).',
+  Mimic: E(
+    'Mimic',
+    'Tide',
+    'cast',
+    () => 'Cast a copy of the last power cast at the table (full faces are public).',
   ),
   Wild: E('Wild', 'Tide', 'self', () => 'One of your hole cards counts as any suit this hand.'),
   Resonant: M('Resonant', 'Tide', () => 'The effect resolves twice.'),
 
   // -- Root: growth and endurance --
-  Thriving: M('Thriving', 'Root', () =>
-    'Unit: the effect fires again on every later street it stays out, stronger each time.',
+  Thriving: M(
+    'Thriving',
+    'Root',
+    () => 'Unit: the effect fires again on every later street it stays out, stronger each time.',
   ),
-  Bulwark: E('Bulwark', 'Root', 'self', (n) =>
-    `If you don't win this hand, take back up to ${n} of your chips from the pot.`,
+  Bulwark: E(
+    'Bulwark',
+    'Root',
+    'self',
+    (n) => `If you don't win this hand, take back up to ${n} of your chips from the pot.`,
   ),
   Fuse: M('Fuse', 'Root', (n) => `Resolves ${n} street(s) later — everyone sees it coming.`),
-  Rerun: E('Rerun', 'Root', 'self', () =>
-    'If the hand is all-in before the river, deal the rest of the board twice and split each pot.',
+  Rerun: E(
+    'Rerun',
+    'Root',
+    'self',
+    () =>
+      'If the hand is all-in before the river, deal the rest of the board twice and split each pot.',
   ),
   Soulbound: M('Soulbound', 'Root', () => 'Returns to your hand after use.'),
 
@@ -191,8 +220,11 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
     stackable: true,
     fusable: true,
   }),
-  Pass: E('Pass', 'Gale', 'table', () =>
-    'Every seat still in the hand passes one hole card to the left.',
+  Pass: E(
+    'Pass',
+    'Gale',
+    'table',
+    () => 'Every seat still in the hand passes one hole card to the left.',
   ),
 
   // -- Light: truth and protection --
@@ -208,48 +240,78 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
     stackable: true,
     fusable: true,
   }),
-  Mark: E('Mark', 'Light', 'opponent', () =>
-    "Learn one of a target's hole cards for the rest of the hand, wherever it goes.",
+  Mark: E(
+    'Mark',
+    'Light',
+    'opponent',
+    () => "Learn one of a target's hole cards for the rest of the hand, wherever it goes.",
     { gated: true, hostile: true, stackable: true },
   ),
-  'Call Out': E('Call Out', 'Light', 'cast', () =>
-    "Test a seat's last cast. If it fizzled, they lose nerve and your cost is refunded.",
+  'Call Out': E(
+    'Call Out',
+    'Light',
+    'cast',
+    () => "Test a seat's last cast. If it fizzled, they lose nerve and your cost is refunded.",
     { gated: true },
   ),
-  Toll: E('Toll', 'Light', 'self', (n) =>
-    `This hand, whenever a hostile power targets you, its caster pays you ${n}.`,
+  Toll: E(
+    'Toll',
+    'Light',
+    'self',
+    (n) => `This hand, whenever a hostile power targets you, its caster pays you ${n}.`,
   ),
-  Insurance: E('Insurance', 'Light', 'self', (n) =>
-    `If you lose while all-in this hand, recover up to ${n} from the pot.`,
+  Insurance: E(
+    'Insurance',
+    'Light',
+    'self',
+    (n) => `If you lose while all-in this hand, recover up to ${n} from the pot.`,
   ),
   Siphon: E('Siphon', 'Light', 'self', (n) => `Take ${n} from the pot.`, {
     stackable: true,
     fusable: true,
   }),
-  Blessed: E('Blessed', 'Light', 'self', (n) =>
-    `Take back up to ${n} of the chips you paid for powers this hand.`,
+  Blessed: E(
+    'Blessed',
+    'Light',
+    'self',
+    (n) => `Take back up to ${n} of the chips you paid for powers this hand.`,
     { stackable: true },
   ),
 
   // -- Shadow: deception and recursion --
-  Feint: M('Feint', 'Shadow', () =>
-    'Cast face-up, with a secret choice to let it fizzle. Only a Call Out can tell.',
+  Feint: M(
+    'Feint',
+    'Shadow',
+    () => 'Cast face-up, with a secret choice to let it fizzle. Only a Call Out can tell.',
   ),
   Veil: M('Veil', 'Shadow', () => 'Its target stays hidden until the street ends.'),
-  Decoy: E('Decoy', 'Shadow', 'self', () =>
-    'The first Peek or Mark aimed at you this hand only ever sees your lowest hole card.',
+  Decoy: E(
+    'Decoy',
+    'Shadow',
+    'self',
+    () => 'The first Peek or Mark aimed at you this hand only ever sees your lowest hole card.',
   ),
   Needle: E('Needle', 'Shadow', 'opponent', (n) => `Drain ${n} nerve from a target.`, {
     hostile: true,
     stackable: true,
     fusable: true,
   }),
-  Bait: M('Bait', 'Shadow', () => 'If anyone raises after this cast this street, refund its chips.'),
-  Exhume: E('Exhume', 'Shadow', 'self', () =>
-    'Swap one of your hole cards for a random folded or mucked card.',
+  Bait: M(
+    'Bait',
+    'Shadow',
+    () => 'If anyone raises after this cast this street, refund its chips.',
   ),
-  Venomous: E('Venomous', 'Shadow', 'opponent', (n) =>
-    `If the target wins a pot this hand, they pay you ${n}.`,
+  Exhume: E(
+    'Exhume',
+    'Shadow',
+    'self',
+    () => 'Swap one of your hole cards for a random folded or mucked card.',
+  ),
+  Venomous: E(
+    'Venomous',
+    'Shadow',
+    'opponent',
+    (n) => `If the target wins a pot this hand, they pay you ${n}.`,
     { hostile: true },
   ),
 
@@ -266,17 +328,25 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
   Snuff: E('Snuff', 'Void', 'cast', () => 'Response only: cancel a cast as it is made.', {
     gated: true,
   }),
-  Entropic: E('Entropic', 'Void', 'opponent', () =>
-    'The target discards a random power card now and at the start of every later street.',
+  Entropic: E(
+    'Entropic',
+    'Void',
+    'opponent',
+    () => 'The target discards a random power card now and at the start of every later street.',
     { gated: true, hostile: true },
   ),
-  Warded: M('Warded', 'Void', () =>
-    "Can't be Snuffed or Called Out. A Warded Unit also keeps your hole cards from being read.",
+  Warded: M(
+    'Warded',
+    'Void',
+    () =>
+      "Can't be Snuffed or Called Out. A Warded Unit also keeps your hole cards from being read.",
   ),
 };
 
 export const KEYWORDS = Object.keys(KEYWORD_SPECS) as Keyword[];
-export const EFFECT_KEYWORDS = KEYWORDS.filter((k) => KEYWORD_SPECS[k].kind === 'effect') as EffectKeyword[];
+export const EFFECT_KEYWORDS = KEYWORDS.filter(
+  (k) => KEYWORD_SPECS[k].kind === 'effect',
+) as EffectKeyword[];
 export const MODIFIER_KEYWORDS = KEYWORDS.filter(
   (k) => KEYWORD_SPECS[k].kind === 'modifier',
 ) as ModifierKeyword[];
@@ -309,7 +379,16 @@ export function isKeyword(s: string): s is Keyword {
 export function fmtUnits(units: number): string {
   const whole = Math.floor(units);
   const frac = units - whole;
-  const f = frac === 0.5 ? '½' : frac === 0.25 ? '¼' : frac === 0.75 ? '¾' : frac ? `.${Math.round(frac * 100)}` : '';
+  const f =
+    frac === 0.5
+      ? '½'
+      : frac === 0.25
+        ? '¼'
+        : frac === 0.75
+          ? '¾'
+          : frac
+            ? `.${Math.round(frac * 100)}`
+            : '';
   if (whole === 0 && f) return f;
   return `${whole}${f}`;
 }
@@ -349,7 +428,8 @@ export function keywordLabel(kw: Keyword, n?: number): string {
 /** Reminder text with the number filled in. */
 export function keywordText(kw: Keyword, n?: number): string {
   const spec = KEYWORD_SPECS[kw];
-  const shown = n === undefined ? 'N' : CHIP_KEYWORDS.has(kw) ? `${fmtUnits(n)} chip unit(s)` : `${n}`;
+  const shown =
+    n === undefined ? 'N' : CHIP_KEYWORDS.has(kw) ? `${fmtUnits(n)} chip unit(s)` : `${n}`;
   return spec.text(shown);
 }
 

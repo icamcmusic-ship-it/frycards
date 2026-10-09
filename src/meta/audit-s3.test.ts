@@ -1,11 +1,12 @@
 /** Regressions for the 2026-09-29 formula audit (section 3). */
 import { describe, expect, test } from 'vitest';
 import { gradedQuicksellPrice } from './grading';
-import { curveAtOrOver, curveAtOrUnder } from '../game/v3/decks';
-import { deriveDeckAdvice } from './deckAdvice';
-import type { CardDef } from '../game/v3/cards';
+import { deriveDeckAdvice, TIER_TARGETS, TIER_TOLERANCE } from './deckAdvice';
+import type { CardDef } from '../game/poker/cards';
+import { MODES } from '../game/poker/constants';
 import { slotOdds } from './packodds';
-import { firstPlayerForSeed } from '../game/v3/engine';
+import { createMatch } from '../game/poker/engine';
+import { cpuTableSetup } from '../game/poker/sim';
 import { newMatchSeed, winRatePct } from '../lib/utils';
 import { encodeDeckCode } from './deckcode';
 import type { PackType } from '../lib/supabase';
@@ -17,29 +18,38 @@ describe('F5 slab price uses exact arithmetic', () => {
   });
 });
 
-describe('F6 curve band edges are symmetric', () => {
-  test('5+ bucket reads high at 18/60 (30%) as low reads at 6/60 (10%)', () => {
-    expect(curveAtOrOver(18, 60, 2)).toBe(true);
-    expect(curveAtOrOver(17, 60, 2)).toBe(false);
-    expect(curveAtOrUnder(6, 60, 2)).toBe(true);
-    expect(curveAtOrUnder(7, 60, 2)).toBe(false);
+describe('F6 tier band edges are symmetric', () => {
+  // The MTG-era cost-curve buckets are gone; poker decks are judged on the
+  // 1–5 tier pyramid with the same ± tolerance on both sides.
+  const card = (id: string, tier: number): CardDef => ({
+    id,
+    name: id,
+    type: 'Unit',
+    colors: [],
+    tier,
+    effect: { kw: 'Redraw' },
   });
-  test('deriveDeckAdvice flags exactly 18 of 60 five-plus cards as high', () => {
-    const card = (id: string, cost: number): CardDef => ({
-      id,
-      name: id,
-      type: 'Unit',
-      cost: { generic: cost, pips: {} },
-      might: 1,
-      grit: 1,
-    });
-    const advice = (n5: number) =>
-      deriveDeckAdvice([
+  const P = MODES.standard.powers;
+  const curve = (n5: number) =>
+    deriveDeckAdvice(
+      [
         { card: card('big', 5), n: n5 },
-        { card: card('small', 1), n: 60 - n5 },
-      ]).curve[2].status;
-    expect(advice(18)).toBe('high');
-    expect(advice(17)).toBe('ok');
+        { card: card('small', 1), n: P - n5 },
+      ],
+      { mode: 'standard' },
+    ).curve;
+  // Smallest tier-5 count whose share sits past the band, and the one below.
+  const over = Math.floor((TIER_TARGETS[4] + TIER_TOLERANCE) * P + 1e-9) + 1;
+  test('the tier-5 bucket reads high one copy past the band, ok at its edge', () => {
+    expect(curve(over)[4].status).toBe('high');
+    expect(curve(over - 1)[4].status).toBe('ok');
+  });
+  test('an all-tier-1 list reads tier 1 high and the middle tiers low', () => {
+    const c = curve(0);
+    expect(c[0].status).toBe('high');
+    expect(c[1].status).toBe('low');
+    expect(c[2].status).toBe('low');
+    expect(c.map((b) => b.tier)).toEqual([1, 2, 3, 4, 5]);
   });
 });
 
@@ -60,10 +70,12 @@ describe('F7 pack odds mirror the server', () => {
 });
 
 describe('F3 seeds', () => {
-  test('first player is a pure function of the seed and varies', () => {
-    expect(firstPlayerForSeed(5)).toBe(firstPlayerForSeed(5));
-    const seats = new Set(Array.from({ length: 50 }, (_, i) => firstPlayerForSeed(i + 1)));
-    expect(seats.size).toBe(2);
+  test('the first dealer button is a pure function of the seed and varies', () => {
+    const button = (seed: number) =>
+      createMatch(cpuTableSetup({ seed, mode: 'quick', seats: 4 })).button;
+    expect(button(5)).toBe(button(5));
+    const seats = new Set(Array.from({ length: 50 }, (_, i) => button(i + 1)));
+    expect(seats.size).toBe(4);
   });
   test('new seeds are non-negative 31-bit integers', () => {
     for (let i = 0; i < 100; i++) {
@@ -88,7 +100,7 @@ describe('F11 win rate never overstates', () => {
 
 describe('F10 deck code is locale independent', () => {
   test('cards are ordered by code point', () => {
-    expect(encodeDeckCode('l', ['b', 'B', 'a_b', 'ab'])).toBe('FRY1:l:B,a_b,ab,b');
+    expect(encodeDeckCode('l', ['b', 'B', 'a_b', 'ab'])).toBe('FRY2:standard:l:B,a_b,ab,b');
   });
 });
 

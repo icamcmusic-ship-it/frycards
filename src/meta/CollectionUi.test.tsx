@@ -20,7 +20,7 @@ vi.mock('./wishlist', async (orig) => ({
 
 import { MetaContext, type MetaState } from './MetaContext';
 import { CollectionScreen } from './CollectionScreen';
-import { POOL_V4 } from '../game/v3/cardpool';
+import { POOL } from '../game/poker/cardpool';
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -43,7 +43,7 @@ beforeEach(() => {
 
 function mount(opts: { owned?: number; onGrading?: () => void } = {}) {
   const noop = async () => undefined;
-  const owned = POOL_V4.slice(0, opts.owned ?? 6);
+  const owned = POOL.slice(0, opts.owned ?? 6);
   const meta = {
     session: { user: { id: 'u1' } },
     guest: false,
@@ -143,9 +143,40 @@ describe('CollectionScreen', () => {
 
   test('every filter select has a visible label', () => {
     mount();
-    for (const l of ['Type', 'Rarity', 'Colour', 'Keyword', 'Sort by']) {
+    for (const l of ['Type', 'Rarity', 'Colour', 'Keyword', 'Tier', 'Location rule', 'Sort by']) {
       expect(screen.getByLabelText(l).closest('label')!.textContent).toContain(l);
     }
+  });
+
+  test('the filters speak poker: tier, poker keywords, Location rules and a Tier sort', async () => {
+    const user = userEvent.setup();
+    mount();
+    const sorts = [...(screen.getByLabelText('Sort by') as HTMLSelectElement).options].map(
+      (o) => o.value,
+    );
+    expect(sorts).toEqual(['Name', 'Rarity', 'Type', 'Tier']);
+    const kws = [...(screen.getByLabelText('Keyword') as HTMLSelectElement).options].map(
+      (o) => o.value,
+    );
+    expect(kws).toContain('Redraw');
+    expect(kws).not.toContain('Aerial');
+    const rules = [...(screen.getByLabelText('Location rule') as HTMLSelectElement).options];
+    expect(rules.length).toBeGreaterThan(1);
+    await user.click(screen.getByRole('tab', { name: /FULL SET/ }));
+    await user.selectOptions(screen.getByLabelText('Tier'), '5');
+    const stored = JSON.parse(localStorage.getItem('frycards:ui:collection.filters')!);
+    expect(stored.tier).toBe('5');
+  });
+
+  test('a remembered MTG-era filter loads without emptying the grid', () => {
+    localStorage.setItem(
+      'frycards:ui:collection.filters',
+      JSON.stringify({ view: 'all', keyword: 'Overrun', sort: 'Cost', might: 3 }),
+    );
+    mount();
+    expect((screen.getByLabelText('Keyword') as HTMLSelectElement).value).toBe('All');
+    expect((screen.getByLabelText('Sort by') as HTMLSelectElement).value).toBe('Tier');
+    expect(screen.queryByText(/No cards match these filters/)).toBeNull();
   });
 
   test('an empty collection says so and an empty filtered grid offers a way out', async () => {

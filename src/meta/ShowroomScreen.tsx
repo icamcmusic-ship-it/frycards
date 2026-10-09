@@ -45,8 +45,8 @@ import {
 import { useMeta } from './MetaContext';
 import { PopButton, Tabs } from './ui';
 import { usePersistedState } from './usePersistedState';
-import { POOL_BY_ID, POOL_V4 } from '../game/v3/cardpool';
-import { CardDef } from '../game/v3/cards';
+import { POOL_BY_ID, POOL } from '../game/poker/cardpool';
+import { CardDef } from '../game/poker/cards';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
 import { GradedSlab } from './GradedSlab';
 import { GradedCard, GRADING_SERVICE_BY_ID, fetchGradedCards, fmtGrade } from './grading';
@@ -170,7 +170,7 @@ export function ShowroomScreen({
         ? owned
             .map((c) => ({ def: POOL_BY_ID[c.card_id], foil: c.quantity === 0 }))
             .filter((x): x is { def: CardDef; foil: boolean } => !!x.def)
-        : POOL_V4.map((def) => ({ def, foil: false }));
+        : POOL.map((def) => ({ def, foil: false }));
     return defs
       .filter((x) => !q || x.def.name.toLowerCase().includes(q))
       .sort(

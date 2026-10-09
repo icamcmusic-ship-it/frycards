@@ -37,14 +37,15 @@ import {
 } from './packodds';
 import { LeaderPicker } from './LeaderPicker';
 import { CardFace } from '../components/CardFaceV4';
-import { POOL_BY_ID } from '../game/v3/cardpool';
-import { CardDef } from '../game/v3/cards';
+import { POOL_BY_ID } from '../game/poker/cardpool';
+import { CardDef } from '../game/poker/cards';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 function bountyDefFor(card: BountyCard): CardDef {
   return (
     POOL_BY_ID[card.card_id] || {
       id: card.card_id,
+      colors: [],
       name: card.name,
       type: (card.card_type || 'Unit') as CardDef['type'],
       rarity: (card.rarity || 'Common') as CardDef['rarity'],

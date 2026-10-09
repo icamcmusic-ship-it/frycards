@@ -36,14 +36,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { VisibleVideo } from './VisibleVideo';
 import { createPortal } from 'react-dom';
 import { Swords, Crown, MapPin, Wand2, Zap, Coins, Flame } from 'lucide-react';
-import {
-  CardDef,
-  CardType,
-  KwRef,
-  PowerType,
-  TIER_MARK,
-  isPower,
-} from '../game/poker/cards';
+import { CardDef, CardType, KwRef, PowerType, TIER_MARK, isPower } from '../game/poker/cards';
 import { COST_LADDER_UNITS, NERVE, SECOND_COST_TIER } from '../game/poker/constants';
 import { LOCATION_TEMPLATES, ruleName, ruleText } from '../game/poker/locations';
 import { cn } from '../lib/utils';
@@ -559,13 +552,14 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
   Tool: 'Tool Item — also marks one opponent hole card: you learn it for the hand.',
   Nerve:
     'Your public tilt meter (0–10, start 5). Leader abilities spend or build it. At 0 you are tilted: your Leader is locked and powers cost one step more.',
-  Stars: 'A Unit\'s tier (1–5). Up to two Units a hand, five stars between them.',
-  Gears: 'An Item\'s tier (1–5). Up to two Items a hand, five gears between them.',
-  Bolts: 'An Event\'s tier (1–5). Up to five bolts a hand, two Events a street.',
+  Stars: "A Unit's tier (1–5). Up to two Units a hand, five stars between them.",
+  Gears: "An Item's tier (1–5). Up to two Items a hand, five gears between them.",
+  Bolts: "An Event's tier (1–5). Up to five bolts a hand, two Events a street.",
   Shed: 'A second cost: discard another power card from your hand.',
   Exclusion:
     'A second cost: name a hand category you cannot win a showdown with this hand (pair, two pair, trips, straight or flush).',
-  Location: 'A table rule. Each deck brings one; the table plays them from a shared bag, one per hand.',
+  Location:
+    'A table rule. Each deck brings one; the table plays them from a shared bag, one per hand.',
 };
 
 /** "Peek 1 — See 1 of a target\'s hole cards." */
@@ -600,7 +594,11 @@ export function cardRuleLines(def: CardDef): string[] {
     if (def.subtype === 'Tool') bits.push('Also marks one opponent hole card.');
   }
   if (def.type === 'Event')
-    bits.push(def.subtype === 'Quick' ? 'Quick: castable in response windows.' : 'Slow: your turn, before you act.');
+    bits.push(
+      def.subtype === 'Quick'
+        ? 'Quick: castable in response windows.'
+        : 'Slow: your turn, before you act.',
+    );
   return bits;
 }
 
@@ -613,7 +611,10 @@ export function cardRules(def: CardDef): string {
 export function costSummary(def: CardDef): string | null {
   if (!isPower(def) || !def.tier) return null;
   const mark = TIER_MARK[def.type as PowerType];
-  const second = def.tier >= SECOND_COST_TIER ? ' plus a second cost (shed, blind a hole card, or a hand exclusion)' : '';
+  const second =
+    def.tier >= SECOND_COST_TIER
+      ? ' plus a second cost (shed, blind a hole card, or a hand exclusion)'
+      : '';
   return `${def.tier} ${def.tier === 1 ? mark.name : mark.plural}: costs ${fmtUnits(printedCostUnits(def))} chip unit(s) into the pot${second}`;
 }
 
@@ -659,7 +660,10 @@ export function TierMark({ def, size, onArt }: { def: CardDef; size: CardSize; o
     .filter(Boolean)
     .join(', ');
   return (
-    <span className="flex items-center gap-[2px] shrink-0 justify-end max-w-full" aria-label={label}>
+    <span
+      className="flex items-center gap-[2px] shrink-0 justify-end max-w-full"
+      aria-label={label}
+    >
       {colors.map((c) => (
         <span
           key={c}
@@ -668,7 +672,12 @@ export function TierMark({ def, size, onArt }: { def: CardDef; size: CardSize; o
             'flex items-center justify-center rounded-full shrink-0',
             onArt ? 'border border-white/80' : 'border border-[var(--c-paper)]/70',
           )}
-          style={{ width: d, height: d, backgroundColor: COLOR_PIP[c].bg, boxShadow: onArt ? '0 1px 3px rgba(0,0,0,0.8)' : undefined }}
+          style={{
+            width: d,
+            height: d,
+            backgroundColor: COLOR_PIP[c].bg,
+            boxShadow: onArt ? '0 1px 3px rgba(0,0,0,0.8)' : undefined,
+          }}
         >
           <EssenceIcon type={c} color={COLOR_PIP[c].fg} size={Math.round(d * 0.66)} />
         </span>
@@ -1658,12 +1667,22 @@ export interface FaceChip {
 export function faceChips(def: CardDef): FaceChip[] {
   const chips: FaceChip[] = [];
   const kwChip = (ref: KwRef, accent?: string) =>
-    chips.push({ kw: ref.kw, label: keywordLabel(ref.kw, ref.n), text: keywordText(ref.kw, ref.n), accent });
+    chips.push({
+      kw: ref.kw,
+      label: keywordLabel(ref.kw, ref.n),
+      text: keywordText(ref.kw, ref.n),
+      accent,
+    });
   if (def.effect) kwChip(def.effect);
   for (const m of def.mods ?? []) kwChip(m, '#6D28D9');
   if (def.type === 'Location' && def.rule) {
     const t = LOCATION_TEMPLATES[def.rule.id];
-    chips.push({ kw: 'Location', label: t.name, text: `${t.name} (${t.tag}): ${ruleText(def.rule)}`, accent: '#16A34A' });
+    chips.push({
+      kw: 'Location',
+      label: t.name,
+      text: `${t.name} (${t.tag}): ${ruleText(def.rule)}`,
+      accent: '#16A34A',
+    });
   }
   if (def.type === 'Leader') {
     for (const ab of def.abilities ?? []) kwChip(ab.effect, ab.nerve < 0 ? '#B91C1C' : '#15803D');
@@ -1923,7 +1942,9 @@ function typeLineText(def: CardDef): string {
   if (def.type === 'Leader') return `Leader — ${cardColors(def).join('/') || 'Colourless'}`;
   if (def.type === 'Location') return def.rule ? `Location — ${ruleName(def.rule)}` : 'Location';
   const base = def.subtype ? `${def.type} — ${def.subtype}` : def.type;
-  return isPower(def) && def.tier ? `${base} · ${def.tier}${TIER_MARK[def.type as PowerType].glyph}` : base;
+  return isPower(def) && def.tier
+    ? `${base} · ${def.tier}${TIER_MARK[def.type as PowerType].glyph}`
+    : base;
 }
 
 /** The card's printed rules line: the plain-English meaning of its effect

@@ -9,7 +9,7 @@
  *   2. `public.cards.rarity` (column) — what every server RPC prices, rolls
  *      pack odds against, caps deck copies by and quicksells at.
  *   3. `src/game/generated-cards.ts` — the bundled offline fallback, and the
- *      catalog every sim in scripts/simulate-v5.ts runs over.
+ *      catalog every sim in scripts/simulate-poker.ts runs over.
  *
  * A v6.8 rarity migration was applied to (1) for six cards and to (2) for a
  * different four, leaving all three sources disagreeing. Because a card's
@@ -53,8 +53,8 @@
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { GENERATED_CARDS } from '../src/game/generated-cards';
-import { POOL_BY_ID } from '../src/game/v3/cardpool';
-import type { EssenceCost } from '../src/game/v3/cards';
+import { POOL_BY_ID } from '../src/game/poker/cardpool';
+import { mechanicsFromDef } from '../src/meta/submissions';
 import type { CardTemplate } from '../src/types';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
@@ -67,9 +67,11 @@ interface Row {
   card_type: string | null;
   template: CardTemplate | null;
   // v7.6: the DERIVED mechanics columns. Every balance pass rewrites these in
-  // code, and nothing checked that the database had been told.
+  // code, and nothing checked that the database had been told. FryCards
+  // Poker keeps the MTG-era column names; `mechanicsFromDef` defines what
+  // each holds now (might = tier; essence_cost/grit/resolve = null).
   keywords: string | null;
-  essence_cost: EssenceCost | null;
+  essence_cost: unknown | null;
   might: number | null;
   grit: number | null;
   resolve: number | null;
@@ -199,29 +201,34 @@ const canonical = (v: unknown): unknown =>
 for (const r of rows) {
   const c = POOL_BY_ID[r.id];
   if (!c) continue; // covered by the live-only check above
-  const expectKw = (c.keywords ?? []).join(', ') || null;
-  if (norm(r.keywords) !== expectKw)
-    problems.push(`${r.id}: cards.keywords="${r.keywords}" but the pool derives "${expectKw}"`);
+  // The same mapping db:sync and the Creator tools write.
+  const want = mechanicsFromDef(c);
+  if (norm(r.keywords) !== want.keywords)
+    problems.push(
+      `${r.id}: cards.keywords="${r.keywords}" but the pool derives "${want.keywords}"`,
+    );
   if (
-    JSON.stringify(canonical(r.essence_cost ?? null)) !== JSON.stringify(canonical(c.cost ?? null))
+    JSON.stringify(canonical(r.essence_cost ?? null)) !==
+    JSON.stringify(canonical(want.essence_cost ?? null))
   )
     problems.push(
-      `${r.id}: cards.essence_cost=${JSON.stringify(r.essence_cost)} but the pool derives ` +
-        `${JSON.stringify(c.cost)}`,
+      `${r.id}: cards.essence_cost=${JSON.stringify(r.essence_cost)} but poker writes ` +
+        `${JSON.stringify(want.essence_cost)} (retired column)`,
     );
-  if ((r.might ?? null) !== (c.might ?? null) || (r.grit ?? null) !== (c.grit ?? null))
+  if ((r.might ?? null) !== want.might)
+    problems.push(`${r.id}: cards.might=${r.might} but the pool derives tier ${want.might}`);
+  if ((r.grit ?? null) !== want.grit || (r.resolve ?? null) !== want.resolve)
     problems.push(
-      `${r.id}: cards stats ${r.might}/${r.grit} but the pool derives ${c.might}/${c.grit}`,
+      `${r.id}: cards.grit/resolve=${r.grit}/${r.resolve} but poker writes ` +
+        `${want.grit}/${want.resolve} (retired columns)`,
     );
-  if ((r.resolve ?? null) !== (c.resolve ?? null))
-    problems.push(`${r.id}: cards.resolve=${r.resolve} but the pool derives ${c.resolve}`);
-  if (norm(r.card_subtype) !== (c.subtype ?? null))
+  if (norm(r.card_subtype) !== want.card_subtype)
     problems.push(
-      `${r.id}: cards.card_subtype="${r.card_subtype}" but the pool derives ${c.subtype}`,
+      `${r.id}: cards.card_subtype="${r.card_subtype}" but the pool derives ${want.card_subtype}`,
     );
-  if (norm(r.rules_text) !== norm(c.text))
+  if (norm(r.rules_text) !== norm(want.rules_text))
     problems.push(
-      `${r.id}: cards.rules_text is stale — "${r.rules_text}" vs "${c.text}" (run npm run db:sync)`,
+      `${r.id}: cards.rules_text is stale — "${r.rules_text}" vs "${want.rules_text}" (run npm run db:sync)`,
     );
 }
 

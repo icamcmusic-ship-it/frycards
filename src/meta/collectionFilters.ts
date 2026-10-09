@@ -3,13 +3,26 @@
  * between visits and saved as named presets. Pure; the screen owns the UI.
  */
 import { RARITIES } from '../types';
-import { COLORS } from '../game/v3/colors';
+import { COLORS, cardColors, type Color } from '../game/poker/colors';
+import { KEYWORDS } from '../game/poker/keywords';
+import { LOCATION_TEMPLATES } from '../game/poker/locations';
+import type { CardDef, LocationRuleId } from '../game/poker/cards';
 import { quicksellPrice } from './economy';
 
 export const TYPES = ['All', 'Leader', 'Unit', 'Item', 'Event', 'Location'];
 export const RARITY_FILTERS = ['All', ...RARITIES];
 export const COLOR_FILTERS = ['All', ...COLORS, 'Colorless'];
-export const SORTS = ['Name', 'Rarity', 'Type', 'Cost'] as const;
+/** Stars / gears / bolts. Only powers (Unit, Item, Event) carry a tier. */
+export const TIER_FILTERS = ['All', '1', '2', '3', '4', '5'];
+/** Poker keywords. Retired MTG keywords (Aerial, Overrun…) are not here, so a
+ * remembered filter on one falls back to 'All' instead of emptying the grid. */
+export const KEYWORD_FILTERS: string[] = ['All', ...KEYWORDS];
+/** Location table rules (template ids); only Locations carry one. */
+export const RULE_FILTERS: string[] = [
+  'All',
+  ...(Object.keys(LOCATION_TEMPLATES) as LocationRuleId[]),
+];
+export const SORTS = ['Name', 'Rarity', 'Type', 'Tier'] as const;
 export type SortKey = (typeof SORTS)[number];
 
 /** What the grid lists: your cards, the whole set, only spares, or the wishlist. */
@@ -21,8 +34,12 @@ export interface CollectionFilters {
   type: string;
   rarity: string;
   color: string;
-  /** Free-form (the keyword list comes from the live pool); 'All' = any. */
+  /** A poker keyword (effect or modifier); 'All' = any. */
   keyword: string;
+  /** Tier 1–5 as a string; 'All' = any. */
+  tier: string;
+  /** Location rule id (e.g. 'highStakes'); 'All' = any. */
+  rule: string;
   set: string;
   sort: SortKey;
 }
@@ -33,6 +50,8 @@ export const DEFAULT_FILTERS: CollectionFilters = {
   rarity: 'All',
   color: 'All',
   keyword: 'All',
+  tier: 'All',
+  rule: 'All',
   set: 'All',
   sort: 'Name',
 };
@@ -42,31 +61,90 @@ const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T):
 const str = (v: unknown, fallback: string): string =>
   typeof v === 'string' && v.length > 0 && v.length <= 60 ? v : fallback;
 
-/** Coerce stored JSON into a valid filter object; unknown values (a rarity
- * renamed since the save, a hand-edited key) fall back to their defaults. */
+/** Sorts that existed in the MTG-style game, mapped to their poker stand-in. */
+const LEGACY_SORT: Record<string, SortKey> = { Cost: 'Tier' };
+
+/**
+ * Coerce stored JSON into a valid filter object; unknown values (a rarity
+ * renamed since the save, a hand-edited key) fall back to their defaults.
+ *
+ * Presets saved under the MTG-style game load safely: retired keys (cost,
+ * might, grit, essence…) are dropped because only known keys are read, a
+ * retired keyword falls back to 'All', and the old 'Cost' sort becomes 'Tier'.
+ */
 export function sanitizeFilters(v: unknown): CollectionFilters {
   const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
   const d = DEFAULT_FILTERS;
+  const sort = typeof o.sort === 'string' && LEGACY_SORT[o.sort] ? LEGACY_SORT[o.sort] : o.sort;
   return {
     view: pick(o.view, VIEWS, d.view),
     type: pick(o.type, TYPES, d.type),
     rarity: pick(o.rarity, RARITY_FILTERS, d.rarity),
     color: pick(o.color, COLOR_FILTERS, d.color),
-    keyword: str(o.keyword, d.keyword),
+    keyword: pick(o.keyword, KEYWORD_FILTERS, d.keyword),
+    tier: pick(typeof o.tier === 'number' ? String(o.tier) : o.tier, TIER_FILTERS, d.tier),
+    rule: pick(o.rule, RULE_FILTERS, d.rule),
     set: str(o.set, d.set),
-    sort: pick(o.sort, SORTS, d.sort),
+    sort: pick(sort, SORTS, d.sort),
   };
 }
 
 export const isFilters = (v: unknown): v is CollectionFilters =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 
+/** The narrowing filters (the view and the sort are choices, not filters). */
+const NARROWING = ['type', 'rarity', 'color', 'keyword', 'tier', 'rule', 'set'] as const;
+
 /** How many of the narrowing filters differ from the default (the view and
  * the sort are choices, not filters, and are not counted). */
 export function activeFilterCount(f: CollectionFilters): number {
-  return (['type', 'rarity', 'color', 'keyword', 'set'] as const).filter(
-    (k) => f[k] !== DEFAULT_FILTERS[k],
-  ).length;
+  return NARROWING.filter((k) => f[k] !== DEFAULT_FILTERS[k]).length;
+}
+
+/** Does a card pass the card-attribute filters (type, rarity, colour,
+ * keyword, tier, Location rule, set)? The view, search and ownership checks
+ * live in the screen. A tier filter only ever matches powers; a rule filter
+ * only ever matches Locations. */
+export function cardMatchesFilters(
+  c: CardDef,
+  f: Pick<CollectionFilters, 'type' | 'rarity' | 'color' | 'keyword' | 'tier' | 'rule' | 'set'>,
+): boolean {
+  if (f.type !== 'All' && c.type !== f.type) return false;
+  if (f.rarity !== 'All' && (c.rarity || 'Common') !== f.rarity) return false;
+  if (f.set !== 'All' && (c.set || '') !== f.set) return false;
+  if (f.color !== 'All') {
+    // A Leader's two colours are on the CardDef like every other card's.
+    const cc = cardColors(c);
+    if (f.color === 'Colorless' ? cc.length > 0 : !cc.includes(f.color as Color)) return false;
+  }
+  if (f.keyword !== 'All' && !c.keywords?.includes(f.keyword)) return false;
+  if (f.tier !== 'All' && String(c.tier ?? '') !== f.tier) return false;
+  if (f.rule !== 'All' && c.rule?.id !== f.rule) return false;
+  return true;
+}
+
+const TYPE_ORDER = ['Leader', 'Location', 'Unit', 'Item', 'Event'];
+
+/** Grid order for a sort key; ties fall back to the name. Rarity sorts
+ * highest first; Tier sorts lowest first, with tierless cards (Leaders,
+ * Locations) after every power. */
+export function compareCards(sort: SortKey): (a: CardDef, b: CardDef) => number {
+  return (a, b) => {
+    let d = 0;
+    if (sort === 'Rarity') {
+      d = RARITIES.indexOf(b.rarity || 'Common') - RARITIES.indexOf(a.rarity || 'Common');
+    } else if (sort === 'Type') {
+      d = TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type);
+    } else if (sort === 'Tier') {
+      d = (a.tier ?? 99) - (b.tier ?? 99);
+    }
+    return d !== 0 ? d : a.name.localeCompare(b.name);
+  };
+}
+
+/** Display label for a Location-rule filter value. */
+export function ruleFilterLabel(rule: string): string {
+  return rule === 'All' ? 'Any' : (LOCATION_TEMPLATES[rule as LocationRuleId]?.name ?? rule);
 }
 
 // ---- saved presets ---------------------------------------------------------
@@ -102,6 +180,8 @@ export function suggestPresetName(f: CollectionFilters, existing: FilterPreset[]
     f.rarity === 'All' ? '' : f.rarity,
     f.color === 'All' ? '' : f.color,
     f.keyword === 'All' ? '' : f.keyword,
+    f.tier === 'All' ? '' : `Tier ${f.tier}`,
+    f.rule === 'All' ? '' : ruleFilterLabel(f.rule),
     f.set === 'All' ? '' : f.set,
   ].filter(Boolean);
   const base = (parts.join(' · ') || 'My filter').slice(0, MAX_PRESET_NAME);

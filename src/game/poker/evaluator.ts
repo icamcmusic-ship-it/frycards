@@ -36,7 +36,21 @@ export function cardLabel(c: Card): string {
 }
 
 export function rankName(r: number): string {
-  return ['Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Jack', 'Queen', 'King', 'Ace'][r - 2];
+  return [
+    'Two',
+    'Three',
+    'Four',
+    'Five',
+    'Six',
+    'Seven',
+    'Eight',
+    'Nine',
+    'Ten',
+    'Jack',
+    'Queen',
+    'King',
+    'Ace',
+  ][r - 2];
 }
 
 export interface HandValue {
@@ -106,7 +120,8 @@ function evalFixed(cards: Card[]): HandValue {
   }
   if (flushSuit >= 0) {
     const ranks: number[] = [];
-    for (let r = 14; r >= 2 && ranks.length < 5; r--) if (suitMasks[flushSuit] & (1 << r)) ranks.push(r);
+    for (let r = 14; r >= 2 && ranks.length < 5; r--)
+      if (suitMasks[flushSuit] & (1 << r)) ranks.push(r);
     return { category: 5, score: pack(5, ranks) };
   }
   const st = straightTop(mask);
@@ -119,7 +134,8 @@ function evalFixed(cards: Card[]): HandValue {
     const kick = [...pairs.slice(2), ...singles].sort((a, b) => b - a)[0] ?? 0;
     return { category: 2, score: pack(2, [pairs[0], pairs[1], kick]) };
   }
-  if (pairs.length === 1) return { category: 1, score: pack(1, [pairs[0], ...singles.slice(0, 3)]) };
+  if (pairs.length === 1)
+    return { category: 1, score: pack(1, [pairs[0], ...singles.slice(0, 3)]) };
   return { category: 0, score: pack(0, singles.slice(0, 5)) };
 }
 
@@ -209,7 +225,8 @@ export function attainableCategories(hole: Card[], board: Card[], toCome: number
     return out;
   }
   for (let i = 0; i < rest.length; i++)
-    for (let j = i + 1; j < rest.length; j++) out.add(evaluate([...mine, rest[i], rest[j]]).category);
+    for (let j = i + 1; j < rest.length; j++)
+      out.add(evaluate([...mine, rest[i], rest[j]]).category);
   return out;
 }
 
@@ -234,7 +251,8 @@ export function equity(opts: {
   let won = 0;
   for (let t = 0; t < trials; t++) {
     // Partial shuffle: draw what we need from the front.
-    const need = boardSize - board.length + opponents.reduce((a, o) => a + Math.max(0, 2 - o.length), 0);
+    const need =
+      boardSize - board.length + opponents.reduce((a, o) => a + Math.max(0, 2 - o.length), 0);
     for (let i = 0; i < need && i < pool.length; i++) {
       const j = i + rng.int(pool.length - i);
       [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -243,7 +261,7 @@ export function equity(opts: {
     const fullBoard = [...board];
     while (fullBoard.length < boardSize) fullBoard.push(pool[k++]);
     const mine = evaluate([...hole, ...fullBoard]).score;
-    let best = mine;
+    const best = mine;
     let ties = 1;
     let beaten = false;
     for (const o of opponents) {

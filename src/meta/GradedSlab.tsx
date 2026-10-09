@@ -31,7 +31,7 @@
 import React from 'react';
 import { Clock } from 'lucide-react';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
-import { POOL_BY_ID } from '../game/v3/cardpool';
+import { POOL_BY_ID } from '../game/poker/cardpool';
 import { cn } from '../lib/utils';
 import { GradedCard, GRADING_SERVICE_BY_ID, GRADE_WORDS, fmtGrade } from './grading';
 

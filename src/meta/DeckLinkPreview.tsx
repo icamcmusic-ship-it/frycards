@@ -1,14 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { POOL_BY_ID } from '../game/v3/cardpool';
-import { totalCost } from '../game/v3/cards';
+import { POOL_BY_ID } from '../game/poker/cardpool';
+import { isPower, tierLabel } from '../game/poker/cards';
+import { cardColors } from '../game/poker/colors';
+import { MODES } from '../game/poker/constants';
+import { checkDeck } from '../game/poker/deck';
+import { ruleName } from '../game/poker/locations';
 import { useEscapeClose, useFocusTrap } from '../components/useFocusTrap';
 import { PopButton } from './ui';
-import { decodeDeckCode } from './deckcode';
+import { decodeDeckCode, RETIRED_CODE_ERROR } from './deckcode';
 
 /**
- * A read-only look at a deck opened from a shared link (`?deck=FRY1:…`): the
- * Leader, the card list by cost, and the totals. Works signed out and as a
+ * A read-only look at a deck opened from a shared link (`?deck=FRY2:…`): the
+ * Leader and its colours, the format, the Location, the powers by tier, and
+ * whether the list is legal in its format. Old `FRY1:` links from the retired
+ * card game decode to an explanation instead. Works signed out and as a
  * guest. Signed-in players can carry it into the Deck Builder as an unsaved
  * draft; nothing is saved or bought from here.
  */
@@ -32,13 +38,23 @@ export function DeckLinkPreview({
     if ('error' in res) return { error: res.error } as const;
     const counts = new Map<string, number>();
     for (const id of res.cardIds) counts.set(id, (counts.get(id) ?? 0) + 1);
-    const rows = [...counts.entries()]
-      .map(([id, n]) => ({ def: POOL_BY_ID[id], n }))
+    const all = [...counts.entries()].map(([id, n]) => ({ def: POOL_BY_ID[id], n }));
+    const locations = all.filter((r) => r.def.type === 'Location');
+    const rows = all
+      .filter((r) => isPower(r.def))
       .sort(
-        (a, b) =>
-          totalCost(a.def.cost) - totalCost(b.def.cost) || a.def.name.localeCompare(b.def.name),
+        (a, b) => (a.def.tier ?? 0) - (b.def.tier ?? 0) || a.def.name.localeCompare(b.def.name),
       );
-    return { leader: POOL_BY_ID[res.leaderId], rows, total: res.cardIds.length } as const;
+    const powers = rows.reduce((s, r) => s + r.n, 0);
+    const check = checkDeck(res.leaderId, res.cardIds, res.mode);
+    return {
+      leader: POOL_BY_ID[res.leaderId],
+      mode: MODES[res.mode],
+      locations,
+      rows,
+      powers,
+      issues: check.issues,
+    } as const;
   }, [code]);
 
   const copy = async () => {
@@ -69,15 +85,40 @@ export function DeckLinkPreview({
         <div className="p-4 overflow-y-auto">
           {'error' in parsed ? (
             <p className="text-sm font-bold text-[var(--c-red)]">
-              This deck link can't be opened: {parsed.error}
+              {parsed.error === RETIRED_CODE_ERROR
+                ? parsed.error
+                : `This deck link can't be opened: ${parsed.error}`}
             </p>
           ) : (
             <>
               <div className="heading-font text-base leading-tight">{parsed.leader.name}</div>
-              <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
-                Leader · {parsed.total} cards
+              <div className="text-[11px] font-bold text-[var(--c-steel)] mb-1">
+                Leader · {cardColors(parsed.leader).join(' / ') || 'Colourless'} ·{' '}
+                {parsed.mode.label} · {parsed.powers}/{parsed.mode.powers} powers
+              </div>
+              <div
+                className={
+                  parsed.issues.length
+                    ? 'text-[11px] font-bold text-[var(--c-red)] mb-3'
+                    : 'text-[11px] font-bold text-[var(--c-steel)] mb-3'
+                }
+              >
+                {parsed.issues.length === 0
+                  ? `✓ Legal in ${parsed.mode.label}`
+                  : `⚠ Not legal in ${parsed.mode.label} yet: ${parsed.issues[0].message}${parsed.issues.length > 1 ? ` (+${parsed.issues.length - 1} more)` : ''}`}
               </div>
               <ul className="flex flex-col gap-1 mb-4">
+                {parsed.locations.map(({ def }) => (
+                  <li
+                    key={def.id}
+                    className="flex items-center justify-between gap-2 text-xs font-bold ink-border-sm px-2 py-1 bg-[var(--c-ink)] text-[var(--c-paper)]"
+                  >
+                    <span className="truncate">{def.name}</span>
+                    <span className="text-[10px] shrink-0 opacity-80">
+                      Location{def.rule ? ` · ${ruleName(def.rule)}` : ''}
+                    </span>
+                  </li>
+                ))}
                 {parsed.rows.map(({ def, n }) => (
                   <li
                     key={def.id}
@@ -88,7 +129,7 @@ export function DeckLinkPreview({
                       {def.name}
                     </span>
                     <span className="text-[10px] text-[var(--c-steel)] shrink-0">
-                      {def.type} · cost {totalCost(def.cost)}
+                      {def.type} · {tierLabel(def)}
                     </span>
                   </li>
                 ))}

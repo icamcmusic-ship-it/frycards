@@ -9,6 +9,75 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v35.0 — FryCards Poker
+
+FryCards is a poker game now. The MTG-style card battler — Essence and
+Wellsprings, Vitality, the Clash, Might/Grit, Resolve, Dawn and Dusk — is
+**retired, not run alongside**. Its rulebook and engine live on in git history.
+The design source is the FryCards Poker Design Spec v0.1 (Oct 8, 2026).
+
+#### What the game is
+
+- **Pot-limit Texas Hold'em freezeout for 2–6 seats** against CPU seats, with
+  blinds that rise ×1.5 on a **clock** (not a hand count) and a hard time cap
+  after which the hand in progress finishes and stacks are ranked. Three modes:
+  **Quick** (30-unit stacks, 16 powers, ~12 min), **Standard** (50, 24, ~25
+  min) and **Deep** (80, 36, ~40 min). Chips exist only inside a match.
+- **A deck is 1 Leader + 1 Location + power cards**, with per-mode copy and
+  tier-5 limits. The Leader's two colours decide which colours the deck may
+  hold.
+- **Powers** are Units (★ stars — a visible token until showdown), Items (⚙
+  gears — Charm, Weapon or Tool) and Events (ϟ bolts — Quick or Slow), tier
+  1–5, built from ~45 poker keywords grouped by colour (Peek, Reveal, Mark,
+  Redraw, Windfall, Kindle, Siphon, Burn, Lock, Snuff, Feint, Call Out, …).
+  Per-hand caps: 2 Units / 5 stars, 2 Items / 5 gears, 5 bolts of Events with
+  at most 2 a street.
+- **Casting is public and a bluff.** A cast shows its full face, caster and
+  target, pays fixed chip units **into the pot** (½ · 1 · 2 · 3½ · 6 by tier,
+  capped at 25% of your stack) and, at tiers 4–5, a second cost: shed a power,
+  blind a hole card, or a **hand exclusion** (a hand you promise not to win
+  with). Each cast and each raise opens a short response window for Quick
+  Events and Ambush cards; there is no stack. Results are private — the table
+  sees that you peeked, only you see what.
+- **Locations** are the table's weather: every seat's Location goes into a
+  shared bag with one Plain Table per cycle, a two-hand forecast shows what is
+  coming, and the 55 Location cards roll 17 rule templates (High Stakes, Bomb
+  Pot, Pineapple, Fog, Happy Hour, Tilt Zone, …).
+- **Nerve** replaces Resolve: a public 0–10 meter that showdowns, bluffs and
+  hostile powers move. Each Leader has two once-per-hand abilities (one spends
+  nerve, one builds it); at 0 nerve you are **tilted** — Leader locked, powers
+  one step dearer.
+- **Rewards pay by finishing place**, never by chips: 100 credits for 1st down
+  to 40 for last in Standard (6 seats: 100 · 76 · 61 · 49 · 43 · 40), ×0.5 in
+  Quick and ×1.5 in Deep, through the existing server-minted match tickets.
+
+#### What was kept
+
+Your **collection** — every card's **rarity, name, art, set and flavor text**
+— and its colour are unchanged. Nothing you own was taken away or reprinted
+into something else; only the mechanics printed on it are new, generated from
+the same card-id hash so a rebalance stays a code change. Packs, the
+marketplace, grading, shops, missions and the battle pass are untouched.
+
+#### What was invalidated
+
+**Old 60-card decks and shared deck links no longer work** in any mode. Build
+a new deck (Leader + Location + 16, 24 or 36 powers) in the Deck Builder.
+
+#### What you will notice
+
+- **A new table** for up to six seats, with real playing cards for the hole
+  cards and the board — drawn with **Kenney's Playing Cards Pack**
+  (www.kenney.nl, CC0) — the active Location and its forecast on show, and
+  keyboard betting (F fold, C check/call, R raise with a pot-limit slider).
+- **Card faces show the tier** (★ ⚙ ϟ) where the essence pips were, the chip
+  cost where Might/Grit were, and **flavor text is now always shown** on every
+  card at every size.
+- **How to Play and the first-game coach teach poker from zero**: hand ranks,
+  betting rounds, blinds and the button, pot-limit and side pots, then the
+  FryCards layers one idea at a time. `docs/RULEBOOK.md` is the new FryCards
+  Poker rulebook v1.0.
+
 #### Cached egress: the CDN was shipping 6 MB PNGs into 140-pixel boxes
 
 The backend's cached egress was pinned at its ceiling. Two causes, both in the

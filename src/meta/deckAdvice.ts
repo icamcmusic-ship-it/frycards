@@ -1,21 +1,23 @@
 /**
- * Deck-building guidance derived from the sim's own deck knowledge
- * (src/game/v3/decks.ts, src/game/v3/colors.ts). Pure functions only — no
- * React. Every threshold here is copied from a named constant or expression
- * in the sim code, with the source cited in a comment next to it; nothing is
- * invented.
+ * Deck-building guidance for FryCards Poker decks. Pure functions only — no
+ * React. Every target here is taken from the game's own rules or generator,
+ * with the source named next to it:
+ *
+ *  - Tier mix: the 35/28/20/12/5 pyramid the card generator rolls tiers from
+ *    (TIER_PYRAMID in game/poker/cardpool.ts).
+ *  - Unit / Item / Event mix: the shares the CPU's buildDeck aims for
+ *    (~45% Units, ~25% Items, the rest Events; game/poker/deck.ts), and the
+ *    per-hand caps (CAPS in game/poker/constants.ts: 2 Units, 2 Items).
+ *  - Location, copies and tier-5 budget: the format rules (MODES).
+ *  - Colours: a Leader carries exactly two (LEADER_COLORS).
+ *  - Effect themes: the spec's keyword families (information, revive,
+ *    economy, defence) from game/poker/keywords.ts.
  */
-import { CardDef, totalCost } from '../game/v3/cards';
-import {
-  CURVE_TARGETS,
-  CURVE_TOLERANCE,
-  DECK_MIN,
-  curveAtOrOver,
-  curveAtOrUnder,
-} from '../game/v3/decks';
-
-export { CURVE_TARGETS, CURVE_TOLERANCE };
-import { cardColors, Color, COLOR_IDENTITY, KEYWORDS_OF_COLOR } from '../game/v3/colors';
+import type { CardDef } from '../game/poker/cards';
+import { isPower } from '../game/poker/cards';
+import { cardColors, isColorLegal, type Color } from '../game/poker/colors';
+import { CAPS, COST_LADDER_UNITS, MODES, type ModeId } from '../game/poker/constants';
+import type { EffectKeyword } from '../game/poker/keywords';
 
 /** One entry per distinct card, with its copy count. */
 export interface DeckEntry {
@@ -24,162 +26,206 @@ export interface DeckEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Cost curve
+// Tier curve
 // ---------------------------------------------------------------------------
 
-export const CURVE_BUCKET_LABELS: readonly [string, string, string] = ['1–2', '3–4', '5+'];
+/** Share of each tier (1–5) in the card pool's pyramid (cardpool.ts). */
+export const TIER_TARGETS: readonly number[] = [0.35, 0.28, 0.2, 0.12, 0.05];
+/** A tier this far (as a share of the powers) off its target is flagged. */
+export const TIER_TOLERANCE = 0.1;
 
-/** Same bucketing as curveBucket() in src/game/v3/decks.ts. */
-export function curveBucket(card: CardDef): 0 | 1 | 2 {
-  const tc = totalCost(card.cost);
-  return tc <= 2 ? 0 : tc <= 4 ? 1 : 2;
-}
-
-export interface CurveBucketAdvice {
+export interface TierBucketAdvice {
+  tier: number;
   label: string;
   count: number;
-  /** Recommended card count at the reference deck size. */
+  /** Recommended copies at the format's power count. */
   target: number;
-  /** Fraction of the deck currently in this bucket. */
+  /** Share of the deck's powers at this tier. */
   fraction: number;
   status: 'low' | 'ok' | 'high';
 }
 
 // ---------------------------------------------------------------------------
-// Colors
+// Types
+// ---------------------------------------------------------------------------
+
+export type PowerKind = 'Unit' | 'Item' | 'Event';
+
+/** Share bands per power type: buildDeck's aim (Units 45%, Items 25%, Events
+ * 30%) ± 10 points. */
+export const TYPE_BANDS: Record<PowerKind, readonly [number, number]> = {
+  Unit: [0.35, 0.55],
+  Item: [0.15, 0.35],
+  Event: [0.2, 0.4],
+};
+
+export interface TypeMix {
+  type: PowerKind;
+  count: number;
+  fraction: number;
+  status: 'low' | 'ok' | 'high';
+}
+
+// ---------------------------------------------------------------------------
+// Colours
 // ---------------------------------------------------------------------------
 
 export interface ColorSpread {
-  /** Cards (copies) per Essence Type, only colors actually present. */
+  /** Cards (copies) per colour, only colours actually present. */
   counts: { color: Color; count: number }[];
   colorless: number;
-  /** Distinct colors in the deck. */
+  /** Distinct colours in the deck. */
   distinct: number;
-  /** Every Leader identity in LEADER_COLORS (src/game/v3/colors.ts) is
-   * exactly 2 Essence Types, so 2 is the workable ceiling. */
+  /** Every Leader carries exactly two colours, so a third can never be legal. */
   overstretched: boolean;
+  /** Copies outside the Leader's colours (0 when no Leader was given). */
+  offColour: number;
 }
 
-/** Max workable colors: every entry in LEADER_COLORS (src/game/v3/colors.ts)
- * is a 2-color identity, and isColorLegal requires every card to fit inside
- * it. */
+/** Every Leader identity in LEADER_COLORS is two colours. */
 export const MAX_WORKABLE_COLORS = 2;
 
 // ---------------------------------------------------------------------------
-// Archetypes
+// Effect themes
 // ---------------------------------------------------------------------------
 
-/**
- * Archetype profiles assembled from the sim's own tables — there is no fixed
- * archetype list in the sim (randomArchetype rolls them), but decks.ts's
- * Archetype scoring gives keywords weight 4 and on-theme effect actions
- * weight 3 (score() in src/game/v3/decks.ts), its doc comment names the
- * canonical leanings ("aggro=damage, control=shatter/banish"), and
- * KEYWORDS_OF_COLOR / COLOR_IDENTITY (src/game/v3/colors.ts) supply the
- * keyword themes and flavor text.
- */
-export interface ArchetypeProfile {
-  id: string;
+export interface ThemeProfile {
+  id: 'information' | 'revive' | 'economy' | 'defence';
   label: string;
-  /** One-line "what this archetype wants". */
+  /** What the family does at the table. */
   wants: string;
-  /** Effect actions over-weighted, per the Archetype.effects doc comment. */
-  effects: string[];
-  /** Keyword themes, from KEYWORDS_OF_COLOR. */
-  keywords: string[];
+  keywords: EffectKeyword[];
 }
 
-export const ARCHETYPE_PROFILES: ArchetypeProfile[] = [
+export const THEMES: ThemeProfile[] = [
   {
-    id: 'aggro',
-    label: 'Aggro',
-    // COLOR_IDENTITY.Ember: 'Aggression, direct damage, haste'.
-    wants: `Cheap units and direct damage — ${COLOR_IDENTITY.Ember.toLowerCase()}.`,
-    effects: ['damage'], // Archetype.effects doc: "aggro=damage" (decks.ts)
-    keywords: KEYWORDS_OF_COLOR.Ember,
+    id: 'information',
+    label: 'Information',
+    wants: 'read what the other seats hold',
+    // Peek / Mark / Reveal are Light-only; Foresee (Tide) reads the deck.
+    keywords: ['Peek', 'Mark', 'Reveal', 'Foresee'],
   },
   {
-    id: 'control',
-    label: 'Control',
-    // COLOR_IDENTITY.Shadow / Void: removal, banish effects, denial.
-    wants: `Answers and denial — ${COLOR_IDENTITY.Shadow.toLowerCase()} plus ${COLOR_IDENTITY.Void.toLowerCase()}.`,
-    effects: ['shatter', 'banish'], // "control=shatter/banish..." (decks.ts)
-    keywords: [...new Set([...KEYWORDS_OF_COLOR.Shadow, ...KEYWORDS_OF_COLOR.Void])],
+    id: 'revive',
+    label: 'Revive',
+    wants: 'rescue a bad deal of hole cards',
+    keywords: ['Redraw', 'Windfall', 'Wild', 'Exhume'],
   },
   {
-    id: 'tempo',
-    label: 'Tempo',
-    // COLOR_IDENTITY.Tide: 'Card draw, bounce, tempo'.
-    wants: `Efficiency and velocity — ${COLOR_IDENTITY.Tide.toLowerCase()}.`,
-    effects: ['draw'],
-    keywords: [...new Set([...KEYWORDS_OF_COLOR.Tide, ...KEYWORDS_OF_COLOR.Gale])],
+    id: 'economy',
+    label: 'Economy',
+    wants: 'move chips your way',
+    keywords: ['Siphon', 'Kindle', 'Tax'],
   },
   {
-    id: 'midrange',
-    label: 'Midrange',
-    // COLOR_IDENTITY.Root / Light: big stats, growth, protection, buffs.
-    wants: `Board presence and staying power — ${COLOR_IDENTITY.Root.toLowerCase()}; ${COLOR_IDENTITY.Light.toLowerCase()}.`,
-    effects: ['buff', 'heal', 'recover'],
-    keywords: [...new Set([...KEYWORDS_OF_COLOR.Root, ...KEYWORDS_OF_COLOR.Light])],
+    id: 'defence',
+    label: 'Defence',
+    wants: 'cap what a lost hand costs you',
+    keywords: ['Bulwark', 'Insurance', 'Toll', 'Decoy'],
   },
 ];
 
-export interface ArchetypeMatch {
-  profile: ArchetypeProfile;
-  score: number;
+export interface ThemeCount {
+  theme: ThemeProfile;
+  count: number;
 }
 
-// ---------------------------------------------------------------------------
-// Composition bands (from randomArchetype in src/game/v3/decks.ts, the sim's
-// notion of a workable 60-card build: units 32-40, sanctums 4-6, spells >= 8)
-// ---------------------------------------------------------------------------
-
-export const UNIT_BAND: readonly [number, number] = [32, 40]; // 32 + rng*9
-export const SANCTUM_BAND: readonly [number, number] = [4, 6]; // 4 + rng*3
-// The auto-builder's real spell floor: DECK_SIZE − max units − max sanctums
-// (60 − 40 − 6). Its literal `Math.max(8, …)` is a vestigial bound that can
-// never bind with those bands — mirroring the 8 here meant a 9–13-spell deck
-// got no "thin spells" suggestion even though the builder never produces one.
-export const SPELL_MIN = 14;
+/** Below this many distinct effects a full deck plays as a one-trick. */
+export const MIN_DISTINCT_EFFECTS = 4;
 
 export interface DeckAdvice {
-  curve: CurveBucketAdvice[];
+  mode: ModeId;
+  /** Tier curve, tiers 1–5, against the pool pyramid. */
+  curve: TierBucketAdvice[];
+  types: TypeMix[];
+  powers: number;
+  locations: number;
+  tier5: number;
+  /** Mean tier of the powers (0 for none). */
+  averageTier: number;
+  /** Mean printed chip cost per power, in chip units. */
+  averageCostUnits: number;
   colors: ColorSpread;
-  archetype: ArchetypeMatch | null;
+  themes: ThemeCount[];
+  /** Distinct effect keywords among the powers. */
+  distinctEffects: number;
   suggestions: string[];
 }
 
-export function deriveDeckAdvice(entries: DeckEntry[]): DeckAdvice {
-  const total = entries.reduce((a, e) => a + e.n, 0);
-  // Reference size for target counts: the deck's own size once it's at least
-  // legal, else the DECK_MIN build target (rulebook §3 via decks.ts).
-  const ref = Math.max(total, DECK_MIN);
+const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-  // --- Curve ---
-  const bucketCounts: [number, number, number] = [0, 0, 0];
-  for (const { card, n } of entries) bucketCounts[curveBucket(card)] += n;
-  const curve: CurveBucketAdvice[] = bucketCounts.map((count, i) => {
-    const fraction = total > 0 ? count / total : 0;
-    const target = Math.round(CURVE_TARGETS[i] * ref);
-    // Same ±0.1 band the sim's curve shaping uses (take() in decks.ts).
-    const status: CurveBucketAdvice['status'] =
-      total === 0
-        ? 'ok'
-        : curveAtOrOver(count, total, i as 0 | 1 | 2)
-          ? 'high'
-          : curveAtOrUnder(count, total, i as 0 | 1 | 2)
-            ? 'low'
-            : 'ok';
-    return { label: CURVE_BUCKET_LABELS[i], count, target, fraction, status };
+export function deriveDeckAdvice(
+  entries: DeckEntry[],
+  opts: { mode?: ModeId; identity?: readonly Color[] } = {},
+): DeckAdvice {
+  const modeId = opts.mode ?? 'standard';
+  const mode = MODES[modeId];
+  const powerEntries = entries.filter((e) => isPower(e.card));
+  const powers = powerEntries.reduce((a, e) => a + e.n, 0);
+  const locations = entries.reduce((a, e) => a + (e.card.type === 'Location' ? e.n : 0), 0);
+  // Target counts are quoted at the format's size (or the list's own, if it
+  // has run over).
+  const ref = Math.max(powers, mode.powers);
+  // Judge shares only once the list is a fair way in — a half-built deck is
+  // naturally "under" everything.
+  const judging = powers >= Math.ceil(mode.powers / 2);
+
+  // --- Tier curve ---
+  const tierCounts = [0, 0, 0, 0, 0];
+  let tierSum = 0;
+  let costSum = 0;
+  for (const { card, n } of powerEntries) {
+    const t = Math.max(1, Math.min(5, card.tier ?? 1));
+    tierCounts[t - 1] += n;
+    tierSum += t * n;
+    costSum += COST_LADDER_UNITS[t] * n;
+  }
+  const curve: TierBucketAdvice[] = tierCounts.map((count, i) => {
+    const fraction = powers > 0 ? count / powers : 0;
+    const share = TIER_TARGETS[i];
+    const status: TierBucketAdvice['status'] = !judging
+      ? 'ok'
+      : fraction > share + TIER_TOLERANCE
+        ? 'high'
+        : fraction < share - TIER_TOLERANCE
+          ? 'low'
+          : 'ok';
+    return {
+      tier: i + 1,
+      label: String(i + 1),
+      count,
+      target: Math.round(share * ref),
+      fraction,
+      status,
+    };
+  });
+  const tier5 = tierCounts[4];
+
+  // --- Types ---
+  const types: TypeMix[] = (['Unit', 'Item', 'Event'] as PowerKind[]).map((type) => {
+    const count = powerEntries.reduce((a, e) => a + (e.card.type === type ? e.n : 0), 0);
+    const fraction = powers > 0 ? count / powers : 0;
+    const [lo, hi] = TYPE_BANDS[type];
+    const status: TypeMix['status'] = !judging
+      ? 'ok'
+      : fraction > hi
+        ? 'high'
+        : fraction < lo
+          ? 'low'
+          : 'ok';
+    return { type, count, fraction, status };
   });
 
-  // --- Colors ---
+  // --- Colours ---
   const colorCounts = new Map<Color, number>();
   let colorless = 0;
+  let offColour = 0;
   for (const { card, n } of entries) {
+    if (card.type === 'Leader') continue;
     const cols = cardColors(card);
     if (cols.length === 0) colorless += n;
     for (const c of cols) colorCounts.set(c, (colorCounts.get(c) || 0) + n);
+    if (opts.identity && !isColorLegal(card, opts.identity as Color[])) offColour += n;
   }
   const colors: ColorSpread = {
     counts: [...colorCounts.entries()]
@@ -188,77 +234,110 @@ export function deriveDeckAdvice(entries: DeckEntry[]): DeckAdvice {
     colorless,
     distinct: colorCounts.size,
     overstretched: colorCounts.size > MAX_WORKABLE_COLORS,
+    offColour,
   };
 
-  // --- Archetype match (weights mirror score() in decks.ts: keyword hit 4,
-  // on-theme effect action 3, per copy) ---
-  let archetype: ArchetypeMatch | null = null;
-  if (total > 0) {
-    let best: ArchetypeMatch | null = null;
-    for (const profile of ARCHETYPE_PROFILES) {
-      let s = 0;
-      for (const { card, n } of entries) {
-        for (const kw of card.keywords ?? []) if (profile.keywords.includes(kw)) s += 4 * n;
-        const act = card.onInvoke?.action;
-        if (act && profile.effects.includes(act)) s += 3 * n;
-      }
-      if (!best || s > best.score) best = { profile, score: s };
-    }
-    if (best && best.score > 0) archetype = best;
-  }
+  // --- Themes ---
+  const themes: ThemeCount[] = THEMES.map((theme) => ({
+    theme,
+    count: powerEntries.reduce(
+      (a, e) =>
+        a + (e.card.effect && theme.keywords.includes(e.card.effect.kw as EffectKeyword) ? e.n : 0),
+      0,
+    ),
+  }));
+  const distinctEffects = new Set(
+    powerEntries.map((e) => e.card.effect?.kw).filter((k): k is NonNullable<typeof k> => !!k),
+  ).size;
 
   // --- Suggestions ---
   const suggestions: string[] = [];
+  if (locations === 0 && entries.length > 0)
+    suggestions.push("No Location yet — every deck brings exactly one to the table's rotation.");
+  else if (locations > 1)
+    suggestions.push(`${locations} Locations — a deck holds exactly one; keep your favourite.`);
+  if (tier5 > mode.maxTier5)
+    suggestions.push(
+      `${tier5} tier-5 cards — ${mode.label} allows ${mode.maxTier5}. They also need a second cost to cast.`,
+    );
   if (curve[0].status === 'low')
     suggestions.push(
-      `Light on 1–2 cost plays (${bucketCounts[0]}; the builder targets ~${curve[0].target} of ${ref}).`,
+      `Light on tier-1 powers (${curve[0].count}; the pool's pyramid suggests ~${curve[0].target} of ${ref}). Cheap powers are what you can afford every hand.`,
     );
-  if (curve[2].status === 'high')
+  const topHeavy = tierCounts[3] + tierCounts[4];
+  const topShare = TIER_TARGETS[3] + TIER_TARGETS[4];
+  if (judging && powers > 0 && topHeavy / powers > topShare + TIER_TOLERANCE)
     suggestions.push(
-      `Top-heavy: ${bucketCounts[2]} cards cost 5+ (the builder targets ~${curve[2].target} of ${ref}).`,
+      `Top-heavy: ${topHeavy} powers at tier 4–5 (${pct(topHeavy / powers)}; the pyramid has ${pct(topShare)}). Each needs a second cost on top of ${COST_LADDER_UNITS[4]}+ chip units.`,
     );
-  // Not an else-if: a deck can be over on 5+ AND under on 3–4 at the same
-  // time, and hearing only about the top-heaviness hid the midgame hole.
-  if (curve[1].status === 'low' && total > 0)
+  // Not an else-if: a deck can be top-heavy AND thin in the middle.
+  if (curve[2].status === 'low')
+    suggestions.push(`Thin at tier 3 (${curve[2].count}; target ~${curve[2].target} of ${ref}).`);
+
+  const [unitMix, itemMix, eventMix] = types;
+  if (unitMix.status === 'high')
     suggestions.push(
-      `Thin midgame: ${bucketCounts[1]} cards at cost 3–4 (target ~${curve[1].target} of ${ref}).`,
+      `${unitMix.count} Units (${pct(unitMix.fraction)}) — only ${CAPS.unitCount} can be out per hand (${CAPS.unitStars} stars total); Items and Events add reach.`,
+    );
+  else if (unitMix.status === 'low')
+    suggestions.push(
+      `Only ${unitMix.count} Units (${pct(unitMix.fraction)}) — Units stay out until showdown and carry your Items; the CPU's builder runs ~45%.`,
+    );
+  if (itemMix.status === 'high')
+    suggestions.push(
+      `${itemMix.count} Items (${pct(itemMix.fraction)}) — only ${CAPS.itemCount} per hand, and without a Unit out each costs a step more.`,
+    );
+  else if (itemMix.status === 'low' && itemMix.count === 0)
+    suggestions.push('No Items — they bond to your Units for extra effect.');
+  if (eventMix.status === 'low')
+    suggestions.push(
+      `Only ${eventMix.count} Events (${pct(eventMix.fraction)}) — Events are your quick answers during betting.`,
+    );
+  else if (eventMix.status === 'high')
+    suggestions.push(
+      `${eventMix.count} Events (${pct(eventMix.fraction)}) — at most ${CAPS.eventsPerStreet} per street and ${CAPS.eventBolts} bolts per hand.`,
     );
 
-  if (colors.overstretched)
+  if (colors.offColour > 0)
     suggestions.push(
-      `Spread across ${colors.distinct} Essence Types — every Leader identity supports at most ${MAX_WORKABLE_COLORS}.`,
+      `${colors.offColour} card${colors.offColour === 1 ? '' : 's'} outside the Leader's colours — they can't be played in this deck.`,
+    );
+  else if (colors.overstretched)
+    suggestions.push(
+      `Spread across ${colors.distinct} colours — every Leader carries exactly ${MAX_WORKABLE_COLORS}.`,
     );
 
-  const sanctums = entries.reduce((a, e) => a + (e.card.type === 'Location' ? e.n : 0), 0);
-  const units = entries.reduce((a, e) => a + (e.card.type === 'Unit' ? e.n : 0), 0);
-  const spells = entries.reduce(
-    (a, e) => a + (e.card.type === 'Item' || e.card.type === 'Event' ? e.n : 0),
-    0,
-  );
-  if (sanctums > SANCTUM_BAND[1])
-    suggestions.push(
-      `${sanctums} Sanctums is above the ${SANCTUM_BAND[0]}–${SANCTUM_BAND[1]} band the auto-builder uses.`,
-    );
-  // Under-band composition advice only once the deck is at least legal size —
-  // a half-built deck is naturally "under" everything.
-  if (total >= DECK_MIN) {
-    if (sanctums < SANCTUM_BAND[0])
+  if (powers >= mode.powers) {
+    for (const { theme, count } of themes) {
+      if (count > 0) continue;
+      // Peek / Mark / Reveal are Light-only, so a non-Light deck's only
+      // information source is Foresee — say so rather than nag.
+      const lightGate =
+        theme.id === 'information' && opts.identity && !opts.identity.includes('Light')
+          ? ' (Peek, Mark and Reveal are Light-only — Foresee is open to Tide)'
+          : '';
       suggestions.push(
-        `Only ${sanctums} Sanctum${sanctums === 1 ? '' : 's'} — the auto-builder runs ${SANCTUM_BAND[0]}–${SANCTUM_BAND[1]}.`,
+        `No ${theme.label.toLowerCase()} powers (${theme.keywords.join(', ')}) — nothing to ${theme.wants}${lightGate}.`,
       );
-    if (units < UNIT_BAND[0])
+    }
+    if (distinctEffects < MIN_DISTINCT_EFFECTS)
       suggestions.push(
-        `Only ${units} Units — the auto-builder runs ${UNIT_BAND[0]}–${UNIT_BAND[1]}.`,
-      );
-    else if (units > UNIT_BAND[1])
-      suggestions.push(
-        `${units} Units is above the auto-builder's ${UNIT_BAND[0]}–${UNIT_BAND[1]} range — spells add flexibility.`,
-      );
-    if (spells < SPELL_MIN)
-      suggestions.push(
-        `Only ${spells} Items/Events — the auto-builder keeps at least ${SPELL_MIN}.`,
+        `Only ${distinctEffects} different effect${distinctEffects === 1 ? '' : 's'} — a one-trick deck is easy to read at the table.`,
       );
   }
 
-  return { curve, colors, archetype, suggestions };
+  return {
+    mode: modeId,
+    curve,
+    types,
+    powers,
+    locations,
+    tier5,
+    averageTier: powers ? +(tierSum / powers).toFixed(2) : 0,
+    averageCostUnits: powers ? +(costSum / powers).toFixed(2) : 0,
+    colors,
+    themes,
+    distinctEffects,
+    suggestions,
+  };
 }
