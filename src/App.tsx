@@ -7,26 +7,12 @@ import {
   MatchResult,
   MatchResultStatus,
 } from './lib/supabase';
-import {
-  buildDeck,
-  deckDefFromCustom,
-  legalModes,
-  randomLeader,
-  type DeckDef,
-} from './game/poker/deck';
-import type { MatchSetup as EngineSetup } from './game/poker/engine';
+import { legalModes } from './game/poker/deck';
 import { MODES, MODE_IDS, MAX_SEATS, MIN_SEATS, type ModeId } from './game/poker/constants';
-import { rngOn } from './game/poker/rng';
-import { cpuTableSetup } from './game/poker/sim';
 import { POOL_BY_ID, applyCardPool } from './game/poker/cardpool';
 import { cn, newMatchSeed, withTimeout } from './lib/utils';
 import { readCache, writeCache } from './lib/cache';
-import {
-  DECK_LINK_PARAM,
-  deckCodeFromSearch,
-  encodeDeckCode,
-  stashPendingDeck,
-} from './meta/deckcode';
+import { DECK_LINK_PARAM, deckCodeFromSearch, stashPendingDeck } from './meta/deckcode';
 import { DeckLinkPreview } from './meta/DeckLinkPreview';
 import type { CardTemplate } from './types';
 import { DeckRow } from './lib/supabase';
@@ -86,9 +72,7 @@ const NO_REWARD_REASON: Record<MatchResultStatus, string> = {
  * Eager on purpose: MainMenu and AuthScreen (the first thing every session
  * renders), and the small shared UI in `./meta/ui`.
  */
-const PokerTable = React.lazy(() =>
-  import('./components/PokerTable').then((m) => ({ default: m.PokerTable })),
-);
+const PokerMatch = React.lazy(() => import('./components/PokerMatch'));
 const HowToPlayScreen = React.lazy(() =>
   import('./components/HowToPlay').then((m) => ({ default: m.HowToPlayScreen })),
 );
@@ -194,13 +178,7 @@ class ErrorBoundary extends React.Component {
 // Play setup — table format, table size, and a freshly-rolled random deck or
 // one of the player's own saved decks
 // ---------------------------------------------------------------------------
-type PlaySetup = {
-  mode: ModeId;
-  seats: number;
-  difficulty: CpuDifficultyId;
-  /** Guided first game: loose bots, helper on, coach. */
-  tutorial?: boolean;
-} & ({ kind: 'custom'; deck: DeckRow } | { kind: 'random' });
+import type { PlaySetup } from './components/PokerMatch';
 
 function PlayScreen({
   onStart,
@@ -416,46 +394,6 @@ function DeckChoices({
   );
 }
 
-/** The engine setup for a match: the human at seat 0, bots drawn from the
- * Leader pool by the match seed (so a replay reproduces them). */
-function buildTable(
-  setup: PlaySetup,
-  matchSeed: number,
-  playerName: string,
-): { engine: EngineSetup; deckCode?: string } {
-  const mode = MODES[setup.mode];
-  const rng = rngOn({ rng: matchSeed * 7919 + 1 });
-  let deck: DeckDef;
-  let deckCode: string | undefined;
-  if (setup.kind === 'random') {
-    const leader = randomLeader(rng);
-    deck = buildDeck(leader, mode, rng, `${leader.name} — Random`);
-  } else {
-    deck = deckDefFromCustom(setup.deck.leader_id, setup.deck.card_ids, setup.deck.name);
-    try {
-      deckCode = encodeDeckCode(setup.deck.leader_id, setup.deck.card_ids, setup.mode);
-    } catch {
-      deckCode = undefined;
-    }
-  }
-  const skill = setup.tutorial
-    ? 0.25
-    : (CPU_DIFFICULTIES.find((d) => d.id === setup.difficulty)?.skill ?? 0.6);
-  const engine = cpuTableSetup({
-    seed: matchSeed,
-    mode: setup.mode,
-    seats: setup.seats,
-    seat0: { name: playerName, human: true, deck },
-    skill,
-  });
-  if (setup.tutorial) {
-    // Loose bots for the guided game: they call more and fold less.
-    for (const s of engine.seats.slice(1))
-      if (s.persona) s.persona = { ...s.persona, tightness: s.persona.tightness - 0.2 };
-  }
-  return { engine, deckCode };
-}
-
 // ---------------------------------------------------------------------------
 // Game (mounted per match)
 // ---------------------------------------------------------------------------
@@ -473,7 +411,6 @@ export function Game({
   const { toast } = useToast();
   // One roll per mount — the gameKey remount (REMATCH) rolls a fresh table.
   const [matchSeed] = useState(newMatchSeed);
-  const [table] = useState(() => buildTable(setup, matchSeed, profile?.username || 'You'));
   const [reward, setReward] = useState<MatchResult | null>(null);
   const [rewardError, setRewardError] = useState<string | null>(null);
   // While the result call is in flight both of the above stay null — this
@@ -579,10 +516,10 @@ export function Game({
           Saving your reward…
         </div>
       )}
-      <PokerTable
-        setup={table.engine}
-        tutorial={setup.tutorial}
-        humanDeckCode={table.deckCode}
+      <PokerMatch
+        play={setup}
+        matchSeed={matchSeed}
+        playerName={profile?.username || 'You'}
         onExit={whenSaved(onExit)}
         onRematch={whenSaved(onRematch)}
         onResult={onResult}
