@@ -237,8 +237,9 @@ export function ProfileScreen({
             ariaLabel={`XP toward level ${profile.level + 1}`}
           />
           <div className="fs-xs font-bold text-[var(--c-steel)] mt-1">
-            Earn XP from every match (+60 win / +25 loss). Each level pays a credits bonus; every
-            5th level adds vouchers on top.
+            Earn XP from every match — the higher you finish, the more (Standard: +60 for 1st, +25
+            for last; Quick pays half, Deep half again). Each level pays a credits bonus; every 5th
+            level adds vouchers on top.
           </div>
         </div>
 

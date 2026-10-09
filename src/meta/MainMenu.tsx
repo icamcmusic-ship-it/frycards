@@ -279,7 +279,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
   const banner = shopItems.find((s) => s.id === profile?.equipped_banner);
   const avatar = shopItems.find((s) => s.id === profile?.equipped_avatar);
 
-  // CPU battles are gated to the Creator account (Fry) for ACCOUNTS while
+  // Bot tables are gated to the Creator account (Fry) for ACCOUNTS while
   // the mode is being finished — those see the tile with a COMING SOON! tag.
   // Guests get the random-deck QUICK MATCH (it's what the PLAY AS GUEST
   // button on the Auth screen promises); gating them on a role they can
@@ -294,7 +294,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
         // it opens How to Play instead of dead-ending on a disabled tile.
         key: 'play',
         label: 'PLAY',
-        desc: 'CPU battles are almost ready — learn the rules meanwhile',
+        desc: 'Poker tables are almost ready — learn the rules meanwhile',
         icon: <Swords className={ICON} />,
         color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
         badge: 'COMING SOON!',
@@ -303,7 +303,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
     : {
         key: 'play',
         label: 'PLAY',
-        desc: 'Battle the CPU',
+        desc: 'Poker against a table of bots',
         icon: <Swords className={ICON} />,
         color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
       };
@@ -321,7 +321,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
     {
       key: 'decks',
       label: 'DECK BUILDER',
-      desc: guest ? lockedDesc : 'Forge 60-card decks',
+      desc: guest ? lockedDesc : 'Leader, Location & power cards',
       icon: <Layers className={ICON} />,
       color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
     },
