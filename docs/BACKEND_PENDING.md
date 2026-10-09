@@ -1,4 +1,4 @@
-# Backend changes: live status (2026-10-09)
+# Backend changes: live status (2026-10-09, complete)
 
 The audit's backend fixes (docs/AUDIT-2026-10-08.md, §1.1 B1–B7 and §1.3 M11) are
 written as migrations `20261008000001`–`07`. Everything in them is idempotent, so
@@ -31,33 +31,31 @@ this reason only; none of it failed on its own logic.
 Smoke-tested live (in a rolled-back transaction): Booster opens 8 cards, Box 49;
 a pack pinned to an empty set now raises instead of paying out another set.
 
-## Not live (needs `DROP` / `DELETE` approval)
+## Also applied (2026-10-09, by running `supabase/manual/parts/` in the SQL editor)
 
-1. **`reset_account()`**, plus `begin_match()` (H-2, one open ticket per account).
-   The function does not exist live, so **Settings → Reset Account errors today**.
-   The new version also refuses while the caller holds the high bid on an active
-   auction (B2 escrow exploit). Both are in `20261008000001_catch_up_drift.sql`
-   (sections 4 and 5). `profiles.last_account_reset_at` already exists live.
-2. **B5 / B7 server side** (`20261008000004`): move the CPU bidders' hidden
-   `cpu_ceiling` / `cpu_next_at` into a private side table, and revoke
-   `settle_expired_listings()` from players. Until then the columns still exist
-   and are still readable by direct table queries. The client already stops
-   selecting them and no longer calls the settle RPC (the 5-minute cron does it).
-3. **Old overloads** `random_card_of_rarity(text)` and `random_leader_of_rarity(text)`
-   are still present (revoked from players). Dropping them is in
-   `20261008000001`; harmless to leave.
-4. **`claim_bingo` week guard** (`20261008000006`, needs `DROP FUNCTION`). Not
-   required: the bingo panel re-checks the card's week client-side before claiming.
-   Do not call `claim_bingo` with `p_week_start` from the client until it is applied.
+| Audit item | What changed                                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| H-2        | `begin_match()` keeps one open ticket per account                                                                                    |
+| B1 / B2    | `reset_account()` exists again (Settings > Reset Account works) and refuses while the caller holds the high bid on an active auction |
+| B5         | CPU bidders' hidden `cpu_ceiling` / `cpu_next_at` live in the private `market_listing_cpu` table; the old columns are emptied        |
+| B7         | `settle_expired_listings()` is cron-only (players can no longer call it)                                                             |
+| cleanup    | the one-argument `random_card_of_rarity` / `random_leader_of_rarity` are dropped                                                     |
 
-To finish items 1–3: run `supabase/manual/finish-backend-2026-10-09.sql` once in the
-Supabase SQL editor (it has no confirmation gate). It is a single transaction,
-idempotent, and applies `begin_match`, `reset_account`, the private CPU-ceiling table
-with the `settle_expired_listings` revoke, and drops the old overloads. Item 4
-(`claim_bingo` guard) is optional and left out.
+Verified live afterwards: no leaked values remain on `market_listings`, `settle_expired_listings`
+and `run_cpu_bidders` are not callable by players, `reset_account` is callable by
+signed-in users and not by anon, and the 5-minute settle job and the daily
+`prune-match-tickets` job are both active and succeeding.
+
+## Intentionally not applied
+
+- **`claim_bingo` week guard** (`20261008000006`): not needed, since the bingo panel
+  re-checks the card's week on the client. Do not call `claim_bingo` with
+  `p_week_start` from the client unless that migration is applied.
+- `market_listings.cpu_ceiling` / `cpu_next_at` columns still exist (emptied). Drop
+  them in a later migration once nothing reads them.
 
 ## Note on the migration files
 
 `20261008000001` as committed is the intended end state (including the drops). On
-live it was applied as the smaller pieces in the table, because the drop-bearing
-calls could not be confirmed. Re-running the whole file on live is safe.
+live it was applied as smaller pieces (see the tables above). Re-running the whole
+file on live is safe.
