@@ -182,7 +182,7 @@ export function ProfileScreen({
                     aria-label="New username"
                   />
                   <PopButton
-                    color="red"
+                    color="yellow"
                     onClick={handleRename}
                     disabled={renaming}
                     title="Save name"
@@ -225,7 +225,7 @@ export function ProfileScreen({
 
         {/* Level progress */}
         <div className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs px-3 py-2 mt-4">
-          <div className="flex justify-between text-[10px] font-black mb-1">
+          <div className="flex justify-between fs-xs font-black mb-1">
             <span>LEVEL {profile.level}</span>
             <span className="font-mono">
               {levelXp.into}/{levelXp.band} XP TO LEVEL {profile.level + 1}
@@ -236,7 +236,7 @@ export function ProfileScreen({
             max={levelXp.band}
             ariaLabel={`XP toward level ${profile.level + 1}`}
           />
-          <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
+          <div className="fs-xs font-bold text-[var(--c-steel)] mt-1">
             Earn XP from every match (+60 win / +25 loss). Each level pays a credits bonus; every
             5th level adds vouchers on top.
           </div>
@@ -255,7 +255,7 @@ export function ProfileScreen({
               className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs px-3 py-2 text-center"
             >
               <div className="heading-font text-2xl">{s.value}</div>
-              <div className="text-[9px] font-black text-[var(--c-steel)]">{s.label}</div>
+              <div className="fs-xs font-black text-[var(--c-steel)]">{s.label}</div>
             </div>
           ))}
         </div>
@@ -327,7 +327,7 @@ export function ProfileScreen({
                       disabled={!!equippingId}
                       className={cn(
                         'btn-pop overflow-hidden ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] text-left transition-all w-36',
-                        isEquipped && 'outline outline-3 outline-[var(--c-red)] -translate-y-1',
+                        isEquipped && 'outline outline-3 outline-[var(--c-ink)] -translate-y-1',
                         equippingId && equippingId !== item.id && 'opacity-40 cursor-not-allowed',
                       )}
                     >
@@ -350,17 +350,17 @@ export function ProfileScreen({
                         />
                       </div>
                       <div className="px-2 py-1 flex justify-between items-center gap-1">
-                        <span className="text-[9px] font-black truncate">{item.name}</span>
+                        <span className="fs-xs font-black truncate">{item.name}</span>
                         {/* The tile being equipped shows its own busy chip —
                             previously every OTHER tile dimmed while the
                             clicked one gave no feedback at all. */}
                         {equippingId === item.id ? (
-                          <span className="text-[8px] font-black bg-[var(--c-yellow)] text-[var(--c-ink)] px-1 shrink-0 animate-pulse">
+                          <span className="fs-xs font-black bg-[var(--c-yellow)] text-[var(--c-ink)] px-1 shrink-0 animate-pulse">
                             …
                           </span>
                         ) : (
                           isEquipped && (
-                            <span className="text-[8px] font-black bg-[var(--c-red)] text-[var(--c-paper)] px-1 shrink-0">
+                            <span className="fs-xs font-black bg-[var(--c-ink)] text-[var(--c-yellow)] px-1 shrink-0">
                               ON
                             </span>
                           )
@@ -466,7 +466,7 @@ function CreatorTools() {
         <ShieldAlert className="w-4 h-4" /> CREATOR TOOLS
       </h2>
       <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-3">
-        <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+        <p className="fs-xs font-bold text-[var(--c-steel)] mb-3">
           Admin-only. Grants and role changes apply instantly and are verified server-side.
         </p>
 
@@ -490,9 +490,7 @@ function CreatorTools() {
           </PopButton>
         </div>
         {searching && (
-          <div className="text-[10px] font-bold text-[var(--c-steel)] animate-pulse mb-2">
-            Searching…
-          </div>
+          <div className="fs-xs font-bold text-[var(--c-steel)] animate-pulse mb-2">Searching…</div>
         )}
         {!searching && results && !target && (
           <div className="flex flex-col gap-1.5 mb-2">
@@ -508,13 +506,13 @@ function CreatorTools() {
                 <span className="text-xs font-bold">
                   {r.username}
                   <RoleBadge role={r.role} />
-                  <span className="text-[9px] text-[var(--c-steel)] ml-2">LV {r.level}</span>
+                  <span className="fs-xs text-[var(--c-steel)] ml-2">LV {r.level}</span>
                 </span>
-                <span className="heading-font text-[9px]">SELECT ▸</span>
+                <span className="heading-font fs-xs">SELECT ▸</span>
               </button>
             ))}
             {results.length === 0 && (
-              <div className="text-[10px] font-bold text-[var(--c-steel)]">No players found.</div>
+              <div className="fs-xs font-bold text-[var(--c-steel)]">No players found.</div>
             )}
           </div>
         )}
@@ -561,7 +559,7 @@ function CreatorTools() {
             {/* Grant currency */}
             <div className="heading-font text-xs mb-1">2 · GRANT CURRENCY</div>
             <div className="flex flex-wrap items-end gap-3 mb-3">
-              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
+              <label className="flex flex-col gap-0.5 fs-xs font-black text-[var(--c-steel)]">
                 CREDITS
                 <input
                   type="number"
@@ -571,7 +569,7 @@ function CreatorTools() {
                   className={`${input} w-24`}
                 />
               </label>
-              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
+              <label className="flex flex-col gap-0.5 fs-xs font-black text-[var(--c-steel)]">
                 VOUCHERS
                 <input
                   type="number"
@@ -584,7 +582,7 @@ function CreatorTools() {
                 />
               </label>
               <PopButton
-                color="red"
+                color="yellow"
                 disabled={busy || (credits === 0 && vouchers === 0)}
                 onClick={async () => {
                   if (
@@ -610,7 +608,7 @@ function CreatorTools() {
             {/* Grant a card */}
             <div className="heading-font text-xs mb-1">3 · GRANT A CARD</div>
             <div className="flex flex-wrap items-end gap-3 mb-3">
-              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
+              <label className="flex flex-col gap-0.5 fs-xs font-black text-[var(--c-steel)]">
                 CARD ID
                 <input
                   list="creator-card-ids"
@@ -627,7 +625,7 @@ function CreatorTools() {
                   ))}
                 </datalist>
               </label>
-              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
+              <label className="flex flex-col gap-0.5 fs-xs font-black text-[var(--c-steel)]">
                 QTY
                 <input
                   type="number"
@@ -637,7 +635,7 @@ function CreatorTools() {
                   className={`${input} w-16`}
                 />
               </label>
-              <label className="flex items-center gap-1.5 text-[10px] font-black pb-1.5">
+              <label className="flex items-center gap-1.5 fs-xs font-black pb-1.5">
                 <input
                   type="checkbox"
                   checked={cardFoil}
@@ -646,7 +644,7 @@ function CreatorTools() {
                 FOIL ✦
               </label>
               <PopButton
-                color="red"
+                color="yellow"
                 disabled={busy || !cardId.trim()}
                 onClick={async () => {
                   if (
@@ -670,7 +668,7 @@ function CreatorTools() {
               </PopButton>
             </div>
             {cardId.trim() !== '' && !cardKnown && (
-              <div className="text-[9px] font-bold text-[var(--c-red)] -mt-2 mb-3">
+              <div className="fs-xs font-bold text-[var(--c-red)] -mt-2 mb-3">
                 Unknown card id in the local pool — the server has the final say.
               </div>
             )}

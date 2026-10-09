@@ -1,7 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowDownUp, Swords, Palette, Sparkles, Timer, Waves } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowDownUp,
+  Check,
+  Swords,
+  Palette,
+  Sparkles,
+  Timer,
+  Waves,
+} from 'lucide-react';
 import { THEMES, ThemeName } from './themes';
 import { PopButton, Notice } from './ui';
+import { CurrencyBar } from './CurrencyBar';
 import { useMeta } from './MetaContext';
 import { resetAccount, setHideSerializedAnnouncements } from '../lib/supabase';
 import {
@@ -150,57 +160,105 @@ export function SettingsScreen({
           &lt; MENU
         </PopButton>
         <h1 className="heading-font text-xl text-[var(--c-yellow)] min-w-0">SETTINGS</h1>
+        <CurrencyBar className="ml-auto" />
       </div>
 
       <div className="p-6 max-w-4xl mx-auto">
-        {/* Color Theme Section */}
+        {/* Color Theme Section: a single row of swatches (11 full-width cards
+            used to fill the whole first screen on a phone and bury everything
+            below them). The chosen theme's name is shown beside the heading. */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
             <Palette className="w-6 h-6 text-[var(--c-ink)]" />
             <h2 className="heading-font text-lg">COLOR THEME</h2>
+            <span className="fs-sm font-bold text-[var(--c-steel)]" aria-live="polite">
+              {THEMES[currentTheme]?.label}
+            </span>
           </div>
+          <div
+            role="group"
+            aria-label="Color theme"
+            className="flex gap-3 overflow-x-auto px-1 pt-1 pb-3 snap-x"
+          >
+            {themeList.map((theme) => {
+              const selected = currentTheme === theme.name;
+              return (
+                <button
+                  key={theme.name}
+                  type="button"
+                  onClick={() => onThemeChange(theme.name)}
+                  aria-pressed={selected}
+                  aria-label={`${theme.label} theme${selected ? ', selected' : ''}`}
+                  title={theme.label}
+                  className={`relative shrink-0 snap-start w-14 h-14 p-1 ink-border-md transition-all ${
+                    selected
+                      ? 'ring-4 ring-[var(--c-ink)] shadow-hard-black'
+                      : 'hover:-translate-y-0.5 shadow-hard-black-xs'
+                  }`}
+                >
+                  {/* The theme's five roles as vertical stripes */}
+                  <span className="flex w-full h-full">
+                    {[
+                      theme.colors.ink,
+                      theme.colors.steel,
+                      theme.colors.red,
+                      theme.colors.yellow,
+                      theme.colors.paper,
+                    ].map((color, idx) => (
+                      <span key={idx} className="flex-1" style={{ backgroundColor: color }} />
+                    ))}
+                  </span>
+                  {selected && (
+                    <span className="absolute inset-0 m-auto w-6 h-6 flex items-center justify-center rounded-full bg-[var(--c-ink)] text-[var(--c-paper)]">
+                      <Check className="w-4 h-4" strokeWidth={3} aria-hidden />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {themeList.map((theme) => (
-              <button
-                key={theme.name}
-                onClick={() => onThemeChange(theme.name)}
-                aria-pressed={currentTheme === theme.name}
-                aria-label={`${theme.label} theme${currentTheme === theme.name ? ', selected' : ''}`}
-                className={`relative overflow-hidden rounded-lg p-4 ink-border-md transition-all ${
-                  currentTheme === theme.name
-                    ? 'ring-4 ring-[var(--c-ink)] shadow-hard-black'
-                    : 'hover:-translate-y-0.5 shadow-hard-black-xs'
-                }`}
-              >
-                {/* Theme preview color grid */}
-                <div className="grid grid-cols-5 gap-1 mb-3">
-                  {[
-                    theme.colors.ink,
-                    theme.colors.steel,
-                    theme.colors.red,
-                    theme.colors.yellow,
-                    theme.colors.paper,
-                  ].map((color, idx) => (
-                    <div
-                      key={idx}
-                      className="aspect-square rounded-sm ink-border-sm"
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
-
-                <div className="text-left">
-                  <div className="heading-font text-sm text-[var(--c-ink)]">{theme.label}</div>
-                </div>
-
-                {currentTheme === theme.name && (
-                  <div className="absolute top-2 right-2 bg-[var(--c-ink)] text-[var(--c-paper)] heading-font text-[9px] px-2 py-1 ink-border-sm">
-                    SELECTED
-                  </div>
-                )}
-              </button>
-            ))}
+        {/* Motion (findings 1.8 / 2.4). Second on the page, right under the theme
+            row: it is an accessibility setting and should not sit below the match prefs. */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Waves className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">MOTION</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              How much the board and the card effects move. SYSTEM follows your device's
+              accessibility setting; the other two override it here, so you don't have to change an
+              OS-level preference to calm one game down. Saved locally, so guests keep it too.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {MOTION_MODES.map((m) => (
+                <PopButton
+                  key={m.id}
+                  color={motionMode === m.id ? 'yellow' : 'steel'}
+                  ariaPressed={motionMode === m.id}
+                  onClick={() => onMotionModeChange(m.id)}
+                >
+                  <OptionLabel label={m.label} blurb={m.blurb} />
+                </PopButton>
+              ))}
+            </div>
+            {/* Live preview: moves under FULL/SYSTEM-without-reduce, holds
+                still when motion is reduced — the same <html data-motion>
+                switch every animation in the game now keys off. */}
+            <style>{`
+              @keyframes settings-motion-demo { 0%,100% { transform: translateX(0) rotate(-4deg); } 50% { transform: translateX(56px) rotate(4deg); } }
+              .settings-motion-demo { animation: settings-motion-demo 1.6s ease-in-out infinite; }
+              @media (prefers-reduced-motion: reduce) { html:not([data-motion='full']) .settings-motion-demo { animation: none; } }
+              html[data-motion='reduced'] .settings-motion-demo { animation: none; }
+            `}</style>
+            <div className="mt-3 flex items-center gap-3" aria-hidden>
+              <span className="fs-xs font-bold text-[var(--c-steel)]">PREVIEW</span>
+              <div className="relative w-28 h-7 ink-border-sm bg-[var(--c-paper)] overflow-hidden">
+                <span className="settings-motion-demo absolute top-1 left-1 w-5 h-5 bg-[var(--c-yellow)] ink-border-sm" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -222,7 +280,7 @@ export function SettingsScreen({
               {CPU_SPEEDS.map((s, i) => (
                 <PopButton
                   key={s.label}
-                  color={cpuSpeed === i ? 'black' : 'yellow'}
+                  color={cpuSpeed === i ? 'yellow' : 'steel'}
                   ariaPressed={cpuSpeed === i}
                   onClick={() => pickSpeed(i)}
                 >
@@ -248,7 +306,7 @@ export function SettingsScreen({
               {CPU_DIFFICULTIES.map((d) => (
                 <PopButton
                   key={d.id}
-                  color={difficulty === d.id ? 'black' : 'yellow'}
+                  color={difficulty === d.id ? 'yellow' : 'steel'}
                   ariaPressed={difficulty === d.id}
                   onClick={() => {
                     setDifficulty(d.id);
@@ -277,7 +335,7 @@ export function SettingsScreen({
               {HAND_SORTS.map((h) => (
                 <PopButton
                   key={h.id}
-                  color={handSort === h.id ? 'black' : 'yellow'}
+                  color={handSort === h.id ? 'yellow' : 'steel'}
                   ariaPressed={handSort === h.id}
                   onClick={() => {
                     setHandSort(h.id);
@@ -287,48 +345,6 @@ export function SettingsScreen({
                   <OptionLabel label={h.label} blurb={h.blurb} />
                 </PopButton>
               ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Motion (findings 1.8 / 2.4) */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <Waves className="w-6 h-6 text-[var(--c-ink)]" />
-            <h2 className="heading-font text-lg">MOTION</h2>
-          </div>
-          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
-            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
-              How much the board and the card effects move. SYSTEM follows your device's
-              accessibility setting; the other two override it here, so you don't have to change an
-              OS-level preference to calm one game down. Saved locally, so guests keep it too.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {MOTION_MODES.map((m) => (
-                <PopButton
-                  key={m.id}
-                  color={motionMode === m.id ? 'black' : 'yellow'}
-                  ariaPressed={motionMode === m.id}
-                  onClick={() => onMotionModeChange(m.id)}
-                >
-                  <OptionLabel label={m.label} blurb={m.blurb} />
-                </PopButton>
-              ))}
-            </div>
-            {/* Live preview: moves under FULL/SYSTEM-without-reduce, holds
-                still when motion is reduced — the same <html data-motion>
-                switch every animation in the game now keys off. */}
-            <style>{`
-              @keyframes settings-motion-demo { 0%,100% { transform: translateX(0) rotate(-4deg); } 50% { transform: translateX(56px) rotate(4deg); } }
-              .settings-motion-demo { animation: settings-motion-demo 1.6s ease-in-out infinite; }
-              @media (prefers-reduced-motion: reduce) { html:not([data-motion='full']) .settings-motion-demo { animation: none; } }
-              html[data-motion='reduced'] .settings-motion-demo { animation: none; }
-            `}</style>
-            <div className="mt-3 flex items-center gap-3" aria-hidden>
-              <span className="text-[10px] font-bold text-[var(--c-steel)]">PREVIEW</span>
-              <div className="relative w-28 h-7 ink-border-sm bg-[var(--c-paper)] overflow-hidden">
-                <span className="settings-motion-demo absolute top-1 left-1 w-5 h-5 bg-[var(--c-yellow)] ink-border-sm" />
-              </div>
             </div>
           </div>
         </div>
@@ -354,7 +370,7 @@ export function SettingsScreen({
                 </p>
               </div>
               <PopButton
-                color={profile.hide_serialized_announcements ? 'black' : 'yellow'}
+                color={profile.hide_serialized_announcements ? 'yellow' : 'steel'}
                 disabled={busy}
                 ariaPressed={profile.hide_serialized_announcements}
                 ariaLabel={
@@ -389,11 +405,11 @@ export function SettingsScreen({
                 Box to open and pick a Leader again. This cannot be undone.
                 {!isExempt && ' Limited to once every 7 days.'}
               </p>
-              <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              <p className="fs-xs font-bold text-[var(--c-steel)] mb-3 max-w-xl">
                 Finish or cancel these first: any open Marketplace auctions or listings, your Player
                 Shop's stock, and cards still at the graders are tied to your collection.
               </p>
-              <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              <p className="fs-xs font-bold text-[var(--c-steel)] mb-3 max-w-xl">
                 Not touched: your username, any moderation history, your level, achievements,
                 cosmetics, unopened packs, and rewards you've already claimed (daily login, Battle
                 Pass, missions).
@@ -442,7 +458,7 @@ export function SettingsScreen({
                         : 'RESET MY ACCOUNT'}
                   </PopButton>
                   {!canConfirm && !resetBusy && (
-                    <span className="text-[10px] font-bold text-[var(--c-steel)]">
+                    <span className="fs-xs font-bold text-[var(--c-steel)]">
                       Type RESET to enable the button.
                     </span>
                   )}
@@ -459,7 +475,7 @@ export function SettingsScreen({
 
         {/* Info Section */}
         <div className="bg-[var(--c-paper)] border-4 border-[var(--c-ink)] p-4">
-          <p className="text-[12px] font-bold text-[var(--c-steel)] leading-relaxed">
+          <p className="fs-sm font-bold text-[var(--c-steel)] leading-relaxed">
             Your theme preference is saved locally and will persist when you return to the game.
           </p>
         </div>
@@ -474,7 +490,7 @@ function OptionLabel({ label, blurb }: { label: string; blurb: string }) {
   return (
     <span className="flex flex-col items-start text-left leading-tight">
       <span>{label}</span>
-      <span className="text-[9px] font-bold normal-case opacity-75">{blurb}</span>
+      <span className="fs-xs font-bold normal-case opacity-75">{blurb}</span>
     </span>
   );
 }

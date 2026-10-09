@@ -38,6 +38,7 @@ import {
   rebondItem,
   mulliganHand,
   opponentOf,
+  passPriority,
 } from './engine';
 import { buildDeck, randomArchetype } from './decks';
 import { POOL_BY_ID } from './cardpool';
@@ -102,6 +103,11 @@ describe('chaos monkey — random legal actions', () => {
       let steps = 0;
       while (!g.winner && steps < 4000) {
         steps++;
+        // The engine refuses endPhase/resolveClash while the opponent holds
+        // priority over a pending item; a real opponent would pass here.
+        if (g.stack.length > 0 && g.priority && g.priority.holder !== g.active) {
+          passPriority(g, g.priority.holder);
+        }
         const pid = g.active;
         const p = g.players[pid];
         const r = rng();

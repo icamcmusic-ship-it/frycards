@@ -25,24 +25,24 @@ for the digital client; digital adaptations are marked **[digital]**.
 
 Unit keywords (rulebook §1):
 
-| Keyword      | Meaning                                                                                  |
-| ------------ | ---------------------------------------------------------------------------------------- |
-| Aerial       | Can only be guarded by other Aerial or Skywatch units                                    |
-| Overrun      | Excess clash damage carries through to the defending player                              |
-| Quickstrike  | Deals damage before normal clash damage                                                  |
-| Doublestrike | Deals both quickstrike and normal damage                                                 |
-| Venomous     | Any damage dealt is lethal                                                               |
-| Siphon       | Damage dealt also gains you that much Vitality (never above 20)                          |
-| Alert        | Doesn't exhaust when attacking                                                           |
-| Reckless     | Can act the turn it enters the field                                                     |
-| Swarmproof   | Must be guarded by two or more units                                                     |
-| Skywatch     | Can guard Aerial units                                                                   |
-| Warded       | Can't be targeted by an opponent                                                         |
+| Keyword      | Meaning                                                                                       |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| Aerial       | Can only be guarded by other Aerial or Skywatch units                                         |
+| Overrun      | Excess clash damage carries through to the defending player                                   |
+| Quickstrike  | Deals damage before normal clash damage                                                       |
+| Doublestrike | Deals both quickstrike and normal damage                                                      |
+| Venomous     | Any damage dealt is lethal                                                                    |
+| Siphon       | Damage dealt also gains you that much Vitality (never above 20)                               |
+| Alert        | Doesn't exhaust when attacking                                                                |
+| Reckless     | Can act the turn it enters the field                                                          |
+| Swarmproof   | Must be guarded by two or more units                                                          |
+| Skywatch     | Can guard Aerial units                                                                        |
+| Warded       | Can't be targeted by an opponent                                                              |
 | Unbreakable  | Once per game, prevent the first shatter or lethal-damage effect; 0 Grit and banish bypass it |
-| Ambush       | Can be invoked at any time, even outside your main phase                                 |
-| Immobile     | Can't attack                                                                             |
-| Regenerate   | At Dawn, heal all damage marked on this unit                                             |
-| Hardened     | Damage dealt to this unit is reduced by 1                                                |
+| Ambush       | Can be invoked at any time, even outside your main phase                                      |
+| Immobile     | Can't attack                                                                                  |
+| Regenerate   | At Dawn, heal all damage marked on this unit                                                  |
+| Hardened     | Damage dealt to this unit is reduced by 1                                                     |
 
 **v6.9:** one new Unit keyword per Essence Type:
 
@@ -98,9 +98,9 @@ Locations none in Ember or Gale:
 
 **v23–v24:** implemented Leader and Event keywords:
 
-| Keyword (type — Essence Type) | Meaning                                                                                                    |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Onslaught (Leader — Ember)    | While your Leader is invoked, your attacking units get +1 Might                                            |
+| Keyword (type — Essence Type) | Meaning                                                                                                   |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Onslaught (Leader — Ember)    | While your Leader is invoked, your attacking units get +1 Might                                           |
 | Beacon (Leader — Light)       | At your Dawn, your invoked Leader restores 1 Vitality                                                     |
 | Dread (Leader — Void)         | While your Leader is invoked, enemy units get -1 Might                                                    |
 | Kindle (Event — Ember)        | When this Event resolves, deal 1 damage to the enemy player                                               |
@@ -163,7 +163,8 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 ## 3. Objective & Setup
 
 - Reduce your opponent's **Vitality from 20 to 0**, or force them to Deal
-  from an empty deck. Vitality can never rise above 20.
+  from an empty deck. Vitality can never rise above 20. If both players are at
+  0 or less Vitality at the same moment, the game is a **draw** (§8).
 - Decks are **at least 60 cards** with **no more than 4 copies of any
   card** (rulebook §3). **[digital]** the editor caps decks at 100 cards,
   and premium rarities carry stricter economy caps: Super-Rare / Ultra-Rare /
@@ -244,6 +245,14 @@ do not use the stack.
   host is gone goes to the unbonded row (Weapon/Tool) or the Ash-pile (Charm).
   A Charm aimed at a **player** cannot fizzle: the target is chosen when it is
   invoked and a player is never an illegal target.
+  A removal Event may be aimed at any unit that is a legal target even if the
+  effect would do nothing to it: shattering an Unbreakable unit with its save
+  up is legal (it spends the save), and so is Recover on a unit that is not
+  exhausted.
+- **Ending a phase or resolving the clash concedes your priority, not your
+  opponent's.** While something waits on the stack and your opponent holds
+  priority, you cannot end the phase or resolve the clash over it — they must
+  pass first.
 - **Steps with no response window**: combat damage, Dawn and Dusk. Anything
   put on the stack inside them resolves before the step continues.
 
@@ -278,7 +287,9 @@ not only in your own main phase — an answer you cannot pay for is no answer.
 ## 8. Death, Removal & State-Based Checks
 
 Before any player acts, the game automatically checks: 0-or-less Vitality
-loses; Dealing from an empty deck loses; lethal damage (or 0 Grit)
+loses (if both players are at 0 or less in the same check, the game is a
+**draw** — neither wins, whoever's turn it is); Dealing from an empty deck
+loses; lethal damage (or 0 Grit)
 shatters a unit (an Unbreakable unit with its once-per-game save still
 unspent survives instead — wounded, with 1 remaining Grit after marked
 damage); banish and a reduction to 0 Grit bypass Unbreakable;
@@ -320,6 +331,15 @@ identity; colorless cards fit any deck.
 
 "**Whenever**" = repeatable trigger · "**When**" = one-time (enters/leaves
 the field) · "**At**" = phase trigger ("At Dawn", "At Dusk").
+
+"Whenever this unit deals clash damage" (Tidecaller and card triggers) fires
+once for each damage step in which the unit deals at least one point of damage:
+a Doublestrike unit that connects in both the first-strike and the normal step
+fires it twice. Several packets from one unit inside a single step (an Overrun
+attacker hitting a guard and spilling through it) count as one damage event,
+and a hit fully absorbed by Hardened or Bulwark deals none. Damage-riding
+keywords are not triggers and still apply to every packet: Withering erodes
+Grit and Siphon gains Vitality on each hit.
 
 ## Quick reference
 

@@ -1,11 +1,33 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Plus, Check, AlertTriangle, Copy, Import, Wand2 } from 'lucide-react';
+import {
+  Trash2,
+  Plus,
+  Check,
+  AlertTriangle,
+  Copy,
+  Import,
+  Wand2,
+  Undo2,
+  Ellipsis,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
 import { encodeDeckCode, decodeDeckCode, deckLink, takePendingDeck } from './deckcode';
 import { takeBuildWith } from './cardOfTheDay';
 import { useMeta } from './MetaContext';
 import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
 import { SafeImage } from './SafeImage';
-import { MetaHeader, PopButton, CardMarketValuePanel } from './ui';
+import { MetaHeader, PopButton, CardMarketValuePanel, Tabs } from './ui';
+import { ActionMenu } from './ActionMenu';
+import { FilterSelect } from './FilterSelect';
+import { usePersistedState } from './usePersistedState';
+import {
+  curveBarHeight,
+  legalitySummary,
+  offColourCount,
+  pushUndo,
+  withoutOffColour,
+} from './deckEdits';
 import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { rarityChip } from './rarity';
 import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpool';
@@ -21,6 +43,7 @@ import { deriveDeckAdvice } from './deckAdvice';
 import { checkProducibleColors, drawTestHand } from './goldfish';
 import { COLOR_HEX } from './colors';
 import { cn } from '../lib/utils';
+import { useIsNarrow } from '../lib/useIsNarrow';
 import { EssenceIcon } from '../components/EssenceIcon';
 
 // Rulebook §3: at least 60 cards, max 4 copies of any card, Leader kept
@@ -48,6 +71,9 @@ function poolMap(): Map<string, CardDef> {
 
 export interface DeckIssue {
   text: string;
+  /** Set on colour-identity problems, which the editor summarises on one
+   * line and offers a one-click fix for. */
+  kind?: 'colour';
 }
 
 /** Rulebook v4.2 §2 deck validity + (optional) collection-ownership limits.
@@ -112,6 +138,7 @@ export function validateDeckList(
       if (!isColorLegal(c, identity)) {
         issues.push({
           text: `${c.name} (${cardColors(c).join('/')}) is outside ${leader.name}'s color identity (${identity.join('/')}).`,
+          kind: 'colour',
         });
       }
     }
@@ -228,19 +255,17 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
       <MetaHeader title="DECK BUILDER" onBack={onBack} />
       <div className="p-5 max-w-5xl mx-auto">
         <div className="flex flex-wrap items-center gap-3 mb-5">
-          <PopButton color="red" onClick={() => setEditing('new')}>
+          <PopButton color="yellow" onClick={() => setEditing('new')}>
             <span className="flex items-center gap-1">
               <Plus className="w-4 h-4" /> FORGE NEW DECK
             </span>
           </PopButton>
-          <PopButton color="yellow" onClick={handleImport}>
+          <PopButton color="steel" onClick={handleImport}>
             <span className="flex items-center gap-1">
               <Import className="w-4 h-4" /> IMPORT CODE
             </span>
           </PopButton>
-          {listError && (
-            <span className="text-[11px] font-bold text-[var(--c-red)]">⚠ {listError}</span>
-          )}
+          {listError && <span className="fs-xs font-bold text-[var(--c-red)]">⚠ {listError}</span>}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {decks.map((d) => {
@@ -255,12 +280,12 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                     {d.name}
                   </span>
                   {d.is_valid ? (
-                    <span className="text-[9px] font-black text-[var(--c-paper)] bg-[var(--c-steel)] px-1 flex items-center gap-0.5">
+                    <span className="fs-xs font-black text-[var(--c-paper)] bg-[var(--c-steel)] px-1 flex items-center gap-0.5">
                       <Check className="w-3 h-3" />
                       LEGAL
                     </span>
                   ) : (
-                    <span className="text-[9px] font-black text-[var(--c-ink)] bg-[var(--c-yellow)] px-1 flex items-center gap-0.5">
+                    <span className="fs-xs font-black text-[var(--c-ink)] bg-[var(--c-yellow)] px-1 flex items-center gap-0.5">
                       <AlertTriangle className="w-3 h-3" />
                       INCOMPLETE
                     </span>
@@ -275,7 +300,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                     fallbackText={leader?.name}
                   />
                 </div>
-                <div className="px-3 text-[11px] font-bold text-[var(--c-steel)]">
+                <div className="px-3 fs-xs font-bold text-[var(--c-steel)]">
                   {leader?.name || 'Unknown Leader'} · {d.card_ids.length}/{DECK_MIN}+ cards
                 </div>
                 <div className="flex gap-2 p-3">
@@ -283,7 +308,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                     EDIT
                   </PopButton>
                   <PopButton
-                    color="yellow"
+                    color="steel"
                     onClick={() => {
                       setListError('');
                       // An unsaved draft with the same cards: saving creates a new
@@ -300,7 +325,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                     COPY
                   </PopButton>
                   <PopButton
-                    color="black"
+                    color="red"
                     disabled={deletingId !== null}
                     onClick={() => handleDelete(d)}
                     ariaLabel={`Delete deck ${d.name}`}
@@ -318,9 +343,14 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
             </div>
           )}
           {!dataLoading && decks.length === 0 && (
-            <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-14">
-              No decks yet. Open packs in the Store to collect cards, then forge your first deck
-              here.
+            <div className="col-span-full flex flex-col items-center gap-3 text-center font-bold text-[var(--c-steel)] py-14">
+              <p>
+                No decks yet. Open packs in the Store to collect cards, then forge your first deck
+                here.
+              </p>
+              <PopButton color="yellow" onClick={() => setEditing('new')}>
+                FORGE YOUR FIRST DECK →
+              </PopButton>
             </div>
           )}
         </div>
@@ -336,6 +366,15 @@ const TYPE_FILTERS = ['All', 'Unit', 'Item', 'Event', 'Location'];
 // Total-essence-cost buckets (Fry Cards v5.0); everything 7+ shares a bucket.
 const COST_FILTERS = ['All', '0', '1', '2', '3', '4', '5', '6', '7+'];
 const COST_BUCKETS = ['0', '1', '2', '3', '4', '5', '6', '7+'];
+const PANEL_TABS = ['list', 'stats', 'guide'] as const;
+type PanelTab = (typeof PANEL_TABS)[number];
+const isPanelTab = (v: unknown): v is PanelTab => PANEL_TABS.includes(v as PanelTab);
+const isOneOf =
+  (opts: string[]) =>
+  (v: unknown): v is string =>
+    typeof v === 'string' && opts.includes(v);
+/** Height of the tallest cost-curve bar, in px. */
+const CURVE_MAX_PX = 56;
 
 function costBucket(c: CardDef): string {
   const t = totalCost(c.cost);
@@ -353,6 +392,7 @@ function shuffleArr<T>(arr: T[]): T[] {
 
 function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void }) {
   const { session, collection, decks } = useMeta();
+  const narrow = useIsNarrow();
   const db = useMemo(() => new Map(POOL_V4.map((c) => [c.id, c])), []);
   const ownedQty = useMemo(
     () => new Map(collection.map((pc) => [pc.card_id, pc.quantity + pc.foil_quantity])),
@@ -384,16 +424,38 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const initialCardIds = useMemo(() => deck?.card_ids || [], [deck]);
   const [name, setName] = useState(initialName);
   const [leaderId, setLeaderId] = useState<string | null>(deck?.leader_id || null);
-  const [cardIds, setCardIds] = useState<string[]>(deck?.card_ids || []);
-  const [typeFilter, setTypeFilter] = useState('All');
+  const [cardIds, setCardIdsRaw] = useState<string[]>(deck?.card_ids || []);
+  // Undo: every card-list edit records the list as it was. Leader and name
+  // changes are not card edits and are not undone here.
+  const [history, setHistory] = useState<string[][]>([]);
+  const setCardIds = (next: string[]) => {
+    setHistory((h) => pushUndo(h, cardIds));
+    setCardIdsRaw(next);
+  };
+  const undo = () => {
+    const prev = history[history.length - 1];
+    if (!prev) return;
+    setHistory(history.slice(0, -1));
+    setCardIdsRaw(prev);
+  };
+  // Remembered between visits (per viewer): the filters a player builds with.
+  // The colour filter is not: its options depend on the Leader.
+  const [typeFilter, setTypeFilter] = usePersistedState('deck.type', 'All', isOneOf(TYPE_FILTERS));
   const [colorFilter, setColorFilter] = useState('All');
-  const [costFilter, setCostFilter] = useState('All');
+  const [costFilter, setCostFilter] = usePersistedState('deck.cost', 'All', isOneOf(COST_FILTERS));
+  // On: the pool shows only cards legal under the Leader's colours.
+  const [identityOnly, setIdentityOnly] = usePersistedState('deck.identityOnly', true);
+  const [panelTab, setPanelTab] = usePersistedState<PanelTab>('deck.panelTab', 'list', isPanelTab);
+  // The phone bottom sheet; collapsed by default so the pool gets the room.
+  const [sheetOpen, setSheetOpen] = usePersistedState('deck.sheetOpen', false);
+  const [issuesOpen, setIssuesOpen] = useState(false);
   const [search, setSearch] = useState(
     () => (deck as (DeckRow & { __search?: string }) | null)?.__search ?? '',
   );
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // Which export was just copied (drives the confirmation toast).
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const copiedTimeoutRef = useRef<number | null>(null);
 
@@ -412,9 +474,9 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     try {
       const code = encodeDeckCode(leaderId, cardIds);
       await navigator.clipboard.writeText(asLink ? deckLink(code) : code);
-      setCopied(true);
+      setCopied(asLink ? 'link' : 'code');
       if (copiedTimeoutRef.current !== null) window.clearTimeout(copiedTimeoutRef.current);
-      copiedTimeoutRef.current = window.setTimeout(() => setCopied(false), 1500);
+      copiedTimeoutRef.current = window.setTimeout(() => setCopied(null), 1800);
     } catch {
       window.alert('Could not copy to clipboard — clipboard access is blocked in this browser.');
     }
@@ -484,15 +546,19 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   // from the v4.2 pool, restricted to the chosen Leader's color identity
   // (v4.13) — showing an illegal card here just to have it rejected by
   // validateDeckList later would be a confusing dead end, so the browsable
-  // pool itself is pre-filtered to what's actually legal for this deck.
+  // pool is pre-filtered to what's actually legal for this deck. The
+  // "Leader colours only" toggle can lift that to browse everything; the
+  // banner then flags whatever off-colour cards get added.
   const colorIdentity = leaderId ? LEADER_COLORS[leaderId] : undefined;
+  const offColour = offColourCount(cardIds, db, colorIdentity);
+  const removeOffColour = () => setCardIds(withoutOffColour(cardIds, db, colorIdentity));
   const pool = poolByType('Unit')
     .concat(poolByType('Item'), poolByType('Event'), poolByType('Location'))
     .filter((c) => {
       if ((availableQty.get(c.id) || 0) === 0) return false;
       if (typeFilter !== 'All' && c.type !== typeFilter) return false;
       if (costFilter !== 'All' && costBucket(c) !== costFilter) return false;
-      if (colorIdentity && !isColorLegal(c, colorIdentity)) return false;
+      if (identityOnly && colorIdentity && !isColorLegal(c, colorIdentity)) return false;
       if (colorFilter !== 'All' && !cardColors(c).includes(colorFilter as Color)) return false;
       if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
@@ -622,6 +688,21 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [isDirty]);
 
+  // Ctrl/Cmd+Z undoes the last card-list edit, unless a text field has focus
+  // (there it undoes typing, which is what the player means).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (history.length === 0) return;
+      e.preventDefault();
+      undo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   // Leader pick step
   if (!leader) {
     return (
@@ -661,10 +742,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 )}
               >
                 <div className="flex justify-between items-center px-2 py-1 bg-[var(--c-ink)]">
-                  <span className="text-[9px] heading-font text-[var(--c-yellow)]">
+                  <span className="fs-xs heading-font text-[var(--c-yellow)]">
                     {(l.rarity || 'LEADER').toUpperCase()} LEADER ✸
                   </span>
-                  <span className="text-[9px] font-mono font-bold text-[var(--c-paper)]">
+                  <span className="fs-xs font-mono font-bold text-[var(--c-paper)]">
                     RESOLVE {l.resolve ?? 0}
                   </span>
                 </div>
@@ -679,7 +760,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 </div>
                 <div className="p-3 pt-1">
                   <div className="heading-font text-base leading-tight">{l.name}</div>
-                  <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1 flex items-center gap-1 flex-wrap">
+                  <div className="fs-xs font-bold text-[var(--c-steel)] mt-1 flex items-center gap-1 flex-wrap">
                     {(LEADER_COLORS[l.id] || cardColors(l)).map((c) => (
                       <span key={c} className="inline-flex items-center gap-0.5">
                         <span
@@ -697,7 +778,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                       : ''}
                   </div>
                   {avail <= 0 && (
-                    <div className="text-[9px] font-bold text-[var(--c-red)] mt-1">
+                    <div className="fs-xs font-bold text-[var(--c-red)] mt-1">
                       Locked in another deck
                     </div>
                   )}
@@ -715,170 +796,503 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     );
   }
 
+  const summary = legalitySummary(issues, offColour, leader.name);
+  const showBanner = issues.length > 0 || !!saveError;
+
+  // ---- the deck panel: LIST / STATS / GUIDE ------------------------------
+  // One panel, two containers: a sidebar on wide screens and a collapsible
+  // bottom sheet on phones (collapsed by default, so the pool gets the room).
+  const statsBody = (
+    <>
+      {/* Deck stats: essence-cost curve, type breakdown, top keywords */}
+      <div className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40">
+        <div className="heading-font fs-xs text-[var(--c-yellow)] mb-1.5">DECK STATS</div>
+        <CostCurve curve={deckStats.curve} max={deckStats.maxCurve} />
+        <div className="flex gap-2 flex-wrap mb-1.5">
+          {Object.entries(typeCounts).map(([t, n]) => (
+            <span
+              key={t}
+              className="fs-xs font-bold text-[var(--c-paper)] bg-[var(--c-ink)]/50 px-1.5 py-0.5"
+            >
+              {n} {t}
+              {n === 1 ? '' : 's'}
+            </span>
+          ))}
+        </div>
+        {deckStats.topKeywords.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {deckStats.topKeywords.map(([kw, n]) => (
+              <span
+                key={kw}
+                className="fs-xs font-black px-1 py-0.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm"
+              >
+                {kw} ×{n}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Producible colours + seeded test hand (finding 2.6) */}
+      <div className="px-3 py-2.5" aria-label="Colour and draw check">
+        <div className="heading-font fs-xs text-[var(--c-yellow)] mb-1.5">COLOUR &amp; DRAW</div>
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {colorCheck.producible.map((c) => (
+            <span
+              key={c}
+              className="fs-xs font-black px-1 py-0.5 bg-[var(--c-ink)]/50 text-[var(--c-paper)]"
+              title={`${c} essence is producible: Leader identity or one of this deck's Sanctums`}
+            >
+              {c} ✓{colorCheck.demand[c] ? ` ${colorCheck.demand[c]} pips` : ' unused'}
+            </span>
+          ))}
+        </div>
+        {colorCheck.unproducible.length > 0 && (
+          <div
+            role="alert"
+            className="fs-xs font-black text-[var(--c-ink)] bg-[var(--c-yellow)] ink-border-sm px-1.5 py-1 mb-1.5"
+          >
+            UNCASTABLE: this deck asks for {colorCheck.unproducible.join(', ')} essence it cannot
+            produce. Add a Sanctum that makes it, or cut those cards.
+          </div>
+        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <PopButton
+            color="yellow"
+            onClick={() => setHandSeed(Math.floor(Math.random() * 0x7fffffff))}
+          >
+            TEST HAND
+          </PopButton>
+          {testHand && (
+            <span className="fs-xs font-mono font-bold text-[var(--c-paper)]/70 select-all">
+              SEED {testHand.seed}
+            </span>
+          )}
+        </div>
+        {testHand && (
+          <div className="mt-1.5" aria-live="polite">
+            <div className="fs-xs font-bold text-[var(--c-paper)]/80 mb-1">
+              avg cost {testHand.averageCost} · {testHand.turnOnePlays} turn-1 play
+              {testHand.turnOnePlays === 1 ? '' : 's'}
+              {testHand.noUnits ? ' · NO UNITS — the CPU would mulligan this' : ''}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {testHand.cards.map((c, i) => (
+                <button
+                  key={`${c.id}-${i}`}
+                  onClick={() => setInspect(c)}
+                  className="fs-xs font-bold px-1.5 py-1 min-h-[24px] bg-[var(--c-ink)]/50 text-[var(--c-paper)] text-left"
+                >
+                  {c.name} ({totalCost(c.cost)})
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  // Deck guide: curve vs the sim's targets, color spread, closest archetype
+  // and concrete suggestions. Statuses are text ("UNDER"/"OVER"), never
+  // color-only.
+  const guideBody = (
+    <div className="px-3 py-2.5" aria-label="Deck guidance">
+      <div className="heading-font fs-xs text-[var(--c-yellow)] mb-1.5">DECK GUIDE</div>
+      <div className="flex gap-1.5 mb-1.5">
+        {advice.curve.map((b) => (
+          <div
+            key={b.label}
+            className="flex-1 bg-[var(--c-ink)]/50 px-1.5 py-1 text-center"
+            title={`Cost ${b.label}: ${b.count} cards, builder targets ~${b.target}`}
+          >
+            <div className="fs-xs font-mono font-bold text-[var(--c-paper)]/70">COST {b.label}</div>
+            <div className="fs-sm font-black text-[var(--c-paper)]">
+              {b.count}
+              <span className="text-[var(--c-paper)]/60 font-bold">/{b.target}</span>
+            </div>
+            <div
+              className={cn(
+                'fs-xs font-black',
+                b.status === 'ok' ? 'text-[var(--c-paper)]/60' : 'text-[var(--c-yellow)]',
+              )}
+            >
+              {b.status === 'low' ? '▼ UNDER' : b.status === 'high' ? '▲ OVER' : '✓ ON CURVE'}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+        {advice.colors.counts.map(({ color, count }) => (
+          <span
+            key={color}
+            className="inline-flex items-center gap-1 fs-xs font-bold text-[var(--c-paper)] bg-[var(--c-ink)]/50 px-1.5 py-0.5"
+          >
+            <span
+              className="w-3 h-3 rounded-full inline-flex items-center justify-center"
+              style={{ backgroundColor: COLOR_HEX[color] }}
+              aria-hidden="true"
+            >
+              <EssenceIcon type={color} color="#FFFFFF" size={8} />
+            </span>
+            {color} ×{count}
+          </span>
+        ))}
+        {advice.colors.colorless > 0 && (
+          <span className="fs-xs font-bold text-[var(--c-paper)]/80 bg-[var(--c-ink)]/50 px-1.5 py-0.5">
+            Colorless ×{advice.colors.colorless}
+          </span>
+        )}
+        {advice.colors.counts.length === 0 && advice.colors.colorless === 0 && (
+          <span className="fs-xs font-bold text-[var(--c-paper)]/60">
+            No cards yet — the guide fills in as you build.
+          </span>
+        )}
+      </div>
+      {advice.archetype && (
+        <div className="fs-xs font-bold text-[var(--c-paper)] mb-1">
+          <span className="text-[var(--c-yellow)] font-black">
+            CLOSEST ARCHETYPE: {advice.archetype.profile.label.toUpperCase()}
+          </span>{' '}
+          — {advice.archetype.profile.wants}
+        </div>
+      )}
+      {advice.suggestions.length > 0 && (
+        <ul className="fs-xs font-bold text-[var(--c-paper)]/90 list-none space-y-0.5">
+          {advice.suggestions.slice(0, 3).map((s) => (
+            <li key={s}>› {s}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
+  const listBody = (
+    <div className="px-2 py-2 flex flex-col gap-1">
+      {grouped.map(({ card, n }) => (
+        <button
+          key={card.id}
+          onClick={() => removeCard(card.id)}
+          title="Tap to remove one copy"
+          className="flex items-center gap-1.5 bg-[var(--c-paper)] ink-border-sm px-1.5 py-1 min-h-[32px] text-left hover:bg-[var(--c-red)] hover:text-[var(--c-paper)] transition-colors group"
+        >
+          <span
+            className={cn('fs-xs font-black px-1 shrink-0 rounded-sm', rarityChip(card.rarity))}
+          >
+            {costBucket(card)}
+          </span>
+          <span className="fs-sm font-bold truncate flex-1">{card.name}</span>
+          <span className="fs-xs font-mono font-black shrink-0">×{n}</span>
+        </button>
+      ))}
+      {grouped.length === 0 && (
+        <div className="fs-xs font-bold text-[var(--c-paper)]/70 text-center py-8">
+          Tap cards in the pool to add them.
+        </div>
+      )}
+    </div>
+  );
+
+  const panel = (
+    <>
+      <Tabs
+        tabs={[
+          { id: 'list' as PanelTab, label: 'LIST', badge: cardIds.length },
+          { id: 'stats' as PanelTab, label: 'STATS' },
+          { id: 'guide' as PanelTab, label: 'GUIDE' },
+        ]}
+        value={panelTab}
+        onChange={setPanelTab}
+        ariaLabel="Deck panel"
+        className="px-2 py-2 bg-[var(--c-ink)] shrink-0"
+      />
+      <div role="tabpanel" className="flex-1 min-h-0 overflow-y-auto">
+        {panelTab === 'list' ? listBody : panelTab === 'stats' ? statsBody : guideBody}
+      </div>
+    </>
+  );
+
+  const countBadge = (
+    <span
+      className={cn(
+        'heading-font fs-sm px-2 py-1 ink-border-sm shrink-0',
+        cardIds.length >= DECK_MIN && cardIds.length <= DECK_MAX
+          ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+          : 'bg-[var(--c-red)] text-[var(--c-paper)]',
+      )}
+      title={`Decks need at least ${DECK_MIN} cards (max ${DECK_MAX})`}
+    >
+      {cardIds.length}/{DECK_MIN}+
+    </span>
+  );
+
+  const changeLeader = () => {
+    // A color filter left over from the old Leader's identity can silently
+    // zero out the pool under the new one (the selector itself may not even
+    // render if the new identity is single-color, leaving no way to see or
+    // clear it).
+    setColorFilter('All');
+    setLeaderId(null);
+  };
+
   return (
     // `100dvh` rather than `100vh`: on mobile Safari/Chrome the latter is the
     // viewport WITHOUT the retracted URL bar, so a full-height editor is taller
     // than the screen and its bottom row sits under the browser chrome.
     <div className="w-full h-[100dvh] flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)]">
-      {/* Editor header */}
-      {/* v7.5: this header laid out as two fixed rows of controls that could
-          not wrap, so on a 375px phone SAVE DECK and CHANGE LEADER were off
-          the right edge of the screen and the page itself was 443px wide. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 bg-[var(--c-ink)] px-2 sm:px-4 py-2 sm:py-2.5 shrink-0">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
-          <PopButton onClick={handleBack} color="yellow">
-            &lt; BACK
-          </PopButton>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={40}
-            aria-label="Deck name"
-            className="px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm w-32 sm:w-48"
-          />
-          <span className="heading-font text-sm text-[var(--c-paper)] truncate">{leader.name}</span>
-          <PopButton
-            color="steel"
-            onClick={() => {
-              // A color filter left over from the old Leader's identity can
-              // silently zero out the pool under the new one (the selector
-              // itself may not even render if the new identity is
-              // single-color, leaving no way to see or clear it).
-              setColorFilter('All');
-              setLeaderId(null);
-            }}
-            title="Pick a different Leader — keeps the current card list"
-          >
-            CHANGE LEADER
-          </PopButton>
-          {colorIdentity && (
-            <span
-              className="flex items-center gap-1 shrink-0"
-              title="Color identity — only cards in these colors are legal in this deck"
-            >
-              {colorIdentity.map((c) => (
-                <span
-                  key={c}
-                  className="w-3.5 h-3.5 rounded-full border border-white/40 flex items-center justify-center text-[7px] font-black leading-none text-white"
-                  style={{ backgroundColor: COLOR_HEX[c] }}
-                >
-                  <EssenceIcon type={c} color="#FFFFFF" size={9} />
-                </span>
-              ))}
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      {/* Editor header: one row on a phone (BACK, name, undo, menu, SAVE); the
+          rarely-used commands live in the overflow menu there and sit inline
+          from `sm` up. */}
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-[var(--c-ink)] px-2 sm:px-4 py-2 sm:py-2.5 shrink-0">
+        <PopButton onClick={handleBack} color="yellow" className="shrink-0">
+          &lt; BACK
+        </PopButton>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={40}
+          aria-label="Deck name"
+          className="px-2 py-1.5 min-h-[36px] bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm min-w-0 flex-[1_1_6rem] sm:flex-none sm:w-48"
+        />
+        <span className="hidden md:block heading-font text-sm text-[var(--c-paper)] truncate min-w-0">
+          {leader.name}
+        </span>
+        {colorIdentity && (
           <span
-            className={cn(
-              'heading-font text-sm px-2 py-1 ink-border-sm',
-              cardIds.length >= DECK_MIN && cardIds.length <= DECK_MAX
-                ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                : 'bg-[var(--c-red)] text-[var(--c-paper)]',
-            )}
-            title={`Decks need at least ${DECK_MIN} cards (max ${DECK_MAX})`}
+            className="hidden sm:flex items-center gap-1 shrink-0"
+            title="Color identity — only cards in these colors are legal in this deck"
           >
-            {cardIds.length}/{DECK_MIN}+
+            {colorIdentity.map((c) => (
+              <span
+                key={c}
+                className="w-3.5 h-3.5 rounded-full border border-white/40 flex items-center justify-center leading-none text-white"
+                style={{ backgroundColor: COLOR_HEX[c] }}
+              >
+                <EssenceIcon type={c} color="#FFFFFF" size={9} />
+              </span>
+            ))}
           </span>
-          <PopButton
-            color="steel"
-            onClick={handleQuickbuild}
-            title="Auto-fill a legal deck from your owned cards"
-          >
-            <span className="flex items-center gap-1">
-              <Wand2 className="w-4 h-4" /> QUICKBUILD
-            </span>
-          </PopButton>
-          <PopButton
-            color="yellow"
-            onClick={() => handleExport()}
-            title="Copy deck code to clipboard"
-          >
-            <span className="flex items-center gap-1">
-              <Copy className="w-4 h-4" /> {copied ? 'COPIED!' : 'CODE'}
-            </span>
-          </PopButton>
-          <PopButton
-            color="yellow"
-            onClick={() => handleExport(true)}
-            title="Copy a link that opens this deck for anyone"
-          >
-            <span className="flex items-center gap-1">
-              <Copy className="w-4 h-4" /> LINK
-            </span>
-          </PopButton>
-          <PopButton color="red" onClick={handleSave} disabled={saving}>
-            {saving ? 'SAVING…' : isValid ? 'SAVE DECK ✓' : 'SAVE DRAFT'}
-          </PopButton>
-        </div>
+        )}
+        <div className="hidden sm:block sm:ml-auto" />
+        <div className="hidden sm:block">{countBadge}</div>
+        <PopButton
+          color="steel"
+          onClick={undo}
+          disabled={history.length === 0}
+          ariaLabel="Undo last deck edit"
+          title="Undo the last card change (Ctrl+Z)"
+          className="shrink-0 !px-2 min-h-[36px] min-w-[36px] flex items-center justify-center"
+        >
+          <Undo2 className="w-4 h-4" aria-hidden />
+        </PopButton>
+        {/* Wide screens: the common commands stay one click away. */}
+        <PopButton
+          color="steel"
+          onClick={handleQuickbuild}
+          title="Auto-fill a legal deck from your owned cards"
+          className="hidden sm:block"
+        >
+          <span className="flex items-center gap-1">
+            <Wand2 className="w-4 h-4" /> QUICKBUILD
+          </span>
+        </PopButton>
+        <PopButton
+          color="steel"
+          className="hidden sm:block"
+          onClick={changeLeader}
+          title="Pick a different Leader — keeps the current card list"
+        >
+          CHANGE LEADER
+        </PopButton>
+        <ActionMenu
+          ariaLabel="Copy deck code or link"
+          className="hidden sm:block"
+          label={
+            <>
+              <Copy className="w-4 h-4" aria-hidden /> COPY
+              <ChevronDown className="w-3 h-3" aria-hidden />
+            </>
+          }
+          items={[
+            {
+              id: 'code',
+              label: 'Copy deck code',
+              hint: 'Paste it into IMPORT CODE',
+              onSelect: () => handleExport(),
+            },
+            {
+              id: 'link',
+              label: 'Copy deck link',
+              hint: 'Opens this deck for anyone',
+              onSelect: () => handleExport(true),
+            },
+          ]}
+        />
+        <ActionMenu
+          ariaLabel="More deck actions"
+          className="sm:hidden"
+          label={<Ellipsis className="w-4 h-4" aria-hidden />}
+          items={[
+            {
+              id: 'quickbuild',
+              label: 'Quickbuild',
+              hint: 'Auto-fill a legal deck from your cards',
+              onSelect: handleQuickbuild,
+            },
+            {
+              id: 'leader',
+              label: 'Change leader',
+              hint: 'Keeps the current card list',
+              onSelect: changeLeader,
+            },
+            { id: 'code', label: 'Copy deck code', onSelect: () => handleExport() },
+            { id: 'link', label: 'Copy deck link', onSelect: () => handleExport(true) },
+          ]}
+        />
+        <PopButton
+          color={isValid ? 'yellow' : 'steel'}
+          onClick={handleSave}
+          disabled={saving}
+          className="shrink-0 !px-3 sm:!px-4"
+        >
+          {saving ? (
+            'SAVING…'
+          ) : isValid ? (
+            <>
+              SAVE<span className="hidden sm:inline"> DECK</span> ✓
+            </>
+          ) : (
+            <>
+              SAVE<span className="hidden sm:inline"> DRAFT</span>
+            </>
+          )}
+        </PopButton>
       </div>
 
-      {(issues.length > 0 || saveError) && (
-        // Capped and scrolling: four full-sentence legality warnings wrap to
-        // about 300px on a 375px screen, which was most of the editor's
-        // vertical budget and left the card pool a ~40px sliver.
-        <div className="bg-[var(--c-yellow)] border-b-4 border-[var(--c-ink)] px-2 sm:px-4 py-1.5 text-[10px] font-bold flex flex-wrap gap-x-4 gap-y-0.5 shrink-0 max-h-16 sm:max-h-none overflow-y-auto">
-          {saveError && <span className="text-[var(--c-red)]">SAVE FAILED: {saveError}</span>}
-          {issues.slice(0, 4).map((i) => (
-            <span key={i.text}>⚠ {i.text}</span>
-          ))}
-          {issues.length > 4 && <span>+{issues.length - 4} more…</span>}
+      {copied && (
+        <div
+          role="status"
+          className="fixed top-16 right-2 z-50 heading-font fs-sm bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs px-3 py-1.5"
+        >
+          {copied === 'link' ? 'LINK COPIED ✓' : 'CODE COPIED ✓'}
         </div>
       )}
 
-      {/* v7.5: side-by-side below `sm` squeezed the pool column to ~90px —
-          narrower than a single card — so the pool was unusable on a phone.
-          Stacked instead, with the deck list capped and scrolling under it. */}
-      <div className="flex flex-col sm:flex-row flex-1 min-h-0 overflow-y-auto sm:overflow-visible">
-        {/* Card pool */}
-        <div className="flex-1 min-w-0 min-h-[55vh] sm:min-h-0 flex flex-col">
-          <div className="flex gap-2 items-center p-3 pb-2 shrink-0 flex-wrap">
-            <input
-              className={cn(select, 'w-44 max-w-full placeholder:text-[var(--c-steel)]/50')}
-              placeholder="Search…"
-              aria-label="Search owned cards"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <select
-              className={select}
-              aria-label="Filter by card type"
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-            >
-              {TYPE_FILTERS.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-            {colorIdentity && colorIdentity.length > 1 && (
-              <select
-                className={select}
-                aria-label="Filter by color"
-                value={colorFilter}
-                onChange={(e) => setColorFilter(e.target.value)}
-              >
-                {['All', ...colorIdentity].map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
-            )}
-            <select
-              className={select}
-              aria-label="Filter by essence cost"
-              value={costFilter}
-              onChange={(e) => setCostFilter(e.target.value)}
-            >
-              {COST_FILTERS.map((v) => (
-                <option key={v} value={v}>
-                  {v === 'All' ? 'Any Cost' : `Cost ${v}`}
-                </option>
-              ))}
-            </select>
-            <span className="text-[10px] font-bold text-[var(--c-steel)] ml-auto">
-              POOL: OWNED CARDS · {pool.length} MATCH
+      {showBanner && (
+        // One line: the headline problem and its one-tap fix. The rest of the
+        // list opens under it instead of wrapping the banner into a slab.
+        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] border-b-4 border-[var(--c-ink)] shrink-0">
+          <div className="flex items-center gap-2 px-2 sm:px-4 py-1.5 fs-xs font-bold min-w-0">
+            <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden />
+            <span className="truncate flex-1 min-w-0">
+              {saveError ? `SAVE FAILED: ${saveError}` : summary.headline}
+              {!saveError && summary.others.length > 0 && summary.headline && (
+                <span className="font-black"> · +{summary.others.length} more</span>
+              )}
             </span>
+            {offColour > 0 && (
+              <button
+                type="button"
+                aria-label="Remove off-colour cards"
+                title="Take every card outside the Leader's colours out of the deck"
+                onClick={removeOffColour}
+                className="btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 min-h-[28px] ink-border-sm shrink-0"
+              >
+                <span className="sm:hidden">FIX</span>
+                <span className="hidden sm:inline">REMOVE OFF-COLOUR CARDS</span>
+              </button>
+            )}
+            {summary.hasDetails && (
+              <button
+                type="button"
+                aria-expanded={issuesOpen}
+                onClick={() => setIssuesOpen((o) => !o)}
+                className="heading-font fs-xs underline px-1 min-h-[28px] shrink-0"
+              >
+                {issuesOpen ? 'HIDE' : 'DETAILS'}
+              </button>
+            )}
           </div>
-          <div className="flex-1 overflow-y-auto p-3 pt-0 flex flex-wrap gap-2.5 content-start">
+          {issuesOpen && (
+            <ul className="px-3 sm:px-5 pb-2 fs-xs font-bold max-h-40 overflow-y-auto list-none space-y-0.5">
+              {issues.map((i) => (
+                <li key={i.text}>⚠ {i.text}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Phones: the pool takes the screen and the deck panel is a sheet under
+          it. `sm` and up: pool beside a sidebar. */}
+      <div className="flex flex-col sm:flex-row flex-1 min-h-0">
+        {/* Card pool */}
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+          <div className="p-2 sm:p-3 pb-2 shrink-0 flex flex-col gap-2">
+            <div className="flex gap-2 items-end flex-wrap">
+              <input
+                className={cn(
+                  select,
+                  'w-full sm:w-52 min-h-[36px] placeholder:text-[var(--c-steel)]/50',
+                )}
+                placeholder="Search owned cards…"
+                aria-label="Search owned cards"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <div className="flex gap-2 w-full sm:w-auto">
+                <FilterSelect
+                  className="flex-1 sm:flex-none sm:min-w-[96px]"
+                  label="Type"
+                  value={typeFilter}
+                  onChange={setTypeFilter}
+                  options={TYPE_FILTERS.map((t) => ({ value: t, label: t }))}
+                />
+                {colorIdentity && colorIdentity.length > 1 && (
+                  <FilterSelect
+                    className="flex-1 sm:flex-none sm:min-w-[96px]"
+                    label="Colour"
+                    value={colorFilter}
+                    onChange={setColorFilter}
+                    options={['All', ...colorIdentity].map((c) => ({ value: c, label: c }))}
+                  />
+                )}
+                <FilterSelect
+                  className="flex-1 sm:flex-none sm:min-w-[96px]"
+                  label="Cost"
+                  value={costFilter}
+                  onChange={setCostFilter}
+                  options={COST_FILTERS.map((v) => ({
+                    value: v,
+                    label: v === 'All' ? 'Any' : v,
+                  }))}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 min-w-0">
+              {colorIdentity && (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={identityOnly}
+                  onClick={() => setIdentityOnly(!identityOnly)}
+                  title="Show only cards legal under this Leader's colours"
+                  className={cn(
+                    'btn-pop heading-font fs-xs ink-border-sm px-2 py-1 min-h-[28px] truncate min-w-0',
+                    identityOnly
+                      ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                      : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                  )}
+                >
+                  {identityOnly ? '✓' : '○'} {leader.name}&apos;s colours only
+                </button>
+              )}
+              <span className="fs-xs font-bold text-[var(--c-steel)] ml-auto shrink-0">
+                {pool.length} MATCH
+              </span>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-3 pt-0 flex flex-wrap gap-2.5 content-start">
             {pool.map((c) => {
               const inDeck = countOf(c.id);
               const maxAddable = Math.min(
@@ -901,7 +1315,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                         // v28 tap targets: a 9px underline is an 18px-tall
                         // strip, and it is the only way into the card's full
                         // rules text from the pool grid.
-                        className="text-[9px] font-bold text-[var(--c-steel)]/70 underline mt-0.5 px-1 py-1.5"
+                        className="fs-xs font-bold text-[var(--c-steel)]/70 underline mt-0.5 px-1 py-1.5"
                       >
                         details
                       </button>
@@ -911,231 +1325,65 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               );
             })}
             {pool.length === 0 && (
-              <div className="w-full text-center font-bold text-[var(--c-steel)] py-10">
-                No owned cards match.
+              <div className="w-full text-center font-bold text-[var(--c-steel)] py-10 flex flex-col items-center gap-2">
+                <span>No owned cards match.</span>
+                {(typeFilter !== 'All' ||
+                  costFilter !== 'All' ||
+                  colorFilter !== 'All' ||
+                  search) && (
+                  <PopButton
+                    color="yellow"
+                    onClick={() => {
+                      setTypeFilter('All');
+                      setCostFilter('All');
+                      setColorFilter('All');
+                      setSearch('');
+                    }}
+                  >
+                    CLEAR FILTERS
+                  </PopButton>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Deck list */}
-        <div className="w-full sm:w-72 shrink-0 max-h-[45vh] sm:max-h-none border-t-4 sm:border-t-0 sm:border-l-4 border-[var(--c-ink)] bg-[var(--c-steel)] flex flex-col">
-          {/* Deck stats: essence-cost curve, type breakdown, top keywords */}
-          <div className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40 shrink-0">
-            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1.5">DECK STATS</div>
-            <div className="flex items-end gap-1 h-12 mb-1.5">
-              {COST_BUCKETS.map((bucket) => {
-                const n = deckStats.curve[bucket] || 0;
-                const h = Math.round((n / deckStats.maxCurve) * 100);
-                return (
-                  <div key={bucket} className="flex-1 flex flex-col items-center gap-0.5">
-                    <div
-                      className="w-full bg-[var(--c-yellow)] ink-border-sm min-h-[2px]"
-                      style={{ height: `${Math.max(h, n > 0 ? 8 : 2)}%` }}
-                      title={`${n} card${n === 1 ? '' : 's'} at essence cost ${bucket}`}
-                    />
-                    <span className="text-[7px] font-mono font-bold text-[var(--c-paper)]/70">
-                      {bucket}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex gap-2 flex-wrap mb-1.5">
-              {Object.entries(typeCounts).map(([t, n]) => (
-                <span
-                  key={t}
-                  className="text-[9px] font-bold text-[var(--c-paper)] bg-[var(--c-ink)]/50 px-1.5 py-0.5"
-                >
-                  {n} {t}
-                  {n === 1 ? '' : 's'}
+        {narrow ? (
+          // Bottom sheet: a one-line handle when collapsed, the whole panel
+          // when open (the pool shrinks to make room rather than being
+          // covered, so a card can still be tapped while the list is open).
+          <div className="shrink-0 border-t-4 border-[var(--c-ink)] bg-[var(--c-steel)] flex flex-col">
+            <button
+              type="button"
+              aria-expanded={sheetOpen}
+              aria-controls="deck-sheet"
+              onClick={() => setSheetOpen(!sheetOpen)}
+              className="flex items-center justify-between gap-2 px-3 min-h-[44px] bg-[var(--c-ink)] text-[var(--c-yellow)] heading-font fs-sm"
+            >
+              <span className="flex items-center gap-2">
+                DECK {countBadge}
+                <span className="fs-xs text-[var(--c-paper)]/70 font-bold">
+                  {typeCounts.Unit} units ·{' '}
+                  {typeCounts.Item + typeCounts.Event + typeCounts.Location} other
                 </span>
-              ))}
-            </div>
-            {deckStats.topKeywords.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {deckStats.topKeywords.map(([kw, n]) => (
-                  <span
-                    key={kw}
-                    className="text-[8px] font-black px-1 py-0.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm"
-                  >
-                    {kw} ×{n}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Producible colours + seeded test hand (finding 2.6) */}
-          <div
-            className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40 shrink-0"
-            aria-label="Colour and draw check"
-          >
-            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1.5">
-              COLOUR &amp; DRAW
-            </div>
-            <div className="flex flex-wrap gap-1 mb-1.5">
-              {colorCheck.producible.map((c) => (
-                <span
-                  key={c}
-                  className="text-[8px] font-black px-1 py-0.5 bg-[var(--c-ink)]/50 text-[var(--c-paper)]"
-                  title={`${c} essence is producible: Leader identity or one of this deck's Sanctums`}
-                >
-                  {c} ✓{colorCheck.demand[c] ? ` ${colorCheck.demand[c]} pips` : ' unused'}
-                </span>
-              ))}
-            </div>
-            {colorCheck.unproducible.length > 0 && (
-              <div
-                role="alert"
-                className="text-[9px] font-black text-[var(--c-ink)] bg-[var(--c-yellow)] ink-border-sm px-1.5 py-1 mb-1.5"
-              >
-                UNCASTABLE: this deck asks for {colorCheck.unproducible.join(', ')} essence it
-                cannot produce. Add a Sanctum that makes it, or cut those cards.
-              </div>
-            )}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <PopButton
-                color="yellow"
-                onClick={() => setHandSeed(Math.floor(Math.random() * 0x7fffffff))}
-              >
-                TEST HAND
-              </PopButton>
-              {testHand && (
-                <span className="text-[8px] font-mono font-bold text-[var(--c-paper)]/70 select-all">
-                  SEED {testHand.seed}
-                </span>
+              </span>
+              {sheetOpen ? (
+                <ChevronDown className="w-5 h-5" aria-hidden />
+              ) : (
+                <ChevronUp className="w-5 h-5" aria-hidden />
               )}
-            </div>
-            {testHand && (
-              <div className="mt-1.5" aria-live="polite">
-                <div className="text-[9px] font-bold text-[var(--c-paper)]/80 mb-1">
-                  avg cost {testHand.averageCost} · {testHand.turnOnePlays} turn-1 play
-                  {testHand.turnOnePlays === 1 ? '' : 's'}
-                  {testHand.noUnits ? ' · NO UNITS — the CPU would mulligan this' : ''}
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {testHand.cards.map((c, i) => (
-                    <button
-                      key={`${c.id}-${i}`}
-                      onClick={() => setInspect(c)}
-                      className="text-[8px] font-bold px-1 py-0.5 bg-[var(--c-ink)]/50 text-[var(--c-paper)] text-left"
-                    >
-                      {c.name} ({totalCost(c.cost)})
-                    </button>
-                  ))}
-                </div>
+            </button>
+            {sheetOpen && (
+              <div id="deck-sheet" className="flex flex-col h-[55dvh] min-h-0">
+                {panel}
               </div>
             )}
           </div>
-
-          {/* Deck guide: curve vs the sim's targets, color spread, closest
-              archetype and concrete suggestions — always visible while
-              editing. Statuses are text ("UNDER"/"OVER"), never color-only. */}
-          <div
-            className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40 shrink-0"
-            aria-label="Deck guidance"
-          >
-            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1.5">DECK GUIDE</div>
-            <div className="flex gap-1.5 mb-1.5">
-              {advice.curve.map((b) => (
-                <div
-                  key={b.label}
-                  className="flex-1 bg-[var(--c-ink)]/50 px-1.5 py-1 text-center"
-                  title={`Cost ${b.label}: ${b.count} cards, builder targets ~${b.target}`}
-                >
-                  <div className="text-[8px] font-mono font-bold text-[var(--c-paper)]/70">
-                    COST {b.label}
-                  </div>
-                  <div className="text-[10px] font-black text-[var(--c-paper)]">
-                    {b.count}
-                    <span className="text-[var(--c-paper)]/60 font-bold">/{b.target}</span>
-                  </div>
-                  <div
-                    className={cn(
-                      'text-[7px] font-black',
-                      b.status === 'ok' ? 'text-[var(--c-paper)]/60' : 'text-[var(--c-yellow)]',
-                    )}
-                  >
-                    {b.status === 'low' ? '▼ UNDER' : b.status === 'high' ? '▲ OVER' : '✓ ON CURVE'}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-              {advice.colors.counts.map(({ color, count }) => (
-                <span
-                  key={color}
-                  className="inline-flex items-center gap-1 text-[9px] font-bold text-[var(--c-paper)] bg-[var(--c-ink)]/50 px-1.5 py-0.5"
-                >
-                  <span
-                    className="w-2.5 h-2.5 rounded-full inline-flex items-center justify-center"
-                    style={{ backgroundColor: COLOR_HEX[color] }}
-                    aria-hidden="true"
-                  >
-                    <EssenceIcon type={color} color="#FFFFFF" size={7} />
-                  </span>
-                  {color} ×{count}
-                </span>
-              ))}
-              {advice.colors.colorless > 0 && (
-                <span className="text-[9px] font-bold text-[var(--c-paper)]/80 bg-[var(--c-ink)]/50 px-1.5 py-0.5">
-                  Colorless ×{advice.colors.colorless}
-                </span>
-              )}
-              {advice.colors.counts.length === 0 && advice.colors.colorless === 0 && (
-                <span className="text-[9px] font-bold text-[var(--c-paper)]/60">
-                  No cards yet — the guide fills in as you build.
-                </span>
-              )}
-            </div>
-            {advice.archetype && (
-              <div className="text-[9px] font-bold text-[var(--c-paper)] mb-1">
-                <span className="text-[var(--c-yellow)] font-black">
-                  CLOSEST ARCHETYPE: {advice.archetype.profile.label.toUpperCase()}
-                </span>{' '}
-                — {advice.archetype.profile.wants}
-              </div>
-            )}
-            {advice.suggestions.length > 0 && (
-              <ul className="text-[9px] font-bold text-[var(--c-paper)]/90 list-none space-y-0.5">
-                {advice.suggestions.slice(0, 3).map((s) => (
-                  <li key={s}>› {s}</li>
-                ))}
-              </ul>
-            )}
+        ) : (
+          <div className="w-72 lg:w-80 shrink-0 border-l-4 border-[var(--c-ink)] bg-[var(--c-steel)] flex flex-col min-h-0">
+            {panel}
           </div>
-
-          <div className="px-3 py-2 heading-font text-xs text-[var(--c-yellow)] shrink-0">
-            DECK LIST
-          </div>
-          <div className="flex-1 overflow-y-auto px-2 pb-3 flex flex-col gap-1">
-            {grouped.map(({ card, n }) => (
-              <button
-                key={card.id}
-                onClick={() => removeCard(card.id)}
-                title="Click to remove one copy"
-                className="flex items-center gap-1.5 bg-[var(--c-paper)] ink-border-sm px-1.5 py-1 text-left hover:bg-[var(--c-red)] hover:text-[var(--c-paper)] transition-colors group"
-              >
-                <span
-                  className={cn(
-                    'text-[8px] font-black px-1 shrink-0 rounded-sm',
-                    rarityChip(card.rarity),
-                  )}
-                >
-                  {costBucket(card)}
-                </span>
-                <span className="text-[10px] font-bold truncate flex-1">{card.name}</span>
-                <span className="text-[9px] font-mono font-black shrink-0">×{n}</span>
-              </button>
-            ))}
-            {grouped.length === 0 && (
-              <div className="text-[10px] font-bold text-[var(--c-paper)]/60 text-center py-8">
-                Click cards in the pool to add them.
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Card inspector — the same universal card face used everywhere else. */}
@@ -1146,6 +1394,47 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           actions={<CardMarketValuePanel cardId={inspect.id} />}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Essence-cost curve: one bar per cost bucket with the card count printed
+ * above it. Heights are pixels from `curveBarHeight` -- the bars used to take
+ * a percentage of a column with no definite height and all collapsed to a few
+ * px (audit M4) -- and the count above each bar is what a phone reads, since
+ * a 28px-wide bar says little by height alone.
+ */
+export function CostCurve({ curve, max }: { curve: Record<string, number>; max: number }) {
+  return (
+    <div
+      role="img"
+      aria-label={`Cost curve: ${COST_BUCKETS.map((b) => `${curve[b] || 0} at ${b}`).join(', ')}`}
+      className="flex items-end gap-1 mb-2"
+      style={{ height: CURVE_MAX_PX + 34 }}
+    >
+      {COST_BUCKETS.map((bucket) => {
+        const n = curve[bucket] || 0;
+        return (
+          <div
+            key={bucket}
+            className="flex-1 h-full flex flex-col justify-end items-center gap-0.5"
+          >
+            <span className="fs-xs font-mono font-black text-[var(--c-paper)] leading-none min-h-[1em]">
+              {n > 0 ? n : ''}
+            </span>
+            <div
+              data-testid={`curve-bar-${bucket}`}
+              className="w-full bg-[var(--c-yellow)] ink-border-sm"
+              style={{ height: curveBarHeight(n, max, CURVE_MAX_PX) }}
+              title={`${n} card${n === 1 ? '' : 's'} at essence cost ${bucket}`}
+            />
+            <span className="fs-xs font-mono font-bold text-[var(--c-paper)]/70 leading-none">
+              {bucket}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useMeta } from './MetaContext';
 import { fmtCredits, fmtVouchers } from './economy';
 import { fetchCardMarketValue } from '../lib/supabase';
 import { CARD_SIZES } from '../components/CardFaceV4';
+import { StorePlus } from './StorePlus';
 
 /** Comic-pop button used across all meta screens. */
 export function PopButton({
@@ -59,6 +60,75 @@ export function PopButton({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Shared tab strip for the meta screens (Store, Market, Grading, Shops,
+ * Social, Collection, Showroom). The ACTIVE tab is the filled yellow one and
+ * inactive tabs are muted steel — the older ad-hoc strips had this reversed,
+ * so the inactive tabs looked like the call to action. Announced to screen
+ * readers as a tablist with `aria-selected`; Left/Right arrows move between
+ * tabs.
+ */
+export function Tabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+  ariaLabel,
+  className,
+}: {
+  tabs: { id: T; label: React.ReactNode; badge?: number | string; disabled?: boolean }[];
+  value: T;
+  onChange: (id: T) => void;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const enabled = tabs.filter((t) => !t.disabled);
+    const i = enabled.findIndex((t) => t.id === value);
+    if (i < 0) return;
+    const next = enabled[(i + (e.key === 'ArrowRight' ? 1 : enabled.length - 1)) % enabled.length];
+    onChange(next.id);
+    e.preventDefault();
+  };
+  return (
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      onKeyDown={onKeyDown}
+      className={cn('flex flex-wrap gap-1.5', className)}
+    >
+      {tabs.map((t) => {
+        const active = t.id === value;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            tabIndex={active ? 0 : -1}
+            disabled={t.disabled}
+            onClick={() => onChange(t.id)}
+            className={cn(
+              'heading-font fs-sm px-3 py-2 min-h-[36px] ink-border-sm transition-colors',
+              active
+                ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] shadow-hard-black-xs'
+                : 'bg-[var(--c-steel)] text-[var(--c-paper)]/80 hover:text-[var(--c-paper)]',
+              t.disabled && 'opacity-40 cursor-not-allowed',
+            )}
+          >
+            {t.label}
+            {t.badge !== undefined && t.badge !== 0 && (
+              <span className="ml-1.5 px-1.5 bg-[var(--c-red)] text-[var(--c-paper)] fs-xs">
+                {t.badge}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -188,6 +258,7 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
         <div className="flex items-center gap-2">
           <CreditChip amount={profile.credits} />
           <VoucherChip amount={profile.vouchers} />
+          <StorePlus />
         </div>
       )}
     </div>

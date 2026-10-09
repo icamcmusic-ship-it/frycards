@@ -40,7 +40,7 @@ export function PlayerLink({
         // line-height carries the rest. `inline-block` for the padding to
         // apply at all on an inline element.
         className={cn(
-          'tap-target inline-block py-1 leading-6 hover:text-[var(--c-red)] hover:underline transition-colors',
+          'tap-target inline-block py-1 leading-6 hover:text-[var(--c-steel)] hover:underline transition-colors',
           className,
         )}
       >
@@ -113,7 +113,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
               Couldn't load this player's profile.
             </p>
             <div className="flex gap-2 justify-center">
-              <PopButton color="red" onClick={() => setAttempt((n) => n + 1)}>
+              <PopButton color="yellow" onClick={() => setAttempt((n) => n + 1)}>
                 RETRY
               </PopButton>
               <PopButton color="yellow" onClick={onClose}>
@@ -153,14 +153,10 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                     {card.username}
                     <RoleBadge role={card.role} />
                     {isSelf && (
-                      <span className="text-[9px] font-bold text-[var(--c-yellow)] ml-2">
-                        (YOU)
-                      </span>
+                      <span className="fs-xs font-bold text-[var(--c-yellow)] ml-2">(YOU)</span>
                     )}
                   </div>
-                  <div className="text-[10px] font-bold text-[var(--c-yellow)]">
-                    LEVEL {card.level}
-                  </div>
+                  <div className="fs-xs font-bold text-[var(--c-yellow)]">LEVEL {card.level}</div>
                 </div>
               </div>
               <PopButton
@@ -187,7 +183,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                     className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs px-2 py-1.5 text-center"
                   >
                     <div className="heading-font text-lg">{s.value}</div>
-                    <div className="text-[8px] font-black text-[var(--c-steel)]">{s.label}</div>
+                    <div className="fs-xs font-black text-[var(--c-steel)]">{s.label}</div>
                   </div>
                 ))}
               </div>

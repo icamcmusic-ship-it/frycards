@@ -1153,16 +1153,22 @@ export const MARKET_FEE = 0.05;
  * the screen says so rather than letting search silently miss the rest. */
 export const MARKET_LIST_LIMIT = 200;
 
+/**
+ * The market_listings columns a client may see — every MarketListing field.
+ * Listed explicitly rather than select('*') so a column added later for server
+ * bookkeeping (the CPU bidders' hidden ceiling used to live here) is never sent
+ * to every player by default.
+ */
+const MARKET_LISTING_COLUMNS =
+  'id, seller, card_id, foil, quantity, listing_type, price, buyout, current_bid, current_bidder, bid_count, status, created_at, ends_at, cpu_leading, cpu_bidder_name';
+
 export async function fetchMarketListings(): Promise<MarketListing[]> {
-  // settle anything past its end time first so browsers see fresh state
-  const { error: settleError } = await supabase.rpc('settle_expired_listings');
-  // If settlement fails, listings below may still include already-expired
-  // ones — log it rather than silently letting a player bid/buy on a dead
-  // listing with no signal anything went wrong.
-  if (settleError) console.error('settle_expired_listings failed:', settleError.message);
+  // Expired listings are swept by the 5-minute pg_cron job (the RPC is no
+  // longer callable by players). Until then an expired row can still show here,
+  // but place_bid / buy_listing reject anything past ends_at.
   const { data, error } = await supabase
     .from('market_listings')
-    .select('*')
+    .select(MARKET_LISTING_COLUMNS)
     .eq('status', 'active')
     .order('ends_at')
     .limit(MARKET_LIST_LIMIT);
@@ -1223,12 +1229,16 @@ export async function fetchMyMarketActivity(userId: string): Promise<MarketListi
   const [mine, bidOn] = await Promise.all([
     supabase
       .from('market_listings')
-      .select('*')
+      .select(MARKET_LISTING_COLUMNS)
       .or(`seller.eq.${userId},current_bidder.eq.${userId}`)
       .order('created_at', { ascending: false })
       .limit(50),
     remembered.length
-      ? supabase.from('market_listings').select('*').in('id', remembered).eq('status', 'active')
+      ? supabase
+          .from('market_listings')
+          .select(MARKET_LISTING_COLUMNS)
+          .in('id', remembered)
+          .eq('status', 'active')
       : Promise.resolve({ data: [], error: null }),
   ]);
   const error = mine.error ?? bidOn.error;

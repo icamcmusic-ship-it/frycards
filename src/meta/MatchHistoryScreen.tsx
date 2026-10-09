@@ -20,9 +20,9 @@ async function copyText(text: string): Promise<boolean> {
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 min-w-[110px]">
-      <div className="text-[10px] font-bold text-[var(--c-steel)]">{label}</div>
+      <div className="fs-xs font-bold text-[var(--c-steel)]">{label}</div>
       <div className="heading-font text-2xl leading-tight">{value}</div>
-      {sub && <div className="text-[10px] font-bold text-[var(--c-steel)]">{sub}</div>}
+      {sub && <div className="fs-xs font-bold text-[var(--c-steel)]">{sub}</div>}
     </div>
   );
 }
@@ -82,7 +82,7 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
               <StatTile label="ON THE PLAY" value={fmtSplit(summary.onPlay)} sub="going first" />
               <StatTile label="ON THE DRAW" value={fmtSplit(summary.onDraw)} sub="going second" />
               <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3">
-                <div className="text-[10px] font-bold text-[var(--c-steel)] mb-1.5">
+                <div className="fs-xs font-bold text-[var(--c-steel)] mb-1.5">
                   LAST {summary.form.length} (NEWEST FIRST)
                 </div>
                 <div className="flex gap-1" aria-label={`Recent form: ${summary.form.join(' ')}`}>
@@ -124,7 +124,7 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
               </>
             )}
 
-            <h2 className="heading-font text-base mb-2 bg-[var(--c-red)] text-[var(--c-paper)] inline-block px-2 py-0.5">
+            <h2 className="heading-font text-base mb-2 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
               RECENT MATCHES
             </h2>
             <ul className="flex flex-col gap-2">
@@ -147,7 +147,7 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
                     <div className="text-xs font-bold truncate">
                       {r.humanLabel} <span className="text-[var(--c-steel)]">vs</span> {r.cpuLabel}
                     </div>
-                    <div className="text-[10px] font-bold text-[var(--c-steel)]">
+                    <div className="fs-xs font-bold text-[var(--c-steel)]">
                       {new Date(r.finishedAt).toLocaleString()} · {r.turns} turns · vitality{' '}
                       {r.humanVitality}–{r.cpuVitality} · seed {r.seed}
                       {r.firstPlayer

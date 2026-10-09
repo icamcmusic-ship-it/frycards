@@ -135,7 +135,7 @@ export function NewsCenterScreen({
             <button
               onClick={load}
               disabled={loading}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0 disabled:opacity-40"
+              className="btn-pop heading-font fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0 disabled:opacity-40"
             >
               {loading ? 'RETRYING…' : 'RETRY'}
             </button>
@@ -177,7 +177,7 @@ export function NewsCenterScreen({
                   setComposing((c) => !c);
                 }}
                 disabled={publishing}
-                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs disabled:opacity-40"
+                className="btn-pop heading-font fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs disabled:opacity-40"
               >
                 {composing ? 'CANCEL' : '+ NEW POST'}
               </button>
@@ -226,7 +226,7 @@ export function NewsCenterScreen({
                   }
                 }}
                 disabled={!title.trim() || !body.trim() || publishing}
-                className="btn-pop heading-font text-xs bg-[var(--c-red)] text-white px-3 py-1.5 ink-border-sm shadow-hard-black-xs self-start disabled:opacity-40"
+                className="btn-pop heading-font text-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs self-start disabled:opacity-40"
               >
                 {publishing ? 'PUBLISHING…' : 'PUBLISH'}
               </button>
@@ -255,7 +255,7 @@ export function NewsCenterScreen({
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="heading-font text-sm">{p.title}</h3>
                   <span className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] font-bold text-[var(--c-steel)]">
+                    <span className="fs-xs font-bold text-[var(--c-steel)]">
                       {timeAgo(p.published_at)}
                     </span>
                     {/* deleteNewsPost existed server-side with no UI — a
@@ -279,7 +279,7 @@ export function NewsCenterScreen({
                         }}
                         disabled={deletingId !== null}
                         aria-label={`Delete post: ${p.title}`}
-                        className="btn-pop heading-font text-[9px] bg-[var(--c-red)] text-white px-1.5 py-0.5 ink-border-sm disabled:opacity-40"
+                        className="btn-pop heading-font fs-xs bg-[var(--c-red)] text-white px-1.5 py-0.5 ink-border-sm disabled:opacity-40"
                       >
                         {deletingId === p.id ? '…' : '✕ DELETE'}
                       </button>
@@ -289,7 +289,7 @@ export function NewsCenterScreen({
                 <p className="text-[12px] font-medium mt-1.5 whitespace-pre-wrap leading-snug">
                   {p.body}
                 </p>
-                <div className="text-[10px] font-bold text-[var(--c-steel)] mt-2">— {p.author}</div>
+                <div className="fs-xs font-bold text-[var(--c-steel)] mt-2">— {p.author}</div>
               </div>
             ))}
           </div>
@@ -327,19 +327,19 @@ export function NewsCenterScreen({
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-[12px] font-bold truncate">
-                    <span className="text-[var(--c-red)]">{f.username}</span> pulled{' '}
+                    <span className="font-black">{f.username}</span> pulled{' '}
                     <span className="font-black">{f.card_name}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
                     <span
-                      className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${RARITY_CHIP[f.rarity] || ''}`}
+                      className={`fs-xs font-black px-1.5 py-0.5 rounded-full ${RARITY_CHIP[f.rarity] || ''}`}
                     >
                       {f.rarity}
                     </span>
-                    <span className="serial-plate text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                    <span className="serial-plate fs-xs font-black px-1.5 py-0.5 rounded-full">
                       #{f.serial_number}/{f.cap}
                     </span>
-                    <span className="text-[10px] font-bold text-[var(--c-steel)]">
+                    <span className="fs-xs font-bold text-[var(--c-steel)]">
                       {timeAgo(f.acquired_at)}
                     </span>
                   </div>

@@ -131,7 +131,7 @@ function checkInvariants(g: GameState, where: string): void {
   }
 
   if (g.winner) {
-    expect(SEATS.includes(g.winner), `${where}: winner is not a seat`).toBe(true);
+    expect(g.winner === 'draw' || SEATS.includes(g.winner), `${where}: bad winner`).toBe(true);
   } else {
     // Control only ever returns to a caller with the stack fully settled: the
     // priority loop auto-passes for anyone who cannot respond, and no caller
