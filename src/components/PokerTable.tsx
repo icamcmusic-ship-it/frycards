@@ -21,6 +21,7 @@ import type { CardDef } from '../game/poker/cards';
 import { hasKw, tierLabel } from '../game/poker/cards';
 import {
   HUMAN_ACTION_CAP_MS,
+  MAX_EXCLUSIONS,
   MODES,
   TIME_BANK_MS,
   TURN_TIMER_MS,
@@ -1333,13 +1334,15 @@ function CastDialog({
     ({ c }) => !c.blinded && c.r !== 0,
   );
   const exclOpts = extraNeeded > 0 ? excludableCategories(view, HUMAN) : [];
+  const exclRoom = MAX_EXCLUSIONS - h.exclusions[HUMAN].length;
   const has = (e: ExtraCost) =>
     costs.some((x) => x.kind === e.kind && JSON.stringify(x) === JSON.stringify(e));
   const toggle = (e: ExtraCost) =>
     setCosts((cs) =>
       has(e)
         ? cs.filter((x) => JSON.stringify(x) !== JSON.stringify(e))
-        : cs.length < extraNeeded
+        : cs.length < extraNeeded &&
+            (e.kind !== 'exclude' || cs.filter((x) => x.kind === 'exclude').length < exclRoom)
           ? [...cs, e]
           : cs,
     );

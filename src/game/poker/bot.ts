@@ -15,7 +15,7 @@
  * cap applies to them like anyone.
  */
 import type { CardDef } from './cards';
-import { BOT, UNIT } from './constants';
+import { BOT, MAX_EXCLUSIONS, UNIT } from './constants';
 import {
   betOptions,
   canCast,
@@ -60,11 +60,26 @@ function boardSize(v: Match): number {
 }
 
 /** Equity from this seat's view only. */
+/** Opponents a bot expects to actually contest the pot. After the flop that
+ * is everyone still in. Before it, most seats yet to act will fold, so it is
+ * the seats that already have chips in (blinds, limpers, raisers) — at least
+ * one. Pricing a call against five random hands that will mostly fold made
+ * every bot fold everything outside the blinds. */
+export function contestants(v: Match, seat: number): number[] {
+  const h = v.hand!;
+  const live = h.dealtIn.map((_, i) => i).filter((i) => i !== seat && inHand(h, i));
+  if (h.street !== 'preflop') return live;
+  const inPot = live.filter((i) => h.streetBet[i] > 0 || h.committed[i] > 0);
+  return inPot.length > 0 ? inPot : live.slice(0, 1);
+}
+
 export function estimateEquity(
   v: Match,
   seat: number,
   rng: Rng,
   trials = BOT.equityTrials,
+  /** Only the seats expected to contest the pot (bots); default: all live. */
+  against?: number[],
 ): number {
   const h = v.hand!;
   const hole = h.holes[seat].filter((c) => !isHidden(c));
@@ -72,6 +87,7 @@ export function estimateEquity(
   const opps: Card[][] = [];
   for (let i = 0; i < h.holes.length; i++) {
     if (i === seat || !inHand(h, i)) continue;
+    if (against && !against.includes(i)) continue;
     opps.push(h.holes[i].filter((c) => !isHidden(c)).slice(0, 2));
   }
   if (hole.length < 2) {
@@ -108,11 +124,12 @@ function bestTwo(hole: Card[], board: Card[]): Card[] {
 
 function read(v: Match, seat: number, rng: Rng): Read {
   const h = v.hand!;
-  const opponents = h.dealtIn.filter((d, i) => d && i !== seat && !h.folded[i]).length;
+  const against = contestants(v, seat);
+  const opponents = against.length;
   const p = v.seats[seat].persona;
-  let eq = estimateEquity(v, seat, rng);
+  let eq = estimateEquity(v, seat, rng, BOT.equityTrials, against);
   // Low skill misjudges its hand.
-  eq = Math.max(0, Math.min(1, eq + (rng.next() - 0.5) * (1 - p.skill) * 0.3));
+  eq = Math.max(0, Math.min(1, eq + (rng.next() - 0.5) * (1 - p.skill) * 0.45));
   return {
     equity: eq,
     opponents,
@@ -202,7 +219,8 @@ function chooseExtraCosts(v: Match, seat: number, uid: string, count: number): E
   const excl = excludableCategories(v, seat);
   // Bluffers love exclusions (they bite only at showdown); flushes are the
   // cheapest category to give up for an unsuited hand.
-  const prefer = [5, 4, 3, 2, 1].filter((c) => excl.includes(c));
+  const room = Math.max(0, MAX_EXCLUSIONS - h.exclusions[seat].length);
+  const prefer = [5, 4, 3, 2, 1].filter((c) => excl.includes(c)).slice(0, room);
   let shedIdx = 0;
   let debuff = 0;
   while (out.length < count) {
@@ -323,13 +341,26 @@ function betDecision(v: Match, seat: number, r: Read, rng: Rng): Action {
   const p = v.seats[seat].persona;
   const pot = potTotal(h);
   const potOdds = o.callAmount / Math.max(1, pot + o.callAmount);
+  // Fair share of the pot against the seats contesting it, nudged by tightness.
+  const fair = 1 / (r.opponents + 1);
+  const tight = (p.tightness - 0.5) * 0.2;
+  // A blind is not a bet: only a voluntary bet or raise reads as strength.
+  const facingRaise = o.callAmount > 0 && h.lastAggressor !== null;
   // Hand reading: a big bet from someone else means a stronger range than a
   // random hand, so raw equity is discounted by how hard we are pushed.
-  const pressure = o.callAmount / Math.max(1, pot);
-  const eq = Math.pow(r.equity, 1 + 1.6 * pressure * (0.5 + p.skill));
-  // Fair share of the pot at this table size, nudged by tightness.
-  const fair = 1 / (r.opponents + 1);
-  const strong = fair + 0.2 + (p.tightness - 0.5) * 0.2 + (o.callAmount > 0 ? 0.15 : 0);
+  const pressure = facingRaise ? o.callAmount / Math.max(1, pot) : 0;
+  const eq = Math.pow(r.equity, 1 + 1.4 * pressure * (0.3 + 0.7 * p.skill));
+  // Skill is decision quality: a naive bot plays loose and passive (calls
+  // light, rarely raises for value, bluffs at random); a skilled one raises
+  // its good hands for value and picks its bluffs.
+  const naive = 1 - p.skill;
+  const strong =
+    fair +
+    (h.street === 'preflop' ? 0.12 : 0.17) +
+    tight +
+    (facingRaise ? 0.15 : 0) +
+    naive * 0.12 -
+    (h.street !== 'preflop' && r.opponents === 1 ? p.skill * 0.05 : 0);
   const raiseTo = (frac: number) => {
     const size = h.currentBet + (pot + o.callAmount) * frac;
     const rounded = Math.round(size / 10) * 10;
@@ -340,15 +371,30 @@ function betDecision(v: Match, seat: number, r: Read, rng: Rng): Action {
     return { type: 'raise', seat, to: o.maxRaiseTo };
   }
   if (o.canRaise && eq > strong) {
-    const frac = eq > strong + 0.15 ? 0.6 + rng.next() * 0.4 : 0.35 + rng.next() * 0.3;
+    // Value sizing grows with skill: loose callers pay off big bets.
+    const big = 0.6 + rng.next() * 0.4;
+    const small = 0.35 + rng.next() * 0.3 + p.skill * 0.25;
+    const frac = eq > strong + 0.15 ? big : Math.min(1, small);
     return { type: 'raise', seat, to: raiseTo(frac) };
   }
-  // Bluff: a persona-rate stab when checked to with a weak hand.
-  if (o.canRaise && o.canCheck && eq < fair && rng.next() < p.bluff) {
+  // Bluff: a persona-rate stab when checked to with a weak hand. A skilled
+  // bot only bluffs few opponents after the flop.
+  const goodSpot = p.skill < 0.5 || (h.street !== 'preflop' && r.opponents <= 2);
+  if (
+    o.canRaise &&
+    o.canCheck &&
+    eq < fair &&
+    goodSpot &&
+    rng.next() < p.bluff * (1 - 0.6 * p.skill)
+  ) {
     return { type: 'raise', seat, to: raiseTo(0.4 + rng.next() * 0.3) };
   }
   if (o.canCheck) return { type: 'check', seat };
-  const margin = (p.tightness - 0.5) * 0.12 - (1 - p.skill) * 0.08;
+  // Pre-flop, unraised: complete the blind with a playable hand.
+  if (h.street === 'preflop' && !facingRaise) {
+    return eq > fair - 0.08 + tight ? { type: 'call', seat } : { type: 'fold', seat };
+  }
+  const margin = (p.tightness - 0.5) * 0.12 - naive * 0.14;
   if (eq >= potOdds + margin) return { type: 'call', seat };
   return { type: 'fold', seat };
 }
