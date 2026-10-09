@@ -215,3 +215,21 @@ export function quickbuildIds(
   }
   return locations.length ? [locations[0].id, ...powers] : powers;
 }
+
+/**
+ * Rebuild a list from the retired 60-card format (a Deck Box grant, or an old
+ * saved deck) as a poker deck for `mode`, drawing only on the cards already in
+ * that list — each at most as many times as it appears — so the result never
+ * needs a copy the player doesn't own. Deterministic per `seed`.
+ */
+export function convertRetiredList(
+  leader: CardDef,
+  cardIds: readonly string[],
+  mode: ModeConfig,
+  pool: readonly CardDef[],
+  rng: Rng,
+): string[] {
+  const available = new Map<string, number>();
+  for (const id of cardIds) available.set(id, (available.get(id) ?? 0) + 1);
+  return quickbuildIds(leader, mode, pool, available, rng);
+}
