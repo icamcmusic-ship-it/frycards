@@ -59,3 +59,39 @@ the files with the Supabase CLI / SQL editor, which has no such gate). Apply
 `20261008000001` as committed is the intended end state (including the drops). On
 live it was applied as the smaller pieces in the table, because the drop-bearing
 calls could not be confirmed. Re-running the whole file on live is safe.
+
+## 2026-10-09: FryCards Poker
+
+The MTG-style game was retired in favour of FryCards Poker (pot-limit Hold'em
+freezeout, 2–6 seats; see `docs/RULEBOOK.md`). The client ships ahead of the
+backend; these are the server-side gaps it works around today.
+
+1. **Placement rewards are not live.** New migration
+   `supabase/migrations/20261009000000_poker_placement_rewards.sql` is additive:
+   - RPC `record_match_placement(p_match_id, p_place, p_seats, p_mode)` pays by
+     finishing place instead of a win flag;
+   - `match_tickets` gains `place`, `seats` and `mode` columns;
+   - helper `poker_place_factor(p_place, p_seats)` holds the place-factor table.
+
+   Minimum match length is the mode floor (quick 6 / standard 12 / deep 20 min)
+   × seats / 6, never under 45 s. **Not applied to the live project yet.** While
+   the RPC is missing, the client (`recordMatchPlacement` in `src/lib/supabase.ts`)
+   falls back to the old `record_match_result`, with `won` set to `place = 1`. So
+   2nd place and below are paid as a loss until the file is applied. It contains no `DROP` / `DELETE`,
+   so it should apply without the confirmation gate described above.
+2. **`save_deck`'s `is_valid` still grades the retired 60-card rule.** The client
+   works out poker legality itself (`checkDeck` / `legalModes` in
+   `src/game/poker/deck.ts`) and ignores `is_valid`. A follow-up migration could
+   drop the 60-card check, or replace it with a poker check.
+3. **`claim_deck_box` still builds and saves a 60-card list (12 Locations).** Right
+   after the claim, the client rebuilds the saved deck as a legal Standard poker
+   deck from the cards the box granted (`convertRetiredList` in
+   `src/meta/deckEdits.ts`, called from `StoreScreen`). Moving that rebuild to the
+   server needs the poker tiers, which are currently derived on the client.
+4. **`cards` table mechanics columns.** These are written by
+   `scripts/sync-cards-db.ts` through `mechanicsFromDef` (`src/meta/submissions.ts`):
+   `might` = tier, `keywords` = poker keywords, and `essence_types` = colours
+   (unchanged). The live rows only show poker mechanics after a re-sync.
+   `essence_types` already match.
+5. **`submit_card` has no star-hint parameter.** The Creator sets a submitted
+   card's tier at review.
