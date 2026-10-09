@@ -79,6 +79,7 @@ backend; these are the server-side gaps it works around today.
    falls back to the old `record_match_result`, with `won` set to `place = 1`. So
    2nd place and below are paid as a loss until the file is applied. It contains no `DROP` / `DELETE`,
    so it should apply without the confirmation gate described above.
+
 2. **`save_deck`'s `is_valid` still grades the retired 60-card rule.** The client
    works out poker legality itself (`checkDeck` / `legalModes` in
    `src/game/poker/deck.ts`) and ignores `is_valid`. A follow-up migration could

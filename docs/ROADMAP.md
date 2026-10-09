@@ -1,5 +1,49 @@
 # Roadmap
 
+> **2026-10-09: the MTG-style game is retired.** In 2026-10 it was replaced by
+> **FryCards Poker**: a pot-limit Hold'em freezeout for 2–6 seats, where a deck
+> is a Leader, a Location and power cards (`docs/RULEBOOK.md`,
+> `src/game/poker/*`). `scripts/simulate-v5.ts` and `npm run drive:match` were
+> removed; the balance instrument is now `npm run sim:poker`
+> (`scripts/simulate-poker.ts`). The poker follow-ups are listed directly below.
+> Everything after them is the pre-poker roadmap, kept as history. The
+> collection, economy, Showcase, accessibility and infrastructure items still
+> apply. The items that only made sense for the old engine are marked
+> **[retired with the MTG-style game]** where they start, and are otherwise
+> left as written.
+
+## Poker follow-ups (2026-10)
+
+- **Balance pass against the spec's four targets.** `npm run sim:poker` prints
+  all four (`--strict` exits 1 on a miss). Current read: **revival rate** (≈ 1 in
+  8 revive casts turn a losing hand) and **Location fairness** (dealer win rate
+  within 2 points under every Location) **pass**. **Skill gap** and **deck
+  spread** **miss**. The skilled bot wins about 16–22% of 6-seat freezeouts
+  against five naive bots, against a ≥ 60% target (1 in 6 would mean no edge at
+  all). The best deck's head-to-head series is above the 55% ceiling. The
+  skill gap is a bot-quality problem as much as a card problem. Decide which
+  of the two the target is measuring before spending card levers on it.
+- **PvP.** `docs/PVP_DESIGN.md` predates poker. Its transport and
+  hidden-information concerns carry over, and poker makes them sharper: hole
+  cards must never reach another client. The engine already renders every seat
+  from a redacted per-seat view (`src/game/poker/view.ts`), which is the right
+  shape for a wire protocol. The table seating, timers and disconnect rules are
+  new design work.
+- **Server-authoritative matches.** Placement is still client-reported (see
+  `docs/BACKEND_PENDING.md`, 2026-10-09). The match ticket, minimum match
+  length, daily taper and claim ceiling bound the farming risk, but do not stop
+  it. Running the reducer server-side, or at least replaying the client's
+  action log against its seed on the server, is the real fix, and it is also
+  PvP's prerequisite.
+- **Mythic Location video preload in the forecast.** Mythic Location faces loop
+  a video. The table's forecast strip already shows the next two Locations, so
+  it should start preloading a mythic one's video then. Otherwise the video
+  pops in late when that Location turns over.
+- **Replay viewer UI.** The table already keeps an append-only action log per
+  match, and Match History stores seed, mode and deck code. What is missing is
+  a screen that replays a stored match hand by hand. The old "persistent match
+  history and replays" item below shrinks to this plus server-side storage.
+
 Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 Rewritten in v7.7, revised in v13. The previous version had drifted into being
@@ -65,7 +109,7 @@ Everything here has a started implementation and a visible seam.
     full parity against a fresh 297-row snapshot — see
     `docs/BALANCE_SIM_FINDINGS_v23.md` "Closed this pass".
 
-- **The Item subtype split owes a balance pass** (new in v13). Renaming `Charm`
+- **[retired with the MTG-style game]** **The Item subtype split owes a balance pass** (new in v13). Renaming `Charm`
   to `Item` was seed-stable — `SEED_TYPE` keeps hashing Items as `Charm`, so
   cost, colour and keywords are byte-identical — but the _subtypes_ are not a
   rename: the old Bound/Worn pair became Charm/Weapon/Tool, 11 of the 61 Items
@@ -227,7 +271,7 @@ Everything here has a started implementation and a visible seam.
   card under 520px, the way `Card3DInspector` clamps — so `✕ CLOSE` and INVOKE
   stay on-screen on a phone.
 
-- **The match driver's control census is a report; the next pass should make it
+- **[retired with the MTG-style game]** **The match driver's control census is a report; the next pass should make it
   a gate** (new in v29). Every stress round before this one grew `drive:match`
   by adding an action somebody had noticed it never took — SKIP until v19,
   RE-BOND until v22, the VICTORY screen until v26 — which is a coverage
@@ -247,8 +291,8 @@ Everything here has a started implementation and a visible seam.
   **v30 worked the list and it is still not a gate.** Two thirds of the
   remainder was the census wrong about ITSELF again, in three shapes that are
   all the identity rule v29 wrote for card faces arriving through a different
-  door — *a label that describes the board's current contents is not the
-  control's name*. A clash line keys on its matchup, the narration bubble keys
+  door — _a label that describes the board's current contents is not the
+  control's name_. A clash line keys on its matchup, the narration bubble keys
   on the beat inside it, and a Location tile keys on the card standing in it,
   so one divider button, one bubble and one tile arrived as forty-odd distinct
   rows nobody had pressed. Three `data-*` hooks (the same convention as
@@ -305,7 +349,8 @@ Everything here has a started implementation and a visible seam.
   and the moves inside it did not — but nothing here has ever been run through
   an actual screen reader), and **real-device behaviour**, which has been the
   standing third of three since v11.
-- **One balance pass per release, against the findings doc.** The whole live
+
+- **[retired with the MTG-style game]** **One balance pass per release, against the findings doc.** The whole live
   list is `docs/BALANCE_SIM_FINDINGS_v23.md` carry-forward. **v19 froze the
   per-Leader levers pending a widened instrument; v20 widened it; v22 measured
   the caution flag those readings were being filtered through and retired it as
@@ -502,7 +547,7 @@ Everything here has a started implementation and a visible seam.
   path is worth it — which needs a number: what fraction of first loads never
   authenticate?
 
-- **Three v32 sim signals recorded, none of them acted on.** Each is one
+- **[retired with the MTG-style game]** **Three v32 sim signals recorded, none of them acted on.** Each is one
   measurement short of being a lever, and the standing rule is not to spend a
   lever against a one-pass-old instrument:
 
@@ -540,6 +585,7 @@ Everything here has a started implementation and a visible seam.
     "do not spend a lever against a one-pass-old instrument" is the rule this
     project has broken four times. The next pass spends it, with a clean
     before/after and a specific target.
+
   - **Six implemented keywords are unreachable, and that is the cheapest depth
     on the board.** `UNPRINTED_KEYWORDS` is Onslaught, Beacon and Dread
     (Leader) plus Kindle, Tailwind and Luminous (Event). All six are
@@ -594,7 +640,7 @@ Ordered by how much they change what it feels like to own and play the game.
     step away from, and it is what would make the room a destination rather
     than a detour.
 
-- **Persistent match history and replays.** Store per-match logs; let players
+- **[partly superseded by "Replay viewer UI" under Poker follow-ups]** **Persistent match history and replays.** Store per-match logs; let players
   review past games. The engine already emits a structured event stream (the
   sim harness consumes it), so this is storage and a viewer, not new game code.
   It is also the prerequisite for anything competitive: a ladder without
@@ -629,7 +675,7 @@ Ordered by how much they change what it feels like to own and play the game.
   Supabase Storage bucket, since the point is swapping faces without a
   redeploy; it needs a public bucket with CORS and a `crossorigin` attribute,
   and a licence check that the face permits webfont embedding.
-- **Deck archetype guidance in the builder.** The sim knows a great deal about
+- **[retired with the MTG-style game]** **Deck archetype guidance in the builder.** The sim knows a great deal about
   what makes a deck work (`archetypes`, `essenceCurve`, `costTiers`,
   `colorMatchups`) and the deck editor tells the player none of it. The
   cheapest large win in the meta game.
@@ -739,11 +785,11 @@ Ordered by how much they change what it feels like to own and play the game.
   work has to build; parking it here rather than bolting a second ad-hoc window
   onto the client reducer.
 
-- **Multiplayer (PvP).** Requires a server-authoritative engine; design spike
+- **[superseded by "PvP" under Poker follow-ups]** **Multiplayer (PvP).** Requires a server-authoritative engine; design spike
   is in `docs/PVP_DESIGN.md`. Real blocker is that `engine.ts` is a
   client-side pure reducer with no notion of hidden information across a wire.
   Match history and replays are the honest first step toward it.
-- **Leader keywords.** Leaders have three printed keywords (Commander,
+- **[retired with the MTG-style game]** **Leader keywords.** Leaders have three printed keywords (Commander,
   Resolute, Warlord) where every other type now has six or seven. The v7.8
   restructure froze the 'ldr-kw6' path and gave future generations their own
   band (`LEADER_NEXT_KEYWORDS` / 'ldr-kw-next'), and **v23 implemented the
@@ -756,7 +802,7 @@ Ordered by how much they change what it feels like to own and play the game.
   per-Leader grant. A measured two-cohort preview of that print — all three
   playable, none degenerate — is in `docs/BALANCE_SIM_FINDINGS_v23.md` §5.
   Do not interleave the print with a balance lever.
-- **v24 Event keywords.** The same pattern one type over: v24 implemented
+- **[retired with the MTG-style game]** **v24 Event keywords.** The same pattern one type over: v24 implemented
   Kindle (Ember), Tailwind (Gale), Luminous (Light) — the last colour holes
   any type carried — engine-tested (`keywords-v24-events.test.ts`) and listed
   in `UNPRINTED_KEYWORDS`. Printing them has a known shape too: the Event

@@ -1,36 +1,27 @@
 /**
- * Shared v5.0 card-face rendering — the ONE card template used everywhere
- * (match UI, deck builder, collection, store/pack reveals) so a card looks
- * and reads identically no matter where it's shown. Real trading-card
+ * Shared card-face rendering — the ONE card template used everywhere (poker
+ * table, deck builder, collection, store/pack reveals) so a card looks and
+ * reads identically no matter where it's shown. Real trading-card
  * proportions: 2.5" × 3.5" (5:7).
  *
- * Essence-engine conversion: the dice-era Cast Slot cost UI (threshold die,
- * exact/sum kinds, combo-pattern gates) is replaced by an ESSENCE COST row
- * of colored pips + a generic numeral; ATK/HP gems are now Might/Grit;
- * the type line prints "Type — Subtype"; Leaders show Resolve and their
- * two Resolve abilities; keyword chips come from the new binary keyword
- * set (KEYWORD_TEXT). Card dimensions, the regular-art frame, the
- * Full-Art treatment, and the rarity/foil/serialized systems are unchanged.
+ * The FryCards Poker face (2026-10), top to bottom:
+ *  - MASTHEAD: name on the left; the right slot carries the card's colour
+ *    dots and its TIER MARK (★ stars on Units, ⚙ gears on Items, ϟ bolts on
+ *    Events). Tapping the mark explains the tier and its chip cost.
+ *  - ART: regular 4:3 box, or full-bleed on the Full-Art templates.
+ *  - TYPE LINE: "Event — Quick · 3ϟ", with the rarity marker in the right
+ *    slot (set-symbol position).
+ *  - TEXT BOX: the poker keywords as chips, one plain rules line, then the
+ *    flavor. Flavor text is ALWAYS shown, at every size — the rules line gives
+ *    up space first, and the micro board token carries a one-line flavor
+ *    strip of its own. A Location prints its table rule.
+ *  - BOTTOM-RIGHT PLATE: a power's chip cost in units ("+" when its tier also
+ *    needs a second cost), or a Leader's starting nerve. Locations have no
+ *    plate.
  *
- * v6.0 MTG-format layout pass: information lives where a Magic card puts it —
- * name + cost on the top line, art, a type line whose right slot carries the
- * rarity marker (set-symbol position), a text box (keywords → rules →
- * flavor), and a Might/Grit stat plate anchored to the BOTTOM-RIGHT corner
- * (Resolve there for Leaders, like planeswalker loyalty). The old footer
- * color-dot band is gone — color identity is already printed in the cost
- * pips — which reclaims vertical space for the text box so rules stop
- * running off the card. Art ratios are untouched (regular 4:3 box,
- * Full-Art full-bleed).
- *
- * FryCards Poker pass (2026-10): same frame, same slots, new contents. The
- * masthead's right slot carries the card's colour dots and its TIER MARK
- * (★ stars on Units, ⚙ gears on Items, ϟ bolts on Events) where the essence
- * pips sat; the type line reads "Event — Quick · 3ϟ"; the text box prints
- * the poker keywords as chips plus one plain rules line; and the bottom-right
- * plate shows the chip cost (a Leader's plate shows its starting nerve). A
- * Location prints its table rule. Flavor text is ALWAYS shown, at every size
- * — the rules line gives up space first, and the micro board token carries a
- * one-line flavor strip of its own.
+ * Lineage: the frame, slots and art ratios come from the retired MTG-style
+ * game's v6.0 layout pass; card dimensions and the rarity / foil / serialized
+ * systems carried over unchanged.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { VisibleVideo } from './VisibleVideo';
@@ -405,18 +396,12 @@ ensurePremiumStyles();
  * ornaments at the side midpoints. Non-uniform viewBox scaling is fine —
  * everything drawn is decorative line-work meant to hug the card edges. */
 /**
- * v31 (finding 2.2): the board holds the GameState object in useState, mutates
- * it in place and forces renders with a version counter, so EVERY essence tap
- * and hover re-renders the whole tree — including this SVG/gradient work.
- *
- * The pure, prop-stable leaves below are memoised on that basis. The larger
- * memoisation the finding asks for (BoardUnit / LocationTile / CardFace /
- * LeaderLane) cannot be done safely first: those take the mutated GameState
- * object, whose identity never changes, and fresh `onClick` closures per
- * render — so a default comparator would render stale cards and a custom one
- * would need a hand-written field hash per component. That is the same work
- * the reducer refactor (PVP_DESIGN) does properly, and it is why finding 2.8
- * calls the GameV4 extraction a prerequisite for both.
+ * v31 (finding 2.2): the retired MTG-style board mutated its game state in
+ * place and re-rendered the whole tree on every tap and hover — including
+ * this SVG/gradient work — so the pure, prop-stable leaves below were
+ * memoised. The poker table re-renders far less (its engine is a pure
+ * reducer), but the memoisation is still correct and still cheap, so it
+ * stays.
  */
 function UltraFiligreeBase({ size }: { size: CardSize }) {
   // v4.22: was a plain `absolute inset-0` — flush with the card's padding
@@ -646,7 +631,7 @@ const TIER_TINT: Record<PowerType, string> = { Unit: '#F5C542', Item: '#7DD3FC',
 
 /**
  * The masthead's right slot: the card's colour dots, then its tier mark
- * (★★★ for a 3-star Unit). Sits where the essence-cost pips used to.
+ * (★★★ for a 3-star Unit).
  */
 export function TierMark({ def, size, onArt }: { def: CardDef; size: CardSize; onArt?: boolean }) {
   const { d, f } = PIP_SIZE[size];
@@ -700,8 +685,9 @@ export function TierMark({ def, size, onArt }: { def: CardDef; size: CardSize; o
   );
 }
 
-/** A small tinted, icon-led stat gem (Might/Grit/Resolve) — a proper badge
- * so the stat line reads as UI, not a caption. */
+/** A small tinted, icon-led gem for the bottom-right plate (a power's chip
+ * cost, a Leader's starting nerve) — a proper badge so it reads as UI, not a
+ * caption. */
 function StatChip({
   icon: Icon,
   label,
@@ -714,7 +700,7 @@ function StatChip({
   onArt,
 }: {
   icon: React.ComponentType<{ className?: string }>;
-  /** Accessible/hover name of the stat ("Might" / "Grit" / "Resolve"). */
+  /** Accessible/hover name of the value ("Chip cost" / "Starting nerve"). */
   label: string;
   value?: number | string;
   maxValue?: number;
@@ -1226,8 +1212,8 @@ function KeywordText({
   );
 }
 
-/** Click-to-open popover explaining a card's Essence Cost — same portal
- * popover the keyword chips use. Wraps whatever badge content is passed as
+/** Click-to-open popover explaining a card's tier and chip cost (or its
+ * colours, when it has no tier) — same portal popover the keyword chips use. Wraps whatever badge content is passed as
  * children in a real <button>; `title` kept as a desktop hover fallback. */
 function CostInfoButton({
   text,
@@ -1295,7 +1281,7 @@ function CostInfoButton({
 
 /**
  * Whether a card face at `size` gives its keyword chips, in-sentence keyword
- * mentions and cost pips their own tap targets.
+ * mentions and tier mark their own tap targets.
  *
  * Exported so the ladder can be pinned by a test rather than re-derived: the
  * rule is a SIZE rule, and the thing that must not drift is that no tier whose
@@ -1481,14 +1467,14 @@ const TIER: Record<
     keywordMax: number;
     keywordSmall: boolean;
     /**
-     * Whether this tier's keyword chips, in-sentence keyword mentions and cost
-     * pips are their own tap targets.
+     * Whether this tier's keyword chips, in-sentence keyword mentions and tier
+     * mark are their own tap targets.
      *
      * v28: they always were, at every tier, and below `full` that was a bug
      * rather than a feature — twice over.
      *
      * **They are too small.** A chip on a battlefield unit measures 23x14, a
-     * keyword mention as little as 22x9, a cost pip 28x13; WCAG 2.5.8 (AA)
+     * keyword mention as little as 22x9, a cost badge 28x13; WCAG 2.5.8 (AA)
      * asks for 24x24. Only at `full` do they clear it without help, and the
      * help does not fit: the chip row and the rules paragraph both clip their
      * overflow to hold a height budget, and a clipping ancestor clips
@@ -1497,7 +1483,7 @@ const TIER: Record<
      * wreck the layouts these font sizes exist to serve.
      *
      * **They steal the card's own tap.** They sit ON TOP of the card whose tap
-     * IS the game action — select this attacker, add this card to the deck —
+     * IS the action — pick this card, add it to the deck —
      * and on a phone the small target wins the ties. The cheapest thing a
      * player did constantly, reaching for a card, opened a glossary popover.
      *
@@ -1625,14 +1611,15 @@ const TIER: Record<
 const MASTHEAD_H: Record<CardSize, number> = { micro: 14, compact: 18, standard: 21, full: 26 };
 
 /**
- * Bottom padding the text box reserves for the corner stat plate, so flavor
- * text can never render underneath it. Cards with no stat plate (Locations,
- * Items, Events) don't need the clearance, but reserving it unconditionally
- * keeps every card's text box the same height within a tier.
+ * Bottom padding the text box reserves for the corner plate (a power's chip
+ * cost, a Leader's starting nerve), so flavor text can never render
+ * underneath it. Locations have no plate and don't need the clearance, but
+ * reserving it unconditionally keeps every card's text box the same height
+ * within a tier.
  *
  * v7.5: these were 8/11/14/18, hand-estimated from StatChip's `textClass` /
  * `iconClass` picks, and they were all too small — flavor text rendered UNDER
- * the Might/Grit (or Resolve) plate on 35 of the 131 card renders that have
+ * the corner plate (then the old game's Might/Grit or Resolve plate) on 35 of the 131 card renders that have
  * both, worst on the two full-bleed templates where it overlapped by a full
  * 8px and the plate sits directly on the art. Measured in a real browser
  * instead (the geometry is: plate height + its `bottom-1` offset, minus the
@@ -1911,7 +1898,7 @@ function FittedFlavor({
     <div
       ref={ref}
       // Layout-audit hook (scripts/audit-cardface.ts) — the flavor block and
-      // the stat plate are the two boxes that must never intersect.
+      // the corner plate are the two boxes that must never intersect.
       data-fc="flavor"
       className={cn(
         // Pinned to the bottom of the text box under a dashed rule, per the
@@ -1967,9 +1954,10 @@ function cap1(s: string): string {
 
 /** v4.26: the `micro` tier is a purpose-built board token, not a shrunken
  * full card. The art fills the whole footprint with top/bottom scrims; the
- * top strip carries the type glyph + auto-shrinking name and the essence
- * cost pips; the bottom strip carries up to two keyword chips (with a "+N"
- * spillover) and solid-backed Might/Grit gems (Resolve for Leaders). */
+ * top strip carries the type glyph + auto-shrinking name and the tier mark;
+ * the bottom strip carries up to two keyword chips (with a "+N" spillover),
+ * a one-line flavor strip (flavor is always shown) and the solid-backed
+ * chip-cost gem (starting nerve for Leaders). */
 function MicroCard({
   def,
   dimmed,
@@ -2037,7 +2025,7 @@ function MicroCard({
             'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.3) 22%, rgba(0,0,0,0) 36%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.55) 72%, rgba(0,0,0,0.92) 100%)',
         }}
       />
-      {/* Name + essence-cost strip */}
+      {/* Name + tier-mark strip */}
       <div className="relative z-10 flex items-start justify-between gap-0.5 px-1 pt-0.5 shrink-0">
         <span
           className="flex items-center gap-0.5 min-w-0 heading-font leading-tight text-white"
@@ -2105,7 +2093,7 @@ function MicroCard({
                 // MicroCard is its own component with its own chip row, so the
                 // tier table's `chipsInteractive` never reached it — and micro
                 // is the tier where an interactive chip does the most damage:
-                // this is the board token whose tap declares an attacker.
+                // this is the board token whose tap is the card's own action.
                 inert={!chipsAreInteractive('micro')}
               />
             ))}
@@ -2396,8 +2384,9 @@ function CardFaceBase({
     </>
   );
 
-  /** Might/Grit (Resolve) plate — anchored to the card's bottom-right corner
-   * in both templates, on an ink plate the design carries at every rarity. */
+  /** Chip-cost plate (a Leader's starting nerve) — anchored to the card's
+   * bottom-right corner in both templates, on an ink plate the design carries
+   * at every rarity. */
   const statPlate = statChips && (
     <div
       data-fc="stats"
@@ -2543,7 +2532,7 @@ function CardFaceBase({
         </div>
       )}
 
-      {/* ---- Masthead: name + essence cost ----
+      {/* ---- Masthead: name + colour dots and tier mark ----
           A solid ink banner on the framed template, the same banner at 90%
           opacity over the art on the bleed one, and a static prismatic band
           (black title, no motion) on a foil print. */}
@@ -2646,7 +2635,7 @@ function CardFaceBase({
               'relative z-10 flex flex-col flex-1 min-h-0 overflow-hidden mx-1.5 mt-0.5 mb-0.5 border-t border-[var(--c-ink)]',
               cfg.textBoxPad,
             )}
-            // Reserve the bottom-right corner for the stat plate.
+            // Reserve the bottom-right corner for the chip-cost / nerve plate.
             style={{ paddingBottom: PLATE_CLEARANCE[size] }}
           >
             {textContent}
