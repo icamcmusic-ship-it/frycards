@@ -386,9 +386,8 @@ export function SettingsScreen({
                   <GraduationCap className="w-4 h-4" aria-hidden /> FIRST-GAME COACH
                 </div>
                 <p className="text-[11px] font-bold text-[var(--c-steel)] mt-1 max-w-md">
-                  The coach walks you through your hole cards, betting, the board, powers,
-                  Locations and nerve once. Replay it to see the walkthrough again in your next
-                  match.
+                  The coach walks you through your hole cards, betting, the board, powers, Locations
+                  and nerve once. Replay it to see the walkthrough again in your next match.
                 </p>
               </div>
               <PopButton
