@@ -66,19 +66,21 @@ The MTG-style game was retired in favour of FryCards Poker (pot-limit Hold'em
 freezeout, 2–6 seats; see `docs/RULEBOOK.md`). The client ships ahead of the
 backend; these are the server-side gaps it works around today.
 
-1. **Placement rewards are not live.** New migration
-   `supabase/migrations/20261009000000_poker_placement_rewards.sql` is additive:
+1. **Placement rewards — applied live 2026-10-09** (live migration
+   `poker_placement_rewards`). `supabase/migrations/20261009000000_poker_placement_rewards.sql`
+   is additive:
    - RPC `record_match_placement(p_match_id, p_place, p_seats, p_mode)` pays by
      finishing place instead of a win flag;
    - `match_tickets` gains `place`, `seats` and `mode` columns;
    - helper `poker_place_factor(p_place, p_seats)` holds the place-factor table.
 
    Minimum match length is the mode floor (quick 6 / standard 12 / deep 20 min)
-   × seats / 6, never under 45 s. **Not applied to the live project yet.** While
-   the RPC is missing, the client (`recordMatchPlacement` in `src/lib/supabase.ts`)
-   falls back to the old `record_match_result`, with `won` set to `place = 1`. So
-   2nd place and below are paid as a loss until the file is applied. It contains no `DROP` / `DELETE`,
-   so it should apply without the confirmation gate described above.
+   × seats / 6, never under 45 s. Verified live after applying: a six-seat
+   Standard table pays 100 / 76 / 61 / 49 / 43 / 40, `anon` cannot call the RPC,
+   `authenticated` can, and the old `record_match_result(boolean, uuid)` is still
+   in place for clients that predate the swap. The client
+   (`recordMatchPlacement` in `src/lib/supabase.ts`) still falls back to
+   `record_match_result` (`won` = 1st place) if the RPC is ever missing.
 
 2. **`save_deck`'s `is_valid` still grades the retired 60-card rule.** The client
    works out poker legality itself (`checkDeck` / `legalModes` in
