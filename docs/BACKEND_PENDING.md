@@ -50,9 +50,11 @@ a pack pinned to an empty set now raises instead of paying out another set.
    required: the bingo panel re-checks the card's week client-side before claiming.
    Do not call `claim_bingo` with `p_week_start` from the client until it is applied.
 
-To finish: approve the confirmation prompts for the four items above (or apply
-the files with the Supabase CLI / SQL editor, which has no such gate). Apply
-`20261008000001` sections 4–5 before `04`.
+To finish items 1–3: run `supabase/manual/finish-backend-2026-10-09.sql` once in the
+Supabase SQL editor (it has no confirmation gate). It is a single transaction,
+idempotent, and applies `begin_match`, `reset_account`, the private CPU-ceiling table
+with the `settle_expired_listings` revoke, and drops the old overloads. Item 4
+(`claim_bingo` guard) is optional and left out.
 
 ## Note on the migration files
 
