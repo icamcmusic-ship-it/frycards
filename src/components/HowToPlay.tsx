@@ -1,3 +1,4 @@
+import { PlayingCard as SpriteCard } from './PlayingCard';
 import React from 'react';
 import {
   Coins,
@@ -643,9 +644,11 @@ interface StepCard {
   action: Action;
 }
 
-const RED_SUITS = /[♥♦]/;
-
 /** A playing card as text: "K♥" in red, "7♠" in ink. */
+const SUIT_GLYPHS = ['♠', '♥', '♦', '♣'];
+
+/** A card from its printed label ("9♥", "10♣"), drawn with the same Kenney
+ * sprites the table uses. */
 function PlayingCard({
   label,
   size = 'sm',
@@ -654,15 +657,17 @@ function PlayingCard({
   label: string;
   size?: 'sm' | 'xs';
 }) {
+  const rank = label.slice(0, -1);
+  const suit = SUIT_GLYPHS.indexOf(label.slice(-1));
+  const r = rank === '10' ? 10 : '23456789TJQKA'.indexOf(rank) + 2;
   return (
-    <span
-      className={`inline-flex items-center justify-center ink-border-sm bg-white font-mono font-black leading-none ${
-        size === 'sm' ? 'w-8 h-11 text-sm' : 'w-6 h-8 fs-xs'
-      }`}
-      style={{ color: RED_SUITS.test(label) ? '#DC2626' : 'var(--c-ink)' }}
-    >
-      {label}
-    </span>
+    <SpriteCard
+      r={r}
+      s={Math.max(0, suit)}
+      scale={1}
+      title={label}
+      className={size === 'xs' ? '-mr-1' : undefined}
+    />
   );
 }
 
