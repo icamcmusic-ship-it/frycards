@@ -52,14 +52,18 @@
  * `--matches` is the match count per suite (default 200; the round robin
  * spreads it over every Leader pairing, at least 2 per pairing). `--strict`
  * exits 1 when a target misses, so the report can gate a release.
+ * `--invariants` exits 1 only on an engine fault (a bot action the engine
+ * refused, a match that never ends, chips not conserved) — the CI gate, which
+ * must not fail on a balance miss.
  */
 import { writeFileSync } from 'node:fs';
 import { botAction, botRng } from '../src/game/poker/bot';
 import { POOL_LEADERS } from '../src/game/poker/cardpool';
-import { MODES, type ModeId } from '../src/game/poker/constants';
+import { MODES, UNIT, type ModeId } from '../src/game/poker/constants';
 import { buildDeck, type DeckDef } from '../src/game/poker/deck';
 import {
   applyInPlace,
+  chipsInPlay,
   createMatch,
   IllegalAction,
   leaderPseudoDef,
@@ -114,6 +118,9 @@ if (!MODES[MODE]) {
 const SEED = Number(arg('seed') ?? 1337) | 0;
 const JSON_OUT = arg('json');
 const STRICT = process.argv.includes('--strict');
+/** CI gate: exit 1 on an ENGINE fault only (a refused bot action, chips
+ * created or destroyed, a match that never ends) — never on a balance miss. */
+const INVARIANTS = process.argv.includes('--invariants');
 
 // ---------------------------------------------------------------------------
 // Driver: runBots with per-action and per-hand hooks
@@ -129,6 +136,10 @@ interface Hooks {
  * engine bug — the seat folds/passes instead and the match carries on. */
 const illegal = new Map<string, number>();
 let abortedMatches = 0;
+/** Matches that hit the step guard without ending, and matches whose chip
+ * total drifted from the starting stacks (powers move chips, never mint). */
+let unfinishedMatches = 0;
+let chipBreaks = 0;
 
 function play(setup: MatchSetup, botSeed: number, hooks: Hooks = {}): Match {
   const m = createMatch(setup);
@@ -169,6 +180,8 @@ function play(setup: MatchSetup, botSeed: number, hooks: Hooks = {}): Match {
       hooks.afterHand?.(m, h);
     }
   }
+  if (m.phase !== 'over') unfinishedMatches++;
+  if (chipsInPlay(m) !== setup.seats.length * MODES[setup.mode].stackUnits * UNIT) chipBreaks++;
   return m;
 }
 
@@ -598,4 +611,11 @@ if (JSON_OUT) {
 }
 
 const allOk = Object.values(results).every((r) => r.ok);
+if (unfinishedMatches) console.log(`  ${unfinishedMatches} match(es) never finished.`);
+if (chipBreaks) console.log(`  ${chipBreaks} match(es) did not conserve chips.`);
+const engineOk = illegal.size === 0 && !abortedMatches && !unfinishedMatches && !chipBreaks;
+if (INVARIANTS && !engineOk) {
+  console.error('ENGINE INVARIANT FAILURE — see the canary section above.');
+  process.exit(1);
+}
 if (STRICT && !allOk) process.exit(1);
