@@ -1262,7 +1262,12 @@ function CostInfoButton({
         type="button"
         onClick={toggle}
         title={title}
-        className={cn('cursor-help tap-target relative', className)}
+        // A scaled card face (the showroom slab draws it at ~76%) shrinks the
+        // .tap-target expansion and clips it at the card's top edge. px-0.5
+        // keeps the button itself 24px wide there; pb-3 with a matching -mb-3
+        // grows its box downward, away from the clipped edge, without moving
+        // anything in the header.
+        className={cn('cursor-help tap-target relative px-0.5 pb-3 -mb-3', className)}
       >
         {children}
       </button>

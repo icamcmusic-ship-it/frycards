@@ -1188,7 +1188,8 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       title={`${m.label} decks hold exactly ${m.powers} powers plus one Location`}
     >
       {shape.powers}/{m.powers}
-      <span className="fs-xs"> POWERS</span>
+      {/* Visual on wide screens only: at 200% text the phone deck bar has no room. */}
+      <span className="fs-xs sr-only sm:not-sr-only"> POWERS</span>
       {shape.locations === 1 ? ' +LOC' : ''}
     </span>
   );
