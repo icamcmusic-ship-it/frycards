@@ -338,8 +338,8 @@ function DeckChoices({
   mode: ModeId;
   onPick: (d: DeckRow) => void;
 }) {
-  // Legality is the client's poker rules — the server's is_valid flag still
-  // grades the retired 60-card format.
+  // Per-mode legality comes from the client's poker rules; the server's
+  // is_valid flag (poker_deck_modes) only says "legal in some mode".
   const rows = decks.map((d) => ({ d, modes: legalModes(d.leader_id, d.card_ids) }));
   const legal = rows.filter((r) => r.modes.includes(mode));
   if (legal.length === 0)

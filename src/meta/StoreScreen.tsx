@@ -11,8 +11,6 @@ import {
   buyAndOpenPacks,
   openInventoryPacks,
   claimDeckBox,
-  fetchDecks,
-  saveDeck,
   getDailyBounties,
   sellBountyCard,
   buyBountyCard,
@@ -39,10 +37,7 @@ import {
 } from './packodds';
 import { LeaderPicker } from './LeaderPicker';
 import { CardFace } from '../components/CardFaceV4';
-import { POOL, POOL_BY_ID } from '../game/poker/cardpool';
-import { MODES } from '../game/poker/constants';
-import { rngOn } from '../game/poker/rng';
-import { convertRetiredList } from './deckEdits';
+import { POOL_BY_ID } from '../game/poker/cardpool';
 import { CardDef } from '../game/poker/cards';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
@@ -132,7 +127,6 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     refreshCosmetics,
     refreshInventory,
     refreshDecks,
-    session,
   } = useMeta();
   const [tab, setTab] = usePersistedState<Tab>('store:tab', 'packs', isTab);
   const [error, setError] = useState('');
@@ -356,36 +350,6 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     });
   };
 
-  /**
-   * claim_deck_box still saves the retired 60-card list. The cards it grants
-   * are kept as they are (same collection value); the saved deck is rebuilt
-   * from them as a legal Standard poker deck so it is playable at once. A
-   * failure here is not fatal — the deck stays, marked OLD FORMAT, and the
-   * Deck Builder can rebuild it.
-   */
-  const convertDeckBoxDeck = async (leaderId: string) => {
-    const uid = session?.user?.id;
-    const leader = POOL_BY_ID[leaderId];
-    if (!uid || !leader) return;
-    try {
-      const mine = await fetchDecks(uid);
-      const box = mine
-        .filter((d) => d.leader_id === leaderId && d.card_ids.length > MODES.deep.powers + 1)
-        .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
-      if (!box) return;
-      const ids = convertRetiredList(
-        leader,
-        box.card_ids,
-        MODES.standard,
-        POOL,
-        rngOn({ rng: box.card_ids.length * 7919 + leaderId.length }),
-      );
-      await saveDeck({ id: box.id, name: box.name, leader_id: leaderId, card_ids: ids });
-    } catch {
-      /* keep the server's deck; the Deck Builder flags it */
-    }
-  };
-
   const handlePickDeckBoxLeader = async (leaderId: string) => {
     if (claimingBox || !pickingLeaderFor) return;
     const pack = pickingLeaderFor;
@@ -399,7 +363,6 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         return;
       }
       setPickingLeaderFor(null);
-      await convertDeckBoxDeck(leaderId);
       showOpening({ packName: pack.name, packImageUrl: packOpenArt(pack), pulls: data.cards });
       refreshProfile();
       refreshCollection();
