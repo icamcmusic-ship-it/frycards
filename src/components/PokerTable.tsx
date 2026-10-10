@@ -86,7 +86,7 @@ import { Card3DInspector } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
 import { PlayingCard } from './PlayingCard';
 import { VisibleVideo } from './VisibleVideo';
-import { betPosition, seatPositions } from './pokerLayout';
+import { betPosition, boardY, seatPositions, seatStyle, type SeatPos } from './pokerLayout';
 
 export const HUMAN = 0;
 
@@ -94,10 +94,14 @@ export const HUMAN = 0;
 const RESULT_PAUSE_MS = 3200;
 /** Auto-pass a response window the human ignores. */
 const WINDOW_AUTOPASS_MS = 10_000;
+/** Auto-pick a hole-card choice the human ignores. */
+const CHOICE_TIMEOUT_MS = TURN_TIMER_MS;
 /** How long a cast's full-art spotlight stays up at 1×. */
 const SPOTLIGHT_MS = 1700;
 /** Spectating after a bust runs at 4× speed. */
 const SPECTATE_MULT = 0.25;
+/** Felt height (px) from which the board's cards are drawn at 2×. */
+const BOARD_X2_MIN_FELT_PX = 450;
 
 export interface PokerTableProps {
   key?: React.Key;
@@ -164,8 +168,11 @@ function SeatCards({
   fourColor: boolean;
   dim?: boolean;
 }) {
+  // A fully shown hand gets one SHOWN marker under the pair: per-card markers
+  // on overlapping cards print on top of each other.
+  const allShown = cards.length > 1 && cards.every((c) => c.public && !isHidden(c));
   return (
-    <span className="flex -space-x-2">
+    <span className={cn('relative flex -space-x-2', allShown && 'pb-1.5')}>
       {cards.map((c, i) => (
         <PlayingCard
           key={i}
@@ -173,11 +180,19 @@ function SeatCards({
           s={c.s}
           scale={scale}
           wild={c.wild}
-          isPublic={c.public}
+          isPublic={c.public && !allShown}
           fourColor={fourColor}
           dim={dim}
         />
       ))}
+      {allShown && (
+        <span
+          className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 rounded-full bg-[var(--c-ink)] text-[var(--c-paper)] px-1 fs-xs font-black leading-[12px] whitespace-nowrap"
+          title="Face-up for the whole table"
+        >
+          SHOWN
+        </span>
+      )}
     </span>
   );
 }
@@ -267,13 +282,25 @@ export function PokerTable({
   const [castFlow, setCastFlow] = useState<{ uid?: string; leader?: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [conceded, setConceded] = useState(false);
-  const [raiseTo, setRaiseTo] = useState(0);
+  const [raiseSel, setRaiseTo] = useState(0);
   const [bankMs, setBankMs] = useState(TIME_BANK_MS);
   const [now, setNow] = useState(0);
   const promptAt = useRef(0);
   /** When the human's current decision was first put to them (render-safe copy). */
   const [promptStart, setPromptStart] = useState(0);
   const narrow = useIsNarrow();
+  const feltRef = useRef<HTMLDivElement>(null);
+  const [feltH, setFeltH] = useState(0);
+  useEffect(() => {
+    const el = feltRef.current;
+    if (!el) return;
+    const measure = () => setFeltH(el.clientHeight);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [reduced] = useState(() => motionIsReduced(loadMotionMode()));
 
   const view = useMemo(() => viewFor(match, HUMAN), [match]);
@@ -347,31 +374,60 @@ export function PokerTable({
     return () => window.clearTimeout(t);
   }, [match, mult, speedMult, busted, over, dispatch]);
 
-  // Tick a clock for the turn timer and window countdowns.
+  // Tick a clock for the turn timer and the window / choice countdowns.
   useEffect(() => {
-    if (!myTurn && !myWindow) return;
+    if (!myTurn && !myWindow && !myChoice) return;
     const t = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(t);
-  }, [myTurn, myWindow]);
+  }, [myTurn, myWindow, myChoice]);
 
-  // Window auto-pass.
+  // Window auto-pass. Paused while the cast dialog is open (answering a cast
+  // with a Quick Event takes a target and maybe a second cost — the window
+  // must not close under the dialog), and the countdown restarts when it
+  // closes.
+  const [windowStart, setWindowStart] = useState(0);
+  const composing = !!castFlow;
   useEffect(() => {
-    if (!myWindow) return;
+    if (!myWindow || composing) return;
+    const start = Date.now();
+    const mark = window.setTimeout(() => {
+      setWindowStart(start);
+      setNow(Date.now());
+    }, 0);
     const t = window.setTimeout(() => humanAct({ type: 'pass', seat: HUMAN }), WINDOW_AUTOPASS_MS);
+    return () => {
+      window.clearTimeout(mark);
+      window.clearTimeout(t);
+    };
+  }, [myWindow, composing, match, humanAct]);
+
+  // A choice (Windfall, Pineapple, Redraw, Wild, Exhume) has no other way to
+  // time out, and the table waits on it: past the turn timer, make the pick a
+  // bot would (keep the best cards).
+  useEffect(() => {
+    if (!myChoice) return;
+    const t = window.setTimeout(() => {
+      const m = matchRef.current;
+      const a = botAction(viewFor(m, HUMAN), HUMAN, botRng(m.seed ^ m.handNo));
+      humanAct({ type: 'choose', seat: HUMAN, index: a?.type === 'choose' ? a.index : 0 });
+    }, CHOICE_TIMEOUT_MS);
     return () => window.clearTimeout(t);
-  }, [myWindow, match, humanAct]);
+  }, [myChoice, match, humanAct]);
 
   // Soft turn timer with a time bank: past it, check if free, else fold.
-  const turnLeft = myTurn ? TURN_TIMER_MS - (now - promptStart) : TURN_TIMER_MS;
+  // The overrun is measured from the ref the driver set for THIS decision —
+  // `now`/`promptStart` still hold the previous decision's times on the first
+  // render of a new turn, which could fold a fresh turn on the spot.
+  const turnLeft = myTurn ? TURN_TIMER_MS - Math.max(0, now - promptStart) : TURN_TIMER_MS;
   useEffect(() => {
     if (!myTurn) return;
-    const overrun = -turnLeft;
+    const overrun = Date.now() - promptAt.current - TURN_TIMER_MS;
     if (overrun > bankMs) {
       const o = betOptions(match, HUMAN);
       setBankMs(0);
       humanAct(o?.canCheck ? { type: 'check', seat: HUMAN } : { type: 'fold', seat: HUMAN });
     }
-  }, [myTurn, turnLeft, bankMs, match, humanAct]);
+  }, [myTurn, now, bankMs, match, humanAct]);
   const prevTurn = useRef(false);
   useEffect(() => {
     // Leaving a turn spends any overrun from the bank.
@@ -384,6 +440,13 @@ export function PokerTable({
 
   // ---- raise slider ---------------------------------------------------------
   const opts = myTurn ? betOptions(match, HUMAN) : null;
+  // The pot-limit range can move under a kept selection (a cast paid from your
+  // stack, a straddle) without a new bet to reset it, so clamp what is shown
+  // and sent — an out-of-range raise surfaced as a raw "Raise must be
+  // between…" notice.
+  const raiseTo = opts?.canRaise
+    ? Math.min(opts.maxRaiseTo, Math.max(opts.minRaiseTo, raiseSel))
+    : raiseSel;
   useEffect(() => {
     if (opts?.canRaise) setRaiseTo(opts.minRaiseTo);
     // Reset per decision only.
@@ -392,10 +455,22 @@ export function PokerTable({
 
   // ---- keyboard -------------------------------------------------------------
   useEffect(() => {
-    if (!myTurn || castFlow) return;
+    if (!myTurn || castFlow || showHistory || inspect) return;
     const onKey = (e: KeyboardEvent) => {
+      // Ctrl/Cmd+C is copy and Ctrl+R reload, not call and raise.
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      // Any modal on top (the concede confirm, an inspector) owns the keys.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      // Typing goes to the field; the raise slider keeps the hotkeys (R right
+      // after dragging it is the whole point).
+      const typing =
+        !!t &&
+        (t.tagName === 'TEXTAREA' ||
+          t.isContentEditable ||
+          (t.tagName === 'INPUT' &&
+            !['range', 'checkbox', 'radio', 'button'].includes((t as HTMLInputElement).type)));
+      if (typing) return;
       if (!opts) return;
       const k = e.key.toLowerCase();
       if (k === 'f') humanAct({ type: 'fold', seat: HUMAN });
@@ -405,7 +480,7 @@ export function PokerTable({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [myTurn, castFlow, opts, raiseTo, humanAct]);
+  }, [myTurn, castFlow, showHistory, inspect, opts, raiseTo, humanAct]);
 
   // ---- spotlight for new casts ---------------------------------------------
   const [spot, setSpot] = useState<CastRecord | null>(null);
@@ -482,8 +557,11 @@ export function PokerTable({
 
   // ---- derived display ------------------------------------------------------
   const positions = seatPositions(match.seats.length, narrow);
+  const boardTop = boardY(match.seats.length, narrow);
   const spriteScale = narrow ? 1 : 2;
-  const seatSpriteScale = 1;
+  // The board's cards double only when the felt is tall enough to hold them
+  // between the top seats and the pot/result (a 720px laptop is not).
+  const boardScale = !narrow && feltH >= BOARD_X2_MIN_FELT_PX ? 2 : 1;
   const board = h?.board ?? [];
   const myHole = h?.holes[HUMAN] ?? [];
   const location = h?.location.card ?? null;
@@ -535,9 +613,24 @@ export function PokerTable({
     <div
       className="relative w-full h-full overflow-hidden bg-[#0b1512] text-[var(--c-paper)] flex flex-col"
       data-testid="poker-table"
+      // Who the match is waiting on, for the UI driver (scripts/drive-table.ts):
+      // it fails a run where the human is owed a decision but has no control.
+      data-waiting={
+        over
+          ? 'over'
+          : waiting.kind === 'window'
+            ? `window:${waiting.seats.join(',')}`
+            : waiting.kind === 'bet' || waiting.kind === 'choice'
+              ? `${waiting.kind}:${waiting.seat}`
+              : waiting.kind
+      }
+      data-human-decision={myTurn || myWindow || myChoice ? '1' : undefined}
     >
       {/* Top bar */}
-      <div className="relative z-30 flex flex-wrap items-center gap-x-3 gap-y-1 bg-[var(--c-ink)] px-3 py-1.5 border-b-2 border-black">
+      <div
+        className="relative z-30 flex flex-wrap items-center gap-x-3 gap-y-1 bg-[var(--c-ink)] px-3 py-1.5 border-b-2 border-black"
+        data-coach-avoid
+      >
         <button
           onClick={concede}
           className="btn-pop heading-font fs-xs px-3 py-1 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
@@ -622,7 +715,7 @@ export function PokerTable({
           <span className="fs-xs font-bold">
             {LOCATION_TEMPLATES[rule.id].name}: {ruleText(rule)}
           </span>
-          {h?.location.owner !== undefined && (
+          {h?.location.owner !== undefined && !narrow && (
             <span className="fs-xs text-[var(--c-paper)]/60">
               — {view.seats[h.location.owner].name}&apos;s Location
             </span>
@@ -648,6 +741,7 @@ export function PokerTable({
       {/* Felt area */}
       <div className="relative flex-1 min-h-0">
         <div
+          ref={feltRef}
           className={cn(
             'absolute',
             narrow ? 'inset-x-2 top-2 bottom-2' : 'inset-x-[6%] top-[4%] bottom-[6%]',
@@ -658,21 +752,24 @@ export function PokerTable({
             reduced={reduced}
           />
 
-          {/* Board + pot */}
+          {/* Board + pot: the card row is centred on the layout's board line
+              and the pot / result hang below it, so a result banner never
+              pushes the board up into the seats. */}
           <div
-            className="absolute left-1/2 top-[44%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1.5"
+            className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5"
+            style={{ top: `${boardTop}%`, marginTop: -(60 * boardScale) / 2 }}
             data-coach="board"
           >
             <div className="flex items-center gap-1.5">
               {Array.from({ length: rule?.id === 'shortBoard' ? 4 : 5 }, (_, i) => {
                 const c = board[i];
                 return c ? (
-                  <PlayingCard key={i} r={c.r} s={c.s} scale={spriteScale} fourColor={fourColor} />
+                  <PlayingCard key={i} r={c.r} s={c.s} scale={boardScale} fourColor={fourColor} />
                 ) : (
                   <span
                     key={i}
                     className="inline-block rounded border-2 border-dashed border-white/20"
-                    style={{ width: 42 * spriteScale, height: 60 * spriteScale }}
+                    style={{ width: 42 * boardScale, height: 60 * boardScale }}
                   />
                 );
               })}
@@ -689,7 +786,7 @@ export function PokerTable({
               </div>
             )}
             {h && (
-              <div className="bg-black/70 rounded-full px-3 py-0.5 heading-font text-sm text-[var(--c-yellow)]">
+              <div className="bg-black/70 rounded-full px-3 py-0.5 heading-font text-sm text-[var(--c-yellow)] whitespace-nowrap">
                 POT <Chips chips={Math.max(0, potTotal(h))} />
                 {match.jackpot > 0 && (
                   <span className="fs-xs text-[var(--c-paper)] ml-2">
@@ -698,21 +795,19 @@ export function PokerTable({
                 )}
               </div>
             )}
-            {h?.done && h.result && <HandResultBanner match={view} />}
+            {h?.done && h.result && <HandResultBanner match={view} fourColor={fourColor} />}
           </div>
 
-          {/* Seats */}
+          {/* Seats (on a phone your own seat is the panel below the felt) */}
           {view.seats.map((s, i) => {
-            if (i === HUMAN && !narrow) return null;
-            const [x, y] = positions[i];
+            if (i === HUMAN) return null;
             return (
               <SeatBadge
                 key={i}
                 match={view}
                 seat={i}
-                x={x}
-                y={y}
-                scale={seatSpriteScale}
+                pos={positions[i]}
+                narrow={narrow}
                 fourColor={fourColor}
                 active={
                   (waiting.kind === 'bet' && waiting.seat === i) ||
@@ -723,12 +818,14 @@ export function PokerTable({
             );
           })}
 
-          {/* Bets in front of seats */}
+          {/* Bets in front of seats (a phone shows each bet on the seat's
+              plate / your panel instead — there is no room between seat and
+              pot, and the result banner would cover yours) */}
           {h &&
             view.seats.map((s, i) => {
               const bet = h.streetBet[i];
-              if (!bet) return null;
-              const [bx, by] = betPosition(positions[i]);
+              if (!bet || narrow) return null;
+              const [bx, by] = betPosition(positions[i], boardTop);
               return (
                 <span
                   key={i}
@@ -763,27 +860,22 @@ export function PokerTable({
         setRaiseTo={setRaiseTo}
         turnLeft={turnLeft}
         bankMs={bankMs}
-        windowLeft={myWindow ? WINDOW_AUTOPASS_MS - (now - promptStart) : 0}
+        windowLeft={
+          myWindow
+            ? composing
+              ? WINDOW_AUTOPASS_MS
+              : WINDOW_AUTOPASS_MS - (now - Math.max(windowStart, promptStart))
+            : 0
+        }
+        choiceLeft={myChoice ? CHOICE_TIMEOUT_MS - Math.max(0, now - promptStart) : 0}
+        narrow={narrow}
         act={humanAct}
         openCast={(uid) => setCastFlow({ uid })}
         openLeader={(i) => setCastFlow({ leader: i })}
         onInspect={setInspect}
+        onSkip={busted && !over ? skipToEnd : undefined}
         notice={notice}
       />
-
-      {busted && !over && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-40 bg-[var(--c-ink)] ink-border-md shadow-hard-black px-4 py-2 flex items-center gap-3">
-          <span className="heading-font text-sm text-[var(--c-yellow)]">
-            YOU&apos;RE OUT — WATCHING AT 4×
-          </span>
-          <button
-            onClick={skipToEnd}
-            className="btn-pop heading-font fs-xs px-3 py-1 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm"
-          >
-            SKIP TO RESULT ▸▸
-          </button>
-        </div>
-      )}
 
       {castFlow && h && (
         <CastDialog
@@ -807,7 +899,20 @@ export function PokerTable({
           rewardPending={rewardPending}
         />
       )}
-      {!over && <CoachOverlay stage={coachStage} />}
+      {/* The coach sits above everything (z-70), so it steps aside while a
+          modal (cast dialog, inspector, history) is up — faded out, not
+          unmounted (it keeps its place in the script) and not display:none
+          (it measures its own box to place itself). */}
+      {!over && (
+        <div
+          className={cn(
+            'transition-opacity',
+            (castFlow || inspect || showHistory) && 'opacity-0 pointer-events-none',
+          )}
+        >
+          <CoachOverlay stage={coachStage} />
+        </div>
+      )}
     </div>
   );
 }
@@ -845,9 +950,8 @@ function TopToggle({
 function SeatBadge({
   match,
   seat,
-  x,
-  y,
-  scale,
+  pos,
+  narrow,
   fourColor,
   active,
   onInspect,
@@ -855,9 +959,8 @@ function SeatBadge({
   key?: React.Key;
   match: Match;
   seat: number;
-  x: number;
-  y: number;
-  scale: number;
+  pos: SeatPos;
+  narrow: boolean;
   fourColor: boolean;
   active: boolean;
   onInspect: (d: CardDef) => void;
@@ -867,6 +970,8 @@ function SeatBadge({
   const folded = !!h && h.dealtIn[seat] && h.folded[seat];
   const allIn = !!h && inHand(h, seat) && s.stack === 0 && !h.done;
   const units = h?.units.filter((u) => u.seat === seat) ?? [];
+  const bet = narrow && h ? h.streetBet[seat] : 0;
+  const shown = !!h && h.holes[seat].length > 0 && h.holes[seat].every((c) => c.public);
   const tags: string[] = [];
   if (h?.button === seat) tags.push('D');
   if (h?.sbSeat === seat) tags.push('SB');
@@ -874,38 +979,51 @@ function SeatBadge({
   return (
     <div
       className={cn(
-        'absolute -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-0.5 w-[150px]',
+        'absolute -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center',
+        narrow ? 'w-[112px]' : 'w-[150px] gap-0.5',
         s.busted && 'opacity-40',
       )}
-      style={{ left: `${x}%`, top: `${y}%` }}
+      style={seatStyle(pos, narrow)}
       data-seat={seat}
     >
-      {h && h.dealtIn[seat] && !s.busted && (
-        <SeatCards cards={h.holes[seat]} scale={scale} fourColor={fourColor} dim={folded} />
+      {h && h.dealtIn[seat] && !s.busted ? (
+        <SeatCards cards={h.holes[seat]} scale={1} fourColor={fourColor} dim={folded} />
+      ) : (
+        // Keep the plate where it sits when the seat has cards.
+        <span aria-hidden style={{ height: 60 }} />
       )}
       <div
         className={cn(
-          'flex items-center gap-1.5 bg-black/80 ink-border-sm rounded-md px-1.5 py-1 w-full',
+          'relative flex items-center bg-black/80 ink-border-sm rounded-md w-full',
+          narrow ? 'gap-1 px-1 py-0.5' : 'gap-1.5 px-1.5 py-1',
+          // A phone tucks the plate over the foot of the card backs.
+          narrow && !shown && '-mt-3',
           active && 'ring-2 ring-[var(--c-yellow)] animate-pulse',
         )}
       >
-        <button onClick={() => onInspect(s.leader)} title={`${s.leader.name} — inspect Leader`}>
-          <LeaderArt def={s.leader} size={30} />
+        <button
+          onClick={() => onInspect(s.leader)}
+          title={`${s.leader.name} — inspect Leader`}
+          className="shrink-0"
+        >
+          <LeaderArt def={s.leader} size={narrow ? 22 : 30} />
         </button>
         <div className="min-w-0 flex-1 leading-tight">
           <div className="text-[11px] font-black truncate" title={s.name}>
             {s.name}
           </div>
-          <div className="flex items-center gap-1.5 text-[11px]">
+          <div className="flex items-center gap-1 text-[11px]">
             <Chips chips={s.stack} className="text-[var(--c-yellow)]" />
             <NerveMeter nerve={s.nerve} compact />
-            <span className="fs-xs text-white/60" title="Power cards in hand">
-              🂠{s.hand.length}
-            </span>
+            {!narrow && (
+              <span className="fs-xs text-white/60 whitespace-nowrap" title="Power cards in hand">
+                🂠{s.hand.length}
+              </span>
+            )}
           </div>
         </div>
         {tags.length > 0 && (
-          <span className="flex flex-col gap-0.5">
+          <span className="flex flex-col gap-0.5 shrink-0">
             {tags.map((t) => (
               <span
                 key={t}
@@ -920,7 +1038,19 @@ function SeatBadge({
           </span>
         )}
       </div>
-      <div className="flex flex-wrap justify-center gap-0.5 min-h-[14px]">
+      <div
+        className={cn(
+          'flex flex-wrap justify-center gap-0.5',
+          // On a phone the pills hang below the plate so they don't add to the
+          // seat's footprint.
+          narrow ? 'absolute top-full mt-0.5 w-[130px]' : 'min-h-[14px]',
+        )}
+      >
+        {bet > 0 && (
+          <span className="bg-[var(--c-yellow)] text-[var(--c-ink)] rounded-full px-1.5 ink-border-sm fs-xs font-black leading-[14px]">
+            ◎{fmtChips(bet)}
+          </span>
+        )}
         {s.busted && <StatusPill text="OUT" />}
         {folded && <StatusPill text="FOLDED" />}
         {allIn && <StatusPill text="ALL IN" tone="red" />}
@@ -977,10 +1107,13 @@ function HumanPanel({
   turnLeft,
   bankMs,
   windowLeft,
+  choiceLeft,
+  narrow,
   act,
   openCast,
   openLeader,
   onInspect,
+  onSkip,
   notice,
 }: {
   view: Match;
@@ -997,10 +1130,14 @@ function HumanPanel({
   turnLeft: number;
   bankMs: number;
   windowLeft: number;
+  choiceLeft: number;
+  narrow: boolean;
   act: (a: Action) => void;
   openCast: (uid: string) => void;
   openLeader: (i: number) => void;
   onInspect: (d: CardDef) => void;
+  /** Busted and spectating: fast-forward to the result. */
+  onSkip?: () => void;
   notice: string | null;
 }) {
   const h = view.hand;
@@ -1008,6 +1145,9 @@ function HumanPanel({
   const opts = myTurn ? betOptions(match, HUMAN) : null;
   const pending = h?.pending;
   const hole = h?.holes[HUMAN] ?? [];
+  // Shown at showdown: one marker by your name, not one per card (they
+  // collide on a phone's 1× cards).
+  const holeShown = hole.length > 1 && hole.every((c) => c.public && !isHidden(c));
   const live = !!h && inHand(h, HUMAN) && !h.done;
   const castable = (uid: string) => !!h && !h.done && canCast(view, HUMAN, uid).ok;
   const pot = h ? potTotal(h) : 0;
@@ -1029,106 +1169,150 @@ function HumanPanel({
   const timerSecs = Math.ceil(Math.max(0, turnLeft) / 1000);
   const inBank = turnLeft < 0;
 
-  return (
-    <div className="relative z-20 bg-[var(--c-ink)] border-t-2 border-black px-3 py-2 flex flex-wrap items-end gap-x-4 gap-y-2">
-      {/* Identity + hole cards */}
-      <div className="flex items-end gap-3" data-coach="hole">
-        <div className="flex flex-col items-center gap-1">
-          <button onClick={() => onInspect(me.leader)} title="Inspect your Leader">
-            <LeaderArt def={me.leader} size={40} />
+  const leaderRow = (
+    <div className="flex flex-wrap items-center gap-1.5" data-coach="leader">
+      {(me.leader.abilities ?? []).map((ab, i) => {
+        const ok = live && canUseLeader(view, HUMAN, i).ok;
+        return (
+          <button
+            key={i}
+            disabled={!ok}
+            onClick={() => openLeader(i)}
+            title={canUseLeader(view, HUMAN, i).why ?? ab.text}
+            className={cn(
+              'btn-pop text-[11px] font-black px-2 py-1 ink-border-sm text-left',
+              ok
+                ? 'bg-orange-500 text-black'
+                : 'bg-[var(--c-steel)] text-white/60 cursor-not-allowed',
+            )}
+          >
+            LEADER {ab.text}
           </button>
-          <NerveMeter nerve={me.nerve} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="heading-font text-[var(--c-yellow)]">{me.name}</span>
-            <Chips chips={me.stack} className="text-sm" />
-            {h?.button === HUMAN && <StatusPill text="DEALER" />}
-            {me.busted && <StatusPill text="OUT" tone="red" />}
-          </div>
-          <div className="flex items-end gap-1">
-            {hole.map((c, i) => (
-              <PlayingCard
-                key={i}
-                r={c.r}
-                s={c.s}
-                scale={spriteScale}
-                blinded={c.r === 0 && !!h && !h.folded[HUMAN]}
-                wild={c.wild}
-                isPublic={c.public}
-                fourColor={fourColor}
-                dim={!!h && h.folded[HUMAN]}
-                highlight={myChoice}
-                onClick={
-                  myChoice ? () => act({ type: 'choose', seat: HUMAN, index: i }) : undefined
-                }
-              />
-            ))}
-          </div>
-          {helperText && <div className="fs-xs font-bold text-emerald-300">{helperText}</div>}
-          {h && h.exclusions[HUMAN].length > 0 && (
-            <div className="fs-xs text-[var(--c-red)] font-bold">
-              Can&apos;t win with: {h.exclusions[HUMAN].map((c) => CATEGORY_NAMES[c]).join(', ')}
-            </div>
-          )}
-        </div>
-      </div>
+        );
+      })}
+      {h?.freePeeks.includes(HUMAN) && myTurn && (
+        <FreePeek view={view} onPeek={(t) => act({ type: 'freePeek', seat: HUMAN, target: t })} />
+      )}
+    </div>
+  );
 
-      {/* Powers + Leader */}
-      <div className="flex-1 min-w-[240px] flex flex-col gap-1" data-coach="powers">
-        <div className="fs-xs font-bold text-[var(--c-paper)]/60">
-          POWERS ({me.hand.length}/{MODES[view.mode].handCap}) · deck {me.drawPile.length} · discard{' '}
-          {me.discard.length}
-        </div>
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {me.hand.length === 0 && (
-            <span className="fs-xs text-[var(--c-paper)]/50">No power cards in hand.</span>
-          )}
-          {me.hand.map((p) => {
-            const ok = live && castable(p.uid);
-            return (
-              <div key={p.uid} className="relative shrink-0">
-                <CardFace
-                  def={p.def}
-                  size="compact"
-                  dimmed={!ok && live}
-                  onClick={ok ? () => openCast(p.uid) : () => onInspect(p.def)}
+  return (
+    <div
+      className={cn(
+        'relative z-20 bg-[var(--c-ink)] border-t-2 border-black flex flex-wrap items-end',
+        narrow ? 'px-2 py-1.5 gap-x-2 gap-y-1.5' : 'px-3 py-2 gap-x-4 gap-y-2',
+      )}
+      data-coach-avoid
+    >
+      {/* On a phone the hole cards and the powers share one row (micro
+          faces), the Leader buttons get their own, then the actions — the
+          desktop's three columns stacked would leave the felt a strip. */}
+      <div className={cn('flex items-end', narrow ? 'w-full gap-2' : 'contents')}>
+        {/* Identity + hole cards */}
+        <div
+          className={cn('flex items-end shrink-0', narrow ? 'gap-1.5' : 'gap-3')}
+          data-coach="hole"
+        >
+          <div className="flex flex-col items-center gap-1">
+            <button onClick={() => onInspect(me.leader)} title="Inspect your Leader">
+              <LeaderArt def={me.leader} size={narrow ? 30 : 40} />
+            </button>
+            <NerveMeter nerve={me.nerve} compact={narrow} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap text-xs">
+              <span className="heading-font text-[var(--c-yellow)]">{me.name}</span>
+              <Chips chips={me.stack} className="text-sm" />
+              {h?.button === HUMAN && <StatusPill text={narrow ? 'D' : 'DEALER'} />}
+              {me.busted && <StatusPill text="OUT" tone="red" />}
+              {holeShown && <StatusPill text="SHOWN" />}
+              {narrow && h && h.streetBet[HUMAN] > 0 && (
+                <span className="bg-[var(--c-yellow)] text-[var(--c-ink)] rounded-full px-1.5 ink-border-sm fs-xs font-black leading-[14px]">
+                  ◎{fmtChips(h.streetBet[HUMAN])}
+                </span>
+              )}
+            </div>
+            <div className="flex items-end gap-1">
+              {hole.map((c, i) => (
+                <PlayingCard
+                  key={i}
+                  r={c.r}
+                  s={c.s}
+                  scale={spriteScale}
+                  blinded={c.r === 0 && !!h && !h.folded[HUMAN]}
+                  wild={c.wild}
+                  isPublic={c.public && !holeShown}
+                  fourColor={fourColor}
+                  dim={!!h && h.folded[HUMAN]}
+                  highlight={myChoice}
+                  onClick={
+                    myChoice ? () => act({ type: 'choose', seat: HUMAN, index: i }) : undefined
+                  }
                 />
+              ))}
+            </div>
+            {helperText && (
+              <div className="fs-xs font-bold text-emerald-300 max-w-[180px]">{helperText}</div>
+            )}
+            {h && h.exclusions[HUMAN].length > 0 && (
+              <div className="fs-xs text-[var(--c-red)] font-bold max-w-[180px]">
+                Can&apos;t win with: {h.exclusions[HUMAN].map((c) => CATEGORY_NAMES[c]).join(', ')}
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5" data-coach="leader">
-          {(me.leader.abilities ?? []).map((ab, i) => {
-            const ok = live && canUseLeader(view, HUMAN, i).ok;
-            return (
-              <button
-                key={i}
-                disabled={!ok}
-                onClick={() => openLeader(i)}
-                title={canUseLeader(view, HUMAN, i).why ?? ab.text}
-                className={cn(
-                  'btn-pop text-[11px] font-black px-2 py-1 ink-border-sm text-left',
-                  ok
-                    ? 'bg-orange-500 text-black'
-                    : 'bg-[var(--c-steel)] text-white/60 cursor-not-allowed',
-                )}
-              >
-                LEADER {ab.text}
-              </button>
-            );
-          })}
-          {h?.freePeeks.includes(HUMAN) && myTurn && (
-            <FreePeek
-              view={view}
-              onPeek={(t) => act({ type: 'freePeek', seat: HUMAN, target: t })}
-            />
-          )}
+
+        {/* Powers (+ Leader on desktop) */}
+        <div
+          className={cn('flex flex-col gap-1', narrow ? 'flex-1 min-w-0' : 'flex-1 min-w-[240px]')}
+          data-coach="powers"
+        >
+          <div className="fs-xs font-bold text-[var(--c-paper)]/60 truncate">
+            POWERS ({me.hand.length}/{MODES[view.mode].handCap})
+            {narrow ? '' : ` · deck ${me.drawPile.length} · discard ${me.discard.length}`}
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {me.hand.length === 0 && (
+              <span className="fs-xs text-[var(--c-paper)]/50">No power cards in hand.</span>
+            )}
+            {me.hand.map((p) => {
+              const ok = live && castable(p.uid);
+              return (
+                <div key={p.uid} className="relative shrink-0">
+                  <CardFace
+                    def={p.def}
+                    size={narrow ? 'micro' : 'compact'}
+                    dimmed={!ok && live}
+                    onClick={ok ? () => openCast(p.uid) : () => onInspect(p.def)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          {!narrow && leaderRow}
         </div>
       </div>
+      {narrow && <div className="w-full">{leaderRow}</div>}
 
       {/* Actions */}
-      <div className="flex flex-col items-stretch gap-1 min-w-[280px]" data-coach="actions">
+      <div
+        className={cn('flex flex-col items-stretch gap-1', narrow ? 'w-full' : 'min-w-[280px]')}
+        data-coach="actions"
+      >
+        {onSkip && (
+          <div className="flex items-center justify-between gap-2 bg-black/60 ink-border-sm p-1.5">
+            <span className="heading-font text-sm text-[var(--c-yellow)]">
+              YOU&apos;RE OUT — WATCHING AT 4×
+            </span>
+            <button
+              onClick={onSkip}
+              data-primary="1"
+              className="btn-pop heading-font fs-xs px-3 py-1.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm whitespace-nowrap"
+            >
+              SKIP TO RESULT ▸▸
+            </button>
+          </div>
+        )}
         {notice && (
           <div className="fs-xs font-bold text-[var(--c-red)] bg-white/90 px-2 py-0.5 rounded">
             {notice}
@@ -1136,7 +1320,10 @@ function HumanPanel({
         )}
         {myChoice && pending?.kind === 'choice' && (
           <div className="heading-font text-xs text-[var(--c-yellow)]">
-            {choiceLabel[pending.choice]}
+            {choiceLabel[pending.choice]}{' '}
+            <span className="font-sans fs-xs font-bold normal-case text-[var(--c-paper)]/60">
+              auto-pick {Math.ceil(Math.max(0, choiceLeft) / 1000)}s
+            </span>
           </div>
         )}
         {myWindow && (
@@ -1151,6 +1338,7 @@ function HumanPanel({
             </div>
             <button
               onClick={() => act({ type: 'pass', seat: HUMAN })}
+              data-primary="1"
               className="btn-pop heading-font text-sm px-3 py-1.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm"
             >
               PASS
@@ -1180,12 +1368,14 @@ function HumanPanel({
                 <ActionButton
                   label="CHECK"
                   hotkey="C"
+                  primary
                   onClick={() => act({ type: 'check', seat: HUMAN })}
                 />
               ) : (
                 <ActionButton
                   label={`CALL ◎${fmtChips(opts.callAmount)}`}
                   hotkey="C"
+                  primary
                   onClick={() => act({ type: 'call', seat: HUMAN })}
                 />
               )}
@@ -1246,23 +1436,28 @@ function ActionButton({
   hotkey,
   onClick,
   tone = 'paper',
+  primary,
 }: {
   label: string;
   hotkey: string;
   onClick: () => void;
   tone?: 'paper' | 'ink' | 'yellow';
+  /** The coach callout keeps off the primary action. */
+  primary?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      data-primary={primary ? '1' : undefined}
       className={cn(
-        'btn-pop flex-1 heading-font text-sm px-2 py-2 ink-border-sm shadow-hard-black-xs whitespace-nowrap',
+        'btn-pop flex-1 min-w-0 heading-font text-sm leading-tight px-2 py-2 ink-border-sm shadow-hard-black-xs',
         tone === 'yellow' && 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
         tone === 'ink' && 'bg-[var(--c-steel)] text-[var(--c-paper)]',
         tone === 'paper' && 'bg-[var(--c-paper)] text-[var(--c-ink)]',
       )}
     >
-      {label} <span className="opacity-50 fs-xs">[{hotkey}]</span>
+      {label}{' '}
+      <span className="opacity-50 fs-xs hidden sm:inline whitespace-nowrap">[{hotkey}]</span>
     </button>
   );
 }
@@ -1289,6 +1484,17 @@ function FreePeek({ view, onPeek }: { view: Match; onPeek: (seat: number) => voi
 // ===========================================================================
 // Cast dialog: targets, second costs, Feint
 // ===========================================================================
+/** Escape closes a modal. */
+function useEscape(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+}
+
 function CastDialog({
   view,
   flow,
@@ -1315,6 +1521,7 @@ function CastDialog({
   const [targetCast, setTargetCast] = useState<number | null>(null);
   const [costs, setCosts] = useState<ExtraCost[]>([]);
   const [feint, setFeint] = useState(false);
+  useEscape(onClose);
   if (!def) return null;
   const isLeader = leaderIdx !== undefined;
   const check = isLeader ? canUseLeader(view, HUMAN, leaderIdx!) : canCast(view, HUMAN, inst!.uid);
@@ -1557,7 +1764,7 @@ function Spotlight({
   );
 }
 
-function HandResultBanner({ match }: { match: Match }) {
+function HandResultBanner({ match, fourColor }: { match: Match; fourColor: boolean }) {
   const h = match.hand!;
   const r = h.result!;
   return (
@@ -1565,7 +1772,7 @@ function HandResultBanner({ match }: { match: Match }) {
       {r.pots.map((p, i) => (
         <div key={i} className="text-xs font-bold">
           {p.winners.map((w) => match.seats[w].name).join(' & ')} win
-          {p.winners.length === 1 ? 's' : ''} ◎{fmtChips(p.amount)}
+          {p.winners.length === 1 && p.winners[0] !== HUMAN ? 's' : ''} ◎{fmtChips(p.amount)}
           {p.board ? ` (board ${p.board})` : ''}
           {!r.uncontested && p.winners[0] !== undefined && r.shown[p.winners[0]]
             ? ` — ${r.shown[p.winners[0]]}`
@@ -1579,7 +1786,7 @@ function HandResultBanner({ match }: { match: Match }) {
             return (
               <span key={i} className="flex items-center gap-1 fs-xs font-bold">
                 {match.seats[i].name}
-                <SeatCards cards={h.holes[i]} scale={1} fourColor={false} />
+                <SeatCards cards={h.holes[i]} scale={1} fourColor={fourColor} />
               </span>
             );
           })}
@@ -1620,6 +1827,7 @@ function LogPanel({ match, onClose }: { match: Match; onClose: () => void }) {
 }
 
 function HistoryModal({ match, onClose }: { match: Match; onClose: () => void }) {
+  useEscape(onClose);
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4"
@@ -1673,11 +1881,18 @@ function GameOver({
   rewardError?: string | null;
   rewardPending?: boolean;
 }) {
-  const order = standings(match);
-  const place =
-    conceded && match.phase !== 'over'
-      ? match.seats.filter((s) => !s.busted).length
-      : order.indexOf(HUMAN) + 1;
+  const live = standings(match);
+  const concededNow = conceded && match.phase !== 'over' && !match.seats[HUMAN].busted;
+  // Conceding takes the lowest place still open, whatever your stack — rank
+  // the list the same way, or a conceding chip leader is shown "1ST".
+  const place = concededNow ? match.seats.filter((s) => !s.busted).length : live.indexOf(HUMAN) + 1;
+  const order = concededNow
+    ? (() => {
+        const rest = live.filter((i) => i !== HUMAN);
+        rest.splice(place - 1, 0, HUMAN);
+        return rest;
+      })()
+    : live;
   const preview = placementReward(place, match.seats.length, match.mode);
   return (
     <div className="absolute inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">

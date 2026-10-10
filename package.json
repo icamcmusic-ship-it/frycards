@@ -22,6 +22,7 @@
     "sim:poker": "tsx scripts/simulate-poker.ts",
     "audit:cardface": "tsx scripts/audit-cardface.ts",
     "audit:screens": "tsx scripts/audit-meta-screens.ts",
+    "drive:table": "tsx scripts/drive-table.ts",
     "media:shrink-video": "tsx scripts/shrink-video-art.ts",
     "media:migrate": "tsx scripts/migrate-art.ts",
     "media:sync": "tsx scripts/migrate-art.ts sync",

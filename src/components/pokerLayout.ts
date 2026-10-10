@@ -40,38 +40,55 @@ const DESKTOP: Record<number, SeatPos[]> = {
   ],
 };
 
-/** Phone: opponents line the top two thirds in two columns. */
+/** Phone: the human's own seat is the panel under the felt (seat 0's entry
+ * only places its bet), so the opponents line the top of the felt in rows of
+ * up to three and the board sits below them (see BOARD_Y). */
 const NARROW: Record<number, SeatPos[]> = {
   2: [
     [50, 94],
-    [50, 10],
+    [50, 11],
   ],
   3: [
     [50, 94],
-    [25, 10],
-    [75, 10],
+    [27, 11],
+    [73, 11],
   ],
   4: [
     [50, 94],
-    [17, 12],
-    [50, 6],
-    [83, 12],
+    [17, 11],
+    [50, 11],
+    [83, 11],
   ],
   5: [
     [50, 94],
-    [16, 34],
-    [28, 7],
-    [72, 7],
-    [84, 34],
+    [17, 36],
+    [30, 11],
+    [70, 11],
+    [83, 36],
   ],
   6: [
     [50, 94],
-    [15, 40],
-    [15, 10],
-    [50, 5],
-    [85, 10],
-    [85, 40],
+    [17, 36],
+    [17, 11],
+    [50, 11],
+    [83, 11],
+    [83, 36],
   ],
+};
+
+/** Vertical centre of the board's card row, in % of the felt. The pot and the
+ * hand result hang below it, so it sits above the middle. */
+const BOARD_Y = {
+  desktop: 44,
+  narrow: { 2: 46, 3: 46, 4: 46, 5: 62, 6: 62 } as Record<number, number>,
+};
+
+/** Half a seat badge's footprint in px (cards + plate), so a seat placed at a
+ * percentage can be clamped inside the felt on a short or narrow screen
+ * instead of hanging off its edge or under the Location banner. */
+export const SEAT_HALF = {
+  desktop: { w: 75, h: 60 },
+  narrow: { w: 56, h: 42 },
 };
 
 export function seatPositions(seats: number, narrow: boolean): SeatPos[] {
@@ -79,7 +96,22 @@ export function seatPositions(seats: number, narrow: boolean): SeatPos[] {
   return (narrow ? NARROW : DESKTOP)[n];
 }
 
+export function boardY(seats: number, narrow: boolean): number {
+  const n = Math.max(2, Math.min(6, seats));
+  return narrow ? BOARD_Y.narrow[n] : BOARD_Y.desktop;
+}
+
+/** CSS `left`/`top` for a seat centre, clamped so the whole badge stays on
+ * the felt. */
+export function seatStyle(pos: SeatPos, narrow: boolean): { left: string; top: string } {
+  const { w, h } = narrow ? SEAT_HALF.narrow : SEAT_HALF.desktop;
+  return {
+    left: `clamp(${w}px, ${pos[0]}%, calc(100% - ${w}px))`,
+    top: `clamp(${h}px, ${pos[1]}%, calc(100% - ${h}px))`,
+  };
+}
+
 /** Where a seat's bet sits: part-way from the seat towards the pot. */
-export function betPosition(seat: SeatPos, k = 0.36): SeatPos {
-  return [seat[0] + (50 - seat[0]) * k, seat[1] + (46 - seat[1]) * k];
+export function betPosition(seat: SeatPos, potY = 46, k = 0.36): SeatPos {
+  return [seat[0] + (50 - seat[0]) * k, seat[1] + (potY - seat[1]) * k];
 }
