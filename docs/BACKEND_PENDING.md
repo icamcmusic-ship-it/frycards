@@ -103,16 +103,13 @@ backend; these are the server-side gaps it works around today.
      MTG-era mechanics (essence cost required; grit required on Units), so it
      refused every card `mechanicsFromDef` produces. It now requires a tier
      (1–5, in `might`) on powers and rules text on every card.
-   Verified live: each Deck Box Leader's grant builds a 25-card deck that
-   `poker_deck_modes` grades legal in Standard.
-3. **Retired helpers** (`20261011000000_retire_old_rule_helpers.sql`). The
-   `apply_card_upsert` half is **live** (2026-10-11): it now always stores the
-   retired `essence_cost` / `grit` / `resolve` as null. The other half —
-   dropping the unused MTG-era helpers `deck_card_cost(jsonb)` and
-   `rarity_copy_cap(text)` — is **not applied**: it needs the `DROP`
-   confirmation (see "Why some pieces are not live"). Nothing calls either
-   function, so leaving them is harmless; approve the prompt or run the file's
-   two `drop function` lines in the SQL editor to finish.
+     Verified live: each Deck Box Leader's grant builds a 25-card deck that
+     `poker_deck_modes` grades legal in Standard.
+3. **Retired helpers — applied live 2026-10-10** (`20261011000000_retire_old_rule_helpers.sql`):
+   `apply_card_upsert` always stores the retired `essence_cost` / `grit` /
+   `resolve` as null, and the unused MTG-era helpers `deck_card_cost(jsonb)`
+   and `rarity_copy_cap(text)` are dropped (the drop was confirmed by hand).
+   No server function applies the 60-card rules any more.
 4. **Bloom revive share — applied live 2026-10-10** (`20261010000001_bloom_revive.sql`):
    `poker_box_deck` counts Bloom as a revive, like the client builder.
 5. **`cards` table mechanics columns.** These are written by

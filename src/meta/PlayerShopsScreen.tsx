@@ -352,6 +352,7 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
                 <label className="flex items-center gap-1 fs-xs font-bold">
                   <input
                     type="checkbox"
+                    className="shrink-0"
                     checked={showSpent}
                     onChange={(e) => setShowSpent(e.target.checked)}
                   />
@@ -600,6 +601,7 @@ function QuickAddBar({
         <label className="flex items-center gap-1 fs-xs font-bold">
           <input
             type="checkbox"
+            className="shrink-0"
             checked={includeFoils}
             onChange={(e) => setIncludeFoils(e.target.checked)}
           />
@@ -810,6 +812,7 @@ function CardStackPicker({
             <label className="flex items-center gap-1 fs-xs font-bold">
               <input
                 type="checkbox"
+                className="shrink-0"
                 checked={foil}
                 onChange={(e) => {
                   setFoil(e.target.checked);
