@@ -18,7 +18,7 @@ describe('deck rules', () => {
 
   it('CPU decks keep a curve and their share of revives', () => {
     const rng = rngOn({ rng: 23 });
-    const revive = new Set(['Redraw', 'Windfall', 'Wild', 'Exhume']);
+    const revive = new Set(['Redraw', 'Windfall', 'Wild', 'Bloom', 'Exhume']);
     for (const leader of POOL_LEADERS) {
       for (const mode of MODE_IDS) {
         const cfg = MODES[mode];

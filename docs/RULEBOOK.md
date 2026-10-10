@@ -254,15 +254,19 @@ A **raise** also opens a response window for the other seats.
 - **Fizzle:** if the target folds before the cast resolves, it fizzles. **No
   refund.**
 - **Hostile powers** (Kindle, Bounty, Peek, Reveal, Mark, Needle, Venomous,
-  Lock, Entropic) target a seat. **Each seat can be the target of at most one
+  Lock, Entropic, Erode) target a seat. **Each seat can be the target of at most one
   hostile power per street**, and each hostile hit that lands costs the target
   1 nerve.
 
 ### 6.5 Leader abilities
 
-- Every Leader has two abilities: one **spends** 2–3 nerve (strong, a tier-4
-  effect from its first colour) and one **builds** +1 nerve (weaker, a tier-2
+- Every Leader has two abilities: one **spends** nerve (strong, a tier-4
+  effect from its first colour; 3 nerve if it rebuilds your hand — Windfall,
+  Wild, Bloom, Redraw, Exhume or Pass — otherwise 2) and one **builds** +1 nerve (weaker, a tier-2
   effect from its second colour, and it pays ½ or 1 chip unit into the pot).
+- A Leader ability is never one of the situational effects — Straddle, Rerun,
+  Burn, Cut, Toll, Bounty or Lock. Those barely move chips or cards on their
+  own, or only pay when someone else acts, so they stay on power cards.
 - **One Leader ability per hand**, on your own turn, outside any window. Not
   while Locked, and never while **tilted**.
 - A Leader ability is public like a cast and opens a response window (it can
@@ -276,10 +280,10 @@ N for numbered keywords, by tier. Chip amounts are in chip units.
 | Keyword   | ★1  | ★2  | ★3  | ★4  | ★5  |
 | --------- | --- | --- | --- | --- | --- |
 | Kindle    | ½   | 1   | 2   | 3   | 5   |
-| Tax       | ¼   | ½   | 1   | 1½  | 2   |
+| Tax       | ½   | 1   | 1½  | 3   | 4   |
 | Bounty    | 2   | 3   | 5   | 8   | 12  |
 | Foresee   | 1   | 2   | 3   | 4   | 5   |
-| Bulwark   | 1   | 2   | 3   | 5   | 8   |
+| Bulwark   | 1   | 2   | 3   | 4   | 6   |
 | Fuse      | 1   | 1   | 1   | 2   | 2   |
 | Peek      | 1   | 1   | 1   | 2   | 2   |
 | Toll      | ½   | 1   | 1½  | 2   | 3   |
@@ -287,7 +291,8 @@ N for numbered keywords, by tier. Chip amounts are in chip units.
 | Siphon    | ½   | 1   | 2   | 3   | 5   |
 | Blessed   | ½   | 1   | 2   | 3   | 5   |
 | Needle    | 1   | 1   | 2   | 2   | 3   |
-| Venomous  | 1   | 2   | 3   | 5   | 8   |
+| Venomous  | 1   | 1½  | 2½  | 4   | 6   |
+| Erode     | ½   | ½   | 1   | 1½  | 2   |
 | Burn      | 1   | 1   | 1   | 2   | 2   |
 
 Fuse and Needle count streets and nerve; Foresee, Peek and Burn count cards.
@@ -408,7 +413,7 @@ game with a new poker meaning. _Modifiers_ change how or when the effect lands.
 | Windfall   | effect   | Receive a third hole card, then discard down to your best two                   |
 | Foresee    | effect   | Privately look at the top N cards of the deck                                   |
 | Mimic      | effect   | Copy the effect of the last power cast this hand (not Mimic, Snuff or Call Out) |
-| Wild       | effect   | One of your hole cards (your choice) counts as any suit this hand               |
+| Wild       | effect   | A random one of your hole cards counts as any suit this hand                    |
 | Resonant ✔ | modifier | The effect resolves twice                                                       |
 
 ### Root — growth and endurance
@@ -416,6 +421,7 @@ game with a new poker meaning. _Modifiers_ change how or when the effect lands.
 | Keyword     | Type     | Meaning                                                                                                                   |
 | ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Bulwark ✔   | effect   | If you don't win this hand (folding included), take back up to N of your own chips from the pot                           |
+| Bloom       | effect   | **Gated.** When the next street is dealt, a random one of your hole cards (not an Ace) grows one rank higher; no effect on the river |
 | Rerun       | effect   | If the hand goes all-in before the river, the rest of the board is dealt twice and each pot splits between the two boards |
 | Thriving ✔  | modifier | On a Unit: the effect fires again at the start of every later street, N growing each time                                 |
 | Fuse        | modifier | The effect lands N streets later — everyone sees it coming; it fizzles if you have folded                                 |
@@ -463,6 +469,7 @@ game with a new poker meaning. _Modifiers_ change how or when the effect lands.
 | Lock       | effect   | **Gated, hostile.** The target cannot cast (or use its Leader) for the rest of this street                                |
 | Snuff      | effect   | **Gated.** Response only: cancel the cast being made (not your own, not a Warded one); a snuffed card goes to the discard |
 | Entropic ✔ | effect   | **Gated, hostile.** The target discards a random power card now and at the start of every later street                    |
+| Erode      | effect   | **Gated, hostile.** Take N from a target's stack                                                                          |
 | Warded ✔   | modifier | Can't be Snuffed or Called Out; a Warded Unit also stops Peek, Mark and Reveal targeting you                              |
 
 **Retired** with the old game: Aerial, Overrun, Swarmproof, Skywatch,

@@ -160,7 +160,7 @@ async function step(page: Page, rand: () => number, cov: Coverage): Promise<stri
     return 'cast-abandoned';
   }
 
-  // A hole-card choice (Windfall, Pineapple, Redraw, Wild, Exhume).
+  // A hole-card choice (Windfall, Pineapple, Redraw, Exhume).
   const choice = page.locator('[data-coach="hole"] button[data-card]');
   if (await choice.count()) {
     await choice.nth(Math.floor(rand() * (await choice.count()))).click();

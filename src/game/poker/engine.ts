@@ -154,7 +154,7 @@ export type Pending =
   | {
       kind: 'choice';
       seat: number;
-      choice: 'windfall' | 'pineapple' | 'redraw' | 'wild' | 'exhume';
+      choice: 'windfall' | 'pineapple' | 'redraw' | 'exhume';
       /** Hole cards to discard down to, for windfall / pineapple. */
       keep?: number;
       queue: number[];
@@ -231,6 +231,8 @@ export interface Hand {
   entropic: number[];
   gambit: { seat: number; owed: number }[];
   fused: { castId: number; streetsLeft: number }[];
+  /** Seats whose Bloom grows when the next street is dealt. */
+  bloom: number[];
   rerun: boolean;
   /** Shortest-stack buff on position-favouring Locations (first cast one step cheaper). */
   buffSeat: number | null;
@@ -618,6 +620,7 @@ function startHand(m: Match): void {
     entropic: [],
     gambit: [],
     fused: [],
+    bloom: [],
     rerun: false,
     buffSeat: null,
     buffUsed: false,
@@ -925,6 +928,18 @@ function goToStreet(m: Match, street: Street): void {
     }
   }
   h.fused = h.fused.filter((f) => f.streetsLeft > 0);
+  for (const seat of h.bloom.splice(0)) {
+    if (!inHand(h, seat)) continue;
+    // A random hole card that can still rise (an Ace can't).
+    const holes = h.holes[seat];
+    const can = holes.map((_, i) => i).filter((i) => holes[i].r < 14);
+    if (!can.length) continue;
+    const c = holes[can[R(m).int(can.length)]];
+    const before = cardLabel(c);
+    c.r += 1;
+    say(m, `${seatName(m, seat)}'s Bloom grows.`);
+    say(m, `Bloom: ${before} → ${cardLabel(c)}.`, seat);
+  }
 
   // Pineapple: everyone still in discards one after the flop.
   if (street === 'flop' && h.rule.id === 'pineapple') {
@@ -1947,6 +1962,12 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
       say(m, `Kindle drains ${fmtChips(paid)} from ${seatName(m, t)} into the pot.`);
       return;
     }
+    case 'Erode': {
+      if (t === null) return;
+      const took = transfer(m, t, seat, chips);
+      say(m, `Erode: ${s.name} takes ${fmtChips(took)} from ${seatName(m, t)}.`);
+      return;
+    }
     case 'Tax': {
       for (let i = 0; i < m.seats.length; i++) {
         if (i !== seat && inHand(h, i)) payIntoPot(m, i, chips);
@@ -1987,8 +2008,26 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
     case 'Mimic':
       // Mimic's record already holds the copied effect; nothing else to do.
       return;
-    case 'Wild':
-      queueChoice(m, { kind: 'choice', seat, choice: 'wild', queue: [] });
+    case 'Wild': {
+      // A random hole card not already wild — a chance at a flush, not a
+      // sure one (a hand-picked Wild turned a loser almost twice as often
+      // as any other revive).
+      const holes = h.holes[seat];
+      const can = holes.map((_, i) => i).filter((i) => !holes[i].wild);
+      if (!can.length) return;
+      holes[can[R(m).int(can.length)]].wild = true;
+      say(m, `${s.name} makes a hole card wild.`);
+      return;
+    }
+    case 'Bloom':
+      // Root grows over time: a random hole card rises when the next street
+      // is dealt, so a river Bloom has nothing left to grow into.
+      if (h.street === 'river') {
+        say(m, `${s.name}'s Bloom has no street left to grow into.`);
+        return;
+      }
+      h.bloom.push(seat);
+      say(m, `${s.name} plants a Bloom — a hole card grows on the next street.`);
       return;
     case 'Bulwark':
       h.bulwark[seat] += n;
@@ -2171,11 +2210,6 @@ function choose(m: Match, seat: number, index: number): void {
       h.muck.push(old);
       say(m, `${s.name} redraws a hole card.`);
       say(m, `Redraw: ${cardLabel(old)} → ${cardLabel(holes[index])}.`, seat);
-      break;
-    }
-    case 'wild': {
-      holes[index].wild = true;
-      say(m, `${s.name} makes a hole card wild.`);
       break;
     }
     case 'exhume': {

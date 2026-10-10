@@ -209,6 +209,8 @@ function powerValue(v: Match, seat: number, def: CardDef, r: Read): number {
       return 0.25 * r.potBB + 0.4;
     case 'Kindle':
       return nBB * (0.4 + r.equity);
+    case 'Erode':
+      return nBB;
     case 'Tax':
       return nBB * r.opponents * r.equity;
     case 'Siphon':
@@ -220,9 +222,19 @@ function powerValue(v: Match, seat: number, def: CardDef, r: Read): number {
       return nBB * (r.equity < 0.6 ? 0.5 : 0.1);
     case 'Redraw':
     case 'Windfall':
-    case 'Wild':
     case 'Exhume':
       return pre ? losing * 2 : losing * r.potBB * 0.6;
+    case 'Wild':
+    case 'Bloom': {
+      // Unlike a redraw these change a card in place, so they only help
+      // when the change itself makes a better hand (Wild: a flush or a
+      // flush draw; Bloom: a higher category). Otherwise nerve is wasted.
+      // Bloom grows on the next street: nothing to grow into on the river.
+      if (eff.kw === 'Bloom' && h.street === 'river') return 0;
+      const gain = inPlaceGain(v, seat, eff.kw);
+      if (gain <= 0) return 0;
+      return pre ? 0.3 : (losing + 0.15 * gain) * r.potBB * 0.6;
+    }
     case 'Foresee':
       return pre ? 0.2 : 0.5;
     case 'Venomous':
@@ -256,6 +268,58 @@ function powerValue(v: Match, seat: number, def: CardDef, r: Read): number {
   }
 }
 
+/** How much a Wild or a Bloom would lift this seat's hand: the expected gain
+ * in hand category or flush progress over the random card it lands on, 0
+ * when it does nothing. */
+function inPlaceGain(v: Match, seat: number, kw: 'Wild' | 'Bloom'): number {
+  const h = v.hand!;
+  const hole = h.holes[seat].filter((c) => !isHidden(c));
+  const board = visibleBoard(v);
+  if (hole.length === 0 || board.length < 3) return 0;
+  const cat = (cards: Card[]) => evaluate(cards).category;
+  const now = cat([...hole, ...board]);
+  if (kw === 'Bloom') {
+    // The card is random: the average gain over the cards that can rise.
+    const can = hole.filter((c) => c.r < 14);
+    if (!can.length) return 0;
+    let sum = 0;
+    for (const pick of can) {
+      const up = hole.map((c) => (c === pick ? { ...c, r: c.r + 1 } : c));
+      sum += Math.max(0, cat([...up, ...board]) - now);
+    }
+    return sum / can.length;
+  }
+  // Wild lands on a random hole card: average, over the cards it could
+  // land on, the category gain (a flush made) or, with cards still to come,
+  // a four-flush that wasn't there.
+  const can = hole.filter((c) => !c.wild);
+  if (!can.length) return 0;
+  const flushDraw = (cards: Card[]) => {
+    const wilds = cards.filter((c) => c.wild).length;
+    return (
+      Math.max(...[0, 1, 2, 3].map((s) => cards.filter((c) => !c.wild && c.s === s).length)) + wilds
+    );
+  };
+  let sum = 0;
+  for (const pick of can) {
+    const up = hole.map((c) => (c === pick ? { ...c, wild: true } : c));
+    const made = Math.max(0, cat([...up, ...board]) - now);
+    const draw =
+      board.length < 5 &&
+      now < 5 &&
+      flushDraw([...up, ...board]) >= 4 &&
+      flushDraw([...hole, ...board]) < 4
+        ? 1
+        : 0;
+    sum += Math.max(made, draw);
+  }
+  return sum / can.length;
+}
+
+/** A hole card already blinded. The seat's own view shows it as a hidden
+ * placeholder without the `blinded` flag, so check both. */
+const isBlinded = (c: Card & { blinded?: boolean }) => !!c.blinded || isHidden(c);
+
 function chooseExtraCosts(v: Match, seat: number, uid: string, count: number): ExtraCost[] | null {
   const h = v.hand!;
   const out: ExtraCost[] = [];
@@ -272,9 +336,11 @@ function chooseExtraCosts(v: Match, seat: number, uid: string, count: number): E
   while (out.length < count) {
     if (prefer.length) out.push({ kind: 'exclude', category: prefer.shift()! });
     else if (shedIdx < hand.length) out.push({ kind: 'shed', uid: hand[shedIdx++].uid });
-    else if (debuff < h.holes[seat].length && !h.holes[seat][debuff].blinded)
+    else {
+      while (debuff < h.holes[seat].length && isBlinded(h.holes[seat][debuff])) debuff++;
+      if (debuff >= h.holes[seat].length) return null;
       out.push({ kind: 'debuff', hole: debuff++ });
-    else return null;
+    }
   }
   return out;
 }
@@ -368,12 +434,6 @@ function chooseCard(v: Match, seat: number): number {
     case 'exhume':
       // Replace the card contributing least.
       return opts.reduce((a, b) => (scoreWithout(b) > scoreWithout(a) ? b : a), opts[0]);
-    case 'wild': {
-      // The card whose suit is rarest among our cards benefits most.
-      const suits = [...hole, ...board].map((c) => c.s);
-      const count = (s: number) => suits.filter((x) => x === s).length;
-      return opts.reduce((a, b) => (count(hole[b].s) < count(hole[a].s) ? b : a), opts[0]);
-    }
   }
   return 0;
 }

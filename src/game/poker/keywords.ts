@@ -29,6 +29,7 @@ export type EffectKeyword =
   | 'Foresee'
   | 'Mimic'
   | 'Wild'
+  | 'Bloom'
   | 'Bulwark'
   | 'Rerun'
   | 'Cut'
@@ -48,7 +49,8 @@ export type EffectKeyword =
   | 'Burn'
   | 'Lock'
   | 'Snuff'
-  | 'Entropic';
+  | 'Entropic'
+  | 'Erode';
 
 export type ModifierKeyword =
   | 'Roulette'
@@ -187,10 +189,22 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
     'cast',
     () => 'Cast a copy of the last power cast at the table (full faces are public).',
   ),
-  Wild: E('Wild', 'Tide', 'self', () => 'One of your hole cards counts as any suit this hand.'),
+  Wild: E(
+    'Wild',
+    'Tide',
+    'self',
+    () => 'A random one of your hole cards counts as any suit this hand.',
+  ),
   Resonant: M('Resonant', 'Tide', () => 'The effect resolves twice.'),
 
   // -- Root: growth and endurance --
+  Bloom: E(
+    'Bloom',
+    'Root',
+    'self',
+    () => 'On the next street, a random one of your hole cards grows one rank higher.',
+    { gated: true },
+  ),
   Thriving: M(
     'Thriving',
     'Root',
@@ -321,6 +335,10 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
     stackable: true,
     fusable: true,
   }),
+  Erode: E('Erode', 'Void', 'opponent', (n) => `Take ${n} from a target's stack.`, {
+    gated: true,
+    hostile: true,
+  }),
   Lock: E('Lock', 'Void', 'opponent', () => 'The target cannot cast for the rest of this street.', {
     gated: true,
     hostile: true,
@@ -405,6 +423,7 @@ export const CHIP_KEYWORDS = new Set<Keyword>([
   'Siphon',
   'Blessed',
   'Venomous',
+  'Erode',
 ]);
 
 /** N for a keyword at a tier (units for chip keywords). */

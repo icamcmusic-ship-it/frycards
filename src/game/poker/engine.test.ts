@@ -212,6 +212,45 @@ describe('casting', () => {
     expect(m.seats[0].stack).toBe(stack - 1 * UNIT);
   });
 
+  it('Bloom grows a random hole card on the next street; Aces never rise', () => {
+    const m = rigHand(table(2), { button: 0, holes: ['9h As', 'Ac Ad'] });
+    const pass = () => {
+      while (waitingOn(m).kind === 'window')
+        act(m, { type: 'pass', seat: (waitingOn(m) as { seats: number[] }).seats[0] });
+    };
+    const uid = give(m, 0, power({ kw: 'Bloom' }, { tier: 2, colors: ['Root'] }));
+    expect(m.hand!.toAct).toBe(0);
+    act(m, { type: 'cast', seat: 0, uid });
+    pass();
+    // Nothing yet: it grows when the flop is dealt.
+    expect(m.hand!.holes[0].map((c) => c.r)).toEqual([9, 14]);
+    expect(m.hand!.bloom).toEqual([0]);
+    while (m.hand!.street === 'preflop') {
+      const w = waitingOn(m);
+      if (w.kind === 'bet') {
+        const o = betOptions(m, w.seat)!;
+        act(m, { type: o.canCheck ? 'check' : 'call', seat: w.seat });
+      } else if (w.kind === 'window') pass();
+      else break;
+    }
+    expect(m.hand!.holes[0].map((c) => c.r)).toEqual([10, 14]);
+    expect(m.hand!.bloom).toEqual([]);
+  });
+
+  it("Erode moves chips from the target's stack to the caster", () => {
+    const m = rigHand(table(3), { button: 0 });
+    const uid = give(m, 0, power({ kw: 'Erode', n: 1 }, { tier: 3, colors: ['Void'] }));
+    const before = [m.seats[0].stack, m.seats[1].stack];
+    const total = chipsInPlay(m);
+    act(m, { type: 'cast', seat: 0, uid, target: 1 });
+    while (waitingOn(m).kind === 'window')
+      act(m, { type: 'pass', seat: (waitingOn(m) as { seats: number[] }).seats[0] });
+    const paid = castCost(m, 0, power({ kw: 'Erode', n: 1 }, { tier: 3 })).chips;
+    expect(m.seats[1].stack).toBe(before[1] - 1 * UNIT);
+    expect(m.seats[0].stack).toBe(before[0] + 1 * UNIT - paid);
+    expect(chipsInPlay(m)).toBe(total);
+  });
+
   it('Snuff cancels a cast in its response window', () => {
     const m = rigHand(table(3), { button: 0 });
     const snuff = give(

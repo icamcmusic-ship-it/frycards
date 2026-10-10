@@ -23,10 +23,11 @@
  *     bluff rate and tightness; that measures the bot's style, not the deck),
  *     heads-up round robin in duplicate format (each deal played twice, seats
  *     swapped). The best and worst decks by round-robin win rate then play a
- *     dedicated duplicate series. Target: the best deck wins ≤ 55% of it.
+ *     dedicated duplicate series three times the suite size. Target: the best
+ *     deck wins ≤ 55% of it.
  *
  *  3. REVIVAL RATE — over a 6-seat equal-skill suite, every RESOLVED revive
- *     cast (effect Redraw / Windfall / Wild / Exhume, from a power or a Leader
+ *     cast (effect Redraw / Windfall / Wild / Bloom / Exhume, from a power or a Leader
  *     ability). Target ≈ 1 in 8 of them turn a losing hand into a winner.
  *     How it is measured (an approximation, by design): the caster's hole
  *     cards are snapshotted the moment the cast is made. At the end of the
@@ -113,7 +114,7 @@ const NAIVE = 0.2;
 const EVEN = 0.6;
 /** Deck spread compares decks, so both seats play the same style. */
 const NEUTRAL_PERSONA = { bluff: 0.12, tightness: 0.5, powerUse: 0.55, skill: EVEN };
-const REVIVE = new Set(['Redraw', 'Windfall', 'Wild', 'Exhume']);
+const REVIVE = new Set(['Redraw', 'Windfall', 'Wild', 'Bloom', 'Exhume']);
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -304,7 +305,10 @@ const best = deckRows[0];
 const worst = deckRows[deckRows.length - 1];
 let bestWins = 0;
 let series = 0;
-for (let k = 0; k < MATCHES / 2; k++) {
+// Three times the suite size: at 200 a series carries about ±3.5 points of
+// noise, too wide to call a 55% line (the same pairing read 55.5% at 200 and
+// 52.3% at 1,200).
+for (let k = 0; k < (3 * MATCHES) / 2; k++) {
   for (const w of duplicate(best.i, worst.i, ((SEED + 99991) * 31 + k * 7) | 0 || 1)) {
     if (w < 0) continue;
     series++;
@@ -381,9 +385,12 @@ for (let i = 0; i < MATCHES; i++) {
       const r = h.result!;
       const won = (seat: number) => r.winners.includes(seat);
       // Location fairness: the dealer (button) seat, when dealt in.
+      // A split counts as a share (Double Board and Rerun split most pots;
+      // counting any share as a whole win made those rules look
+      // dealer-favoured).
       if (h.dealtIn[h.button]) {
-        const w = won(h.button);
-        dealerAll = { n: dealerAll.n + 1, w: dealerAll.w + (w ? 1 : 0) };
+        const w = won(h.button) ? 1 / r.winners.length : 0;
+        dealerAll = { n: dealerAll.n + 1, w: dealerAll.w + w };
         bump(dealerByRule, h.rule.id, w);
         bump(dealerByCard, h.location.card.id, w);
         nameOf.set(h.location.card.id, h.location.card.name);

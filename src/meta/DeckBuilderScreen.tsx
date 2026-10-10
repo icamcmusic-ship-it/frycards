@@ -931,7 +931,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 <th className="text-left font-bold">By hand</th>
                 <th
                   className="text-right font-bold"
-                  title="A chips-only Redraw, Windfall, Wild or Exhume"
+                  title="A chips-only Redraw, Windfall, Wild, Bloom or Exhume"
                 >
                   Revive
                 </th>

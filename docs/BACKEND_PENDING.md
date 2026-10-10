@@ -105,7 +105,8 @@ backend; these are the server-side gaps it works around today.
      (1–5, in `might`) on powers and rules text on every card.
    Verified live: each Deck Box Leader's grant builds a 25-card deck that
    `poker_deck_modes` grades legal in Standard.
-3. *(merged into 2.)*
+3. **Bloom revive share — applied live 2026-10-10** (`20261010000001_bloom_revive.sql`):
+   `poker_box_deck` counts Bloom as a revive, like the client builder.
 4. **`cards` table mechanics columns.** These are written by
    `scripts/sync-cards-db.ts` through `mechanicsFromDef` (`src/meta/submissions.ts`):
    `might` = tier, `keywords` = poker keywords, and `essence_types` = colours
@@ -116,7 +117,12 @@ backend; these are the server-side gaps it works around today.
    keywords / tier / subtype / rules text / colours matching the local
    derivation exactly; no card changed colour. The previous MTG-era values are
    kept in `public.cards_mechanics_backup_20261009` (RLS on, no player access)
-   should a rollback ever be needed. `pick_deck_bucket` now orders "cheap
+   should a rollback ever be needed.
+   **Resynced again 2026-10-10** for Bloom, Erode and the Leader / number
+   changes (v35.2): 69 rows changed, mechanics columns only. All 297 rows
+   verified against the local derivation by one combined md5
+   (`95a93fa5d07925aa11616d7b59d24b73`). The values from before this resync
+   are in `public.cards_mechanics_backup_20261010` (RLS on). `pick_deck_bucket` now orders "cheap
    first" by tier (see 2.).
 5. **`submit_card` has no star-hint parameter.** The Creator sets a submitted
    card's tier at review.

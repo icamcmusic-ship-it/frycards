@@ -109,7 +109,7 @@ export const THEMES: ThemeProfile[] = [
     id: 'revive',
     label: 'Revive',
     wants: 'rescue a bad deal of hole cards',
-    keywords: ['Redraw', 'Windfall', 'Wild', 'Exhume'],
+    keywords: ['Redraw', 'Windfall', 'Wild', 'Bloom', 'Exhume'],
   },
   {
     id: 'economy',
