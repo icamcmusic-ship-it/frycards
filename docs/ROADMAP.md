@@ -14,15 +14,46 @@
 
 ## Poker follow-ups (2026-10)
 
-- **Balance pass against the spec's four targets.** `npm run sim:poker` prints
-  all four (`--strict` exits 1 on a miss). Current read: **revival rate** (≈ 1 in
-  8 revive casts turn a losing hand) and **Location fairness** (dealer win rate
-  within 2 points under every Location) **pass**. **Skill gap** and **deck
-  spread** **miss**. The skilled bot wins about 16–22% of 6-seat freezeouts
-  against five naive bots, against a ≥ 60% target (1 in 6 would mean no edge at
-  all). The best deck's head-to-head series is above the 55% ceiling. The
-  skill gap is a bot-quality problem as much as a card problem. Decide which
-  of the two the target is measuring before spending card levers on it.
+- **Balance pass against the spec's four targets (2026-10-10).** `npm run
+  sim:poker` prints all four (`--strict` exits 1 on a miss). Over seeds 1337,
+  4242 and 99: **skill gap**, **revival rate** and **Location fairness** pass
+  on every seed; **deck spread** passes on one (46.5%) and misses on two
+  (55.5%, 61%).
+  - **Skill gap** is measured as the spec words it ("a skilled bot beats a
+    naive bot"): the skilled seat finishes above a given naive seat, 61–65%.
+    Read as "wins the whole 6-seat table" the 60% target is unreachable: a bot
+    that sees every hole card wins only ~55% of Quick tables (~59% Standard,
+    ~74% Deep), because the blind clock and the cap leave few hands. The
+    outright win rate is still printed (17–21%; no edge = 16.7%). Moving it
+    needs a slower blind clock (`blindGrowth` ×1.25 lets the see-everything
+    bot reach ~70% in Standard), which changes match length: a product call.
+  - **Bots.** Skilled bots now read hands: an opponent's raise, bet size and
+    calls narrow the range their equity is priced against (`rangeFloors` in
+    `bot.ts`; `handStrength` / `floors` in `evaluator.ts`; depth
+    `BOT.readDepth` = 0.5, since full reading folds its way to second place on
+    the clock). This fixes calling big river bets with bottom pair; it does
+    not measurably move the bot-vs-bot numbers. Rerun is cast when behind
+    with the stack at risk instead of never.
+  - **CPU decks.** `buildDeck` keeps a curve (≤ 30% tier 3, ≤ 12.5% tier 4
+    before its last fill pass), gives every deck its share of revives (15%;
+    Redraw is open to every colour) and at most one situational card (Rerun /
+    Snuff / Call Out). How many revives a random fill drew had decided most
+    of the gap between CPU decks.
+  - **Measurement.** Deck spread gives both seats the same neutral bot
+    persona (colour personas made Void Leaders look like weak decks) and
+    plays duplicate series (each deal twice, seats swapped). Band flags use a
+    Bonferroni-corrected z, so one of 18 fair Locations no longer flags by
+    chance.
+  - **Deck spread, still open — a card-data call.** What is left is Leader
+    abilities. Heads-up, Sentinel of the Nether Pit vs Avatar of the Abyss is
+    41.5%; with both Leaders' abilities removed it is 48.3%. Sentinel's
+    abilities (−3 Straddle, +1 Toll 1) are worth about half a point, while
+    Avatar's −3 Venomous 5 is worth about six; powers and Locations barely
+    move it. Fixes, each of which changes live card text (re-run
+    `scripts/sync-cards-db.ts` after): trim the tier-4/5 `TIER_N` numbers for
+    Venomous and Bounty, or keep Straddle and Rerun out of the Leader minus
+    pool (`leaderEffects` in `cardpool.ts`; this re-picks every Ember and Root
+    Leader's ability).
 - **PvP.** `docs/PVP_DESIGN.md` predates poker. Its transport and
   hidden-information concerns carry over, and poker makes them sharper: hole
   cards must never reach another client. The engine already renders every seat

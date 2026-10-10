@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { attainableCategories, describeHand, equity, evaluate, preflopStrength } from './evaluator';
+import {
+  attainableCategories,
+  describeHand,
+  equity,
+  evaluate,
+  handStrength,
+  preflopStrength,
+} from './evaluator';
 import { rngOn } from './rng';
 import { cards } from './testkit';
 
@@ -79,5 +86,29 @@ describe('equity', () => {
   it('pre-flop strength orders hands sensibly', () => {
     expect(preflopStrength(cards('As Ah'))).toBeGreaterThan(preflopStrength(cards('Ks Qs')));
     expect(preflopStrength(cards('Ks Qs'))).toBeGreaterThan(preflopStrength(cards('7d 2c')));
+  });
+});
+
+describe('hand reading', () => {
+  it('handStrength ranks made hands, draws and air on the board', () => {
+    const board = cards('Kd 7s 2c');
+    const top = handStrength(cards('Ks Qh'), board);
+    const bottom = handStrength(cards('2s Ah'), board);
+    const set = handStrength(cards('7h 7d'), board);
+    const air = handStrength(cards('9h 4d'), board);
+    expect(set).toBeGreaterThan(top);
+    expect(top).toBeGreaterThan(bottom);
+    expect(bottom).toBeGreaterThan(air);
+    // A flush draw reads as a real holding, ahead of air.
+    expect(handStrength(cards('Ad 9d'), cards('Kd 7d 2c'))).toBeGreaterThan(air);
+  });
+
+  it('a read range makes a bluff-catcher worse against a bet', () => {
+    const rng = rngOn({ rng: 11 });
+    const spot = { hole: cards('Js 3h'), board: cards('Jd 9c 5h 2s'), boardSize: 5, trials: 800 };
+    const vsAny = equity({ ...spot, opponents: [[]], rng });
+    const vsBet = equity({ ...spot, opponents: [[]], floors: [0.6], rng });
+    expect(vsAny).toBeGreaterThan(0.6);
+    expect(vsBet).toBeLessThan(vsAny - 0.15);
   });
 });

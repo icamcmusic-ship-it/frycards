@@ -153,6 +153,12 @@ function defaultLocation(identity: Color[]): CardDef {
  * match and every CPU seat use this. Tier mix follows the card pyramid, with
  * a light preference for the Leader's own colours over colourless cards.
  */
+/** Effects that only pay off in a narrow spot (an all-in before the river, a
+ * cast to answer, a Feint to call); a CPU deck carries at most one. */
+const SITUATIONAL = new Set<string>(['Rerun', 'Snuff', 'Call Out']);
+/** Effects that rebuild a losing hand (the spec's revive target). */
+const REVIVES = new Set<string>(['Redraw', 'Windfall', 'Wild', 'Exhume']);
+
 export function buildDeck(leader: CardDef, mode: ModeConfig, rng: Rng, name?: string): DeckDef {
   const identity = cardColors(leader);
   const legal = (d: CardDef) => isColorLegal(d, identity);
@@ -173,6 +179,42 @@ export function buildDeck(leader: CardDef, mode: ModeConfig, rng: Rng, name?: st
     Event: mode.powers,
   };
   const typeCount: Record<string, number> = { Unit: 0, Item: 0, Event: 0 };
+  // A playable curve: mostly cheap casts, a few expensive ones. A random
+  // fill can hand one Leader a deck of tier-4 cards it can rarely afford,
+  // which is a deck-spread gap that has nothing to do with the Leader.
+  const tierCap: Record<number, number> = {
+    3: Math.floor(mode.powers * 0.3),
+    4: Math.max(1, Math.floor(mode.powers * 0.125)),
+  };
+  const tierCount: Record<number, number> = {};
+  let situational = 0;
+  let revives = 0;
+  // Every deck gets its share of revives (Redraw is open to every colour).
+  // Without this, how many a random fill happened to draw decided most of
+  // the gap between the best and worst CPU deck.
+  const reviveTarget = Math.round(mode.powers * 0.15);
+  const isRevive = (d: CardDef) => !!d.effect && REVIVES.has(d.effect.kw);
+  const add = (d: CardDef) => {
+    const tier = d.tier ?? 1;
+    powers.push(d);
+    counts.set(d.id, (counts.get(d.id) ?? 0) + 1);
+    typeCount[d.type]++;
+    tierCount[tier] = (tierCount[tier] ?? 0) + 1;
+    if (d.effect && SITUATIONAL.has(d.effect.kw)) situational++;
+    if (isRevive(d)) revives++;
+    if (tier === 5) tier5++;
+  };
+  // Cheapest revives first, one copy each, then a second copy.
+  const reviveCards = candidates.filter(isRevive).sort((a, b) => (a.tier ?? 1) - (b.tier ?? 1));
+  for (let copy = 1; copy <= mode.maxCopies && revives < reviveTarget; copy++)
+    for (const d of reviveCards) {
+      if (revives >= reviveTarget) break;
+      if ((counts.get(d.id) ?? 0) >= copy) continue;
+      const tier = d.tier ?? 1;
+      if (tier === 5 && tier5 >= mode.maxTier5) continue;
+      if ((tierCount[tier] ?? 0) >= (tierCap[tier] ?? Infinity)) continue;
+      add(d);
+    }
   for (let pass = 0; pass < 3 && powers.length < mode.powers; pass++) {
     for (const d of candidates) {
       if (powers.length >= mode.powers) break;
@@ -180,10 +222,15 @@ export function buildDeck(leader: CardDef, mode: ModeConfig, rng: Rng, name?: st
       if (n >= Math.min(pass + 1, mode.maxCopies)) continue;
       if (d.tier === 5 && tier5 >= mode.maxTier5) continue;
       if (pass === 0 && typeCount[d.type] >= want[d.type]) continue;
-      powers.push(d);
-      counts.set(d.id, n + 1);
-      typeCount[d.type]++;
-      if (d.tier === 5) tier5++;
+      // The curve, the revive share and the one-situational-card rule give
+      // way on the last pass so a small colour pool still fills the deck.
+      if (pass < 2) {
+        const tier = d.tier ?? 1;
+        if ((tierCount[tier] ?? 0) >= (tierCap[tier] ?? Infinity)) continue;
+        if (d.effect && SITUATIONAL.has(d.effect.kw) && situational >= 1) continue;
+        if (isRevive(d) && revives >= reviveTarget) continue;
+      }
+      add(d);
     }
   }
   return { name: name ?? `${leader.name}'s deck`, leader, location, powers };

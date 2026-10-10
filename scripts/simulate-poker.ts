@@ -8,14 +8,22 @@
  * targets, then flags every card, Leader and Location outside its band.
  *
  *  1. SKILL GAP — one skilled bot (persona skill 0.9) against five naive bots
- *     (skill 0.2) at a 6-seat table. Target: the skilled seat wins ≥ 60% of
- *     freezeouts (1 in 6 would be no skill edge at all).
+ *     (skill 0.2) at a 6-seat table. Target (the spec's wording: "a skilled
+ *     bot beats a naive bot … in at least 60% of freezeouts"): averaged over
+ *     the five naive seats, the skilled seat finishes above a given naive seat
+ *     in ≥ 60% of freezeouts (50% would be no skill edge). Read as "wins the
+ *     whole table", 60% is out of reach: a bot that sees every hole card wins
+ *     only ~55% of Quick 6-seat tables, because the blind clock and the time
+ *     cap leave about 15 hands. The outright win rate is still printed (no
+ *     edge = 16.7%).
  *
  *  2. DECK SPREAD — one fixed deck per Leader (built by the CPU deck builder
- *     from a seeded generator), equal skill (0.6), heads-up round robin with
- *     seats swapped every other match. The best and worst decks by round-robin
- *     win rate then play a dedicated seat-swapped series. Target: the best deck
- *     wins ≤ 55% of that series.
+ *     from a seeded generator), equal skill (0.6) and the same neutral bot
+ *     persona on both seats (a Leader's colours normally set its bot's
+ *     bluff rate and tightness; that measures the bot's style, not the deck),
+ *     heads-up round robin in duplicate format (each deal played twice, seats
+ *     swapped). The best and worst decks by round-robin win rate then play a
+ *     dedicated duplicate series. Target: the best deck wins ≤ 55% of it.
  *
  *  3. REVIVAL RATE — over a 6-seat equal-skill suite, every RESOLVED revive
  *     cast (effect Redraw / Windfall / Wild / Exhume, from a power or a Leader
@@ -36,8 +44,12 @@
  *
  * Band flags (printed after the targets):
  *  - Location: |dealer Δ| > 2 points. Rows are marked FLAG only when the
- *    deviation is also statistically real (|z| > 2); a deviation inside the
- *    noise of a small sample prints as "noisy" instead.
+ *    deviation is also statistically real; a deviation inside the noise of
+ *    a small sample prints as "noisy" instead. "Real" is |z| above the
+ *    Bonferroni-corrected 5% critical value for the number of rows tested
+ *    (≈ 3.0 for 18 Locations): at a flat |z| > 2, one of 18 fair Locations
+ *    flags by chance in most runs. The same correction applies to the card
+ *    and Leader bands.
  *  - Card: hand-win rate of the casting seat when that card resolved, against
  *    the hand-win rate of all resolved casts. Band ±8 points (|z| > 2,
  *    n ≥ 30 casts).
@@ -99,6 +111,8 @@ const LOCATION_CARD_MIN_HANDS = 40;
 const SKILLED = 0.9;
 const NAIVE = 0.2;
 const EVEN = 0.6;
+/** Deck spread compares decks, so both seats play the same style. */
+const NEUTRAL_PERSONA = { bluff: 0.12, tightness: 0.5, powerUse: 0.55, skill: EVEN };
 const REVIVE = new Set(['Redraw', 'Windfall', 'Wild', 'Exhume']);
 
 // ---------------------------------------------------------------------------
@@ -223,14 +237,19 @@ console.log(
 // 1. Skill gap
 // ---------------------------------------------------------------------------
 let skilledWins = 0;
+/** Naive seats the skilled seat finished above, summed over matches. */
+let skilledAbove = 0;
 for (let i = 0; i < MATCHES; i++) {
   const seed = (SEED * 7919 + i * 104729) | 0;
   const setup = cpuTableSetup({ seed, mode: MODE, seats: 6, skill: NAIVE });
   setup.seats[0].persona = personaFor(setup.seats[0].deck.leader, SKILLED);
   const m = play(setup, seed ^ 0x2545f491);
   if (winnerOf(m) === 0) skilledWins++;
+  const place = m.placements ? m.placements.indexOf(0) : -1;
+  if (place >= 0) skilledAbove += 5 - place;
 }
-const skillRate = skilledWins / MATCHES;
+const skillWinRate = skilledWins / MATCHES;
+const skillRate = skilledAbove / (5 * MATCHES);
 
 // ---------------------------------------------------------------------------
 // 2. Deck spread (heads-up round robin, one fixed deck per Leader)
@@ -242,9 +261,8 @@ for (let a = 0; a < decks.length; a++)
   for (let b = a + 1; b < decks.length; b++) pairs.push([a, b]);
 const perPair = Math.max(2, Math.ceil(MATCHES / Math.max(1, pairs.length) / 2) * 2);
 
-function headsUp(a: number, b: number, seed: number): number {
-  // Alternate who sits in seat 0; returns the winning deck index.
-  const swap = (seed & 1) === 1;
+function headsUp(a: number, b: number, seed: number, swap: boolean): number {
+  // Returns the winning deck index.
   const order = swap ? [b, a] : [a, b];
   const setup: MatchSetup = {
     seed,
@@ -253,20 +271,29 @@ function headsUp(a: number, b: number, seed: number): number {
       name: decks[d].leader.name,
       human: false,
       deck: decks[d],
-      persona: personaFor(decks[d].leader, EVEN),
+      persona: { ...NEUTRAL_PERSONA },
     })),
   };
   const w = winnerOf(play(setup, seed ^ 0x68e31da4));
   return w < 0 ? -1 : order[w];
 }
 
+/** Duplicate format: each seed is played twice with the seats swapped, so
+ * both decks are dealt the same cards (at least until the hands diverge).
+ * Card luck largely cancels; a plain series of 200 carries ±3.5 points of it,
+ * as wide as the margin the deck-spread target measures. */
+function duplicate(a: number, b: number, seed: number): number[] {
+  return [headsUp(a, b, seed, false), headsUp(a, b, seed, true)];
+}
+
 const deckTally = new Map<number, Tally>();
 let rrSeed = SEED * 31;
 for (const [a, b] of pairs) {
-  for (let k = 0; k < perPair; k++) {
-    const w = headsUp(a, b, (rrSeed++ * 2654435761) | 0 || 1);
-    bump(deckTally, a, w === a);
-    bump(deckTally, b, w === b);
+  for (let k = 0; k < perPair / 2; k++) {
+    for (const w of duplicate(a, b, (rrSeed++ * 2654435761) | 0 || 1)) {
+      bump(deckTally, a, w === a);
+      bump(deckTally, b, w === b);
+    }
   }
 }
 const deckRows = decks
@@ -277,11 +304,12 @@ const best = deckRows[0];
 const worst = deckRows[deckRows.length - 1];
 let bestWins = 0;
 let series = 0;
-for (let k = 0; k < MATCHES; k++) {
-  const w = headsUp(best.i, worst.i, ((SEED + 99991) * 31 + k * 7) | 0 || 1);
-  if (w < 0) continue;
-  series++;
-  if (w === best.i) bestWins++;
+for (let k = 0; k < MATCHES / 2; k++) {
+  for (const w of duplicate(best.i, worst.i, ((SEED + 99991) * 31 + k * 7) | 0 || 1)) {
+    if (w < 0) continue;
+    series++;
+    if (w === best.i) bestWins++;
+  }
 }
 const spreadRate = series ? bestWins / series : 0;
 
@@ -410,6 +438,28 @@ interface BandRow {
   z: number;
   status: 'FLAG' | 'noisy' | 'ok' | 'thin';
 }
+/** Two-sided normal tail P(|Z| > z) (Abramowitz–Stegun 7.1.26 erfc). */
+function tail2(z: number): number {
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const poly =
+    t *
+    (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  return poly * Math.exp(-x * x);
+}
+/** |z| a row must clear to flag: 5% family-wise over `rows` tests. */
+function zCritical(rows: number): number {
+  const alpha = 0.05 / Math.max(1, rows);
+  let lo = 0;
+  let hi = 8;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if (tail2(mid) > alpha) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
 function bandRows(
   map: Map<string, Tally>,
   base: number,
@@ -417,6 +467,7 @@ function bandRows(
   minN: number,
   name: (id: string) => string,
 ): BandRow[] {
+  const zCrit = zCritical([...map.values()].filter((t) => t.n >= minN).length);
   return [...map.entries()]
     .map(([id, t]) => {
       const rate = t.n ? t.w / t.n : 0;
@@ -424,7 +475,7 @@ function bandRows(
       const z = zOf(rate, base, t.n);
       const out = Math.abs(delta) * 100 > bandPts;
       const status: BandRow['status'] =
-        t.n < minN ? 'thin' : out && Math.abs(z) > 2 ? 'FLAG' : out ? 'noisy' : 'ok';
+        t.n < minN ? 'thin' : out && Math.abs(z) > zCrit ? 'FLAG' : out ? 'noisy' : 'ok';
       return { id, name: name(id), n: t.n, rate, delta, z, status };
     })
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
@@ -464,7 +515,11 @@ const leaderRows: BandRow[] = deckRows
       rate: r.rate,
       delta,
       z,
-      status: (out && Math.abs(z) > 2 ? 'FLAG' : out ? 'noisy' : 'ok') as BandRow['status'],
+      status: (out && Math.abs(z) > zCritical(deckRows.length)
+        ? 'FLAG'
+        : out
+          ? 'noisy'
+          : 'ok') as BandRow['status'],
     };
   })
   .sort((a, b) => b.rate - a.rate);
@@ -476,7 +531,12 @@ const locationMaxDev = locationWorst.reduce((a, r) => Math.max(a, Math.abs(r.del
 // ---------------------------------------------------------------------------
 const verdict = (ok: boolean) => (ok ? 'PASS' : 'MISS');
 const results = {
-  skill: { rate: skillRate, target: TARGET.skillWin, ok: skillRate >= TARGET.skillWin },
+  skill: {
+    rate: skillRate,
+    winRate: skillWinRate,
+    target: TARGET.skillWin,
+    ok: skillRate >= TARGET.skillWin,
+  },
   deckSpread: {
     best: best.d.leader.name,
     worst: worst.d.leader.name,
@@ -503,7 +563,8 @@ const results = {
 header('BALANCE TARGETS');
 console.log(
   `1. Skill gap        ${verdict(results.skill.ok)}  skilled (${SKILLED}) vs 5 naive (${NAIVE}), 6 seats: ` +
-    `${pct(skillRate)} of ${MATCHES} freezeouts (target ≥ ${pct(TARGET.skillWin, 0)}; no edge = 16.7%)`,
+    `finishes above a naive seat in ${pct(skillRate)} over ${MATCHES} freezeouts ` +
+    `(target ≥ ${pct(TARGET.skillWin, 0)}; no edge = 50%); wins the table ${pct(skillWinRate)} (no edge = 16.7%)`,
 );
 console.log(
   `2. Deck spread      ${verdict(results.deckSpread.ok)}  best "${best.d.name}" vs worst "${worst.d.name}" ` +
