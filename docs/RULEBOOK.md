@@ -112,9 +112,9 @@ Keyboard: **F** fold, **C** check/call, **R** raise (with a slider).
 
 | Mode     | Stack (chips) | Blinds rise      | Clock cap | Deck: Leader + Location + powers | Max copies | Tier-5 cards | Power hand: start / draw per hand / cap | Reward × | Min. length |
 | -------- | ------------- | ---------------- | --------- | -------------------------------- | ---------- | ------------ | --------------------------------------- | -------- | ----------- |
-| Quick    | 400           | ×1.5 every 2 min | 12 min    | 1 + 1 + 16                       | 2          | 1            | 3 / 1 / 5                               | ×0.5     | 6 min       |
-| Standard | 750           | ×1.5 every 3 min | 25 min    | 1 + 1 + 24                       | 2          | 2            | 4 / 1 / 6                               | ×1       | 12 min      |
-| Deep     | 1,250         | ×1.5 every 4 min | 40 min    | 1 + 1 + 36                       | 3          | 3            | 5 / 2 / 7                               | ×1.5     | 20 min      |
+| Quick    | 480           | ×1.5 every 2 min | 12 min    | 1 + 1 + 16                       | 2          | 1            | 3 / 1 / 5                               | ×0.5     | 6 min       |
+| Standard | 800           | ×1.5 every 3 min | 25 min    | 1 + 1 + 24                       | 2          | 2            | 4 / 1 / 6                               | ×1       | 12 min      |
+| Deep     | 1,280         | ×1.5 every 4 min | 40 min    | 1 + 1 + 36                       | 3          | 3            | 5 / 2 / 7                               | ×1.5     | 20 min      |
 
 Every amount on the table is a **whole number of chips**, never a fraction.
 The opening big blind is 16 chips (small blind 8). The tables below give costs

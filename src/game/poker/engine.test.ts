@@ -400,9 +400,9 @@ describe('match flow', () => {
 });
 
 describe('whole chips', () => {
-  it('starts each mode at 400 / 750 / 1,250 chips', () => {
+  it('starts each mode at 480 / 800 / 1,280 chips (30 / 50 / 80 big blinds)', () => {
     expect([MODES.quick, MODES.standard, MODES.deep].map((m) => m.stackChips)).toEqual([
-      400, 750, 1250,
+      480, 800, 1280,
     ]);
   });
 

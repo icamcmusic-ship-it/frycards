@@ -10,8 +10,8 @@ decks, open packs and grow a collection.
 ## The Game (FryCards Poker, one paragraph)
 
 A match is a **pot-limit Texas Hold'em freezeout** for 2–6 seats in one of
-three modes — **Quick** (400-chip stacks, 16 powers, ~12 min), **Standard** (750,
-24, ~25 min) and **Deep** (1,250, 36, ~40 min) — with blinds that rise ×1.5 on a
+three modes — **Quick** (480-chip stacks, 16 powers, ~12 min), **Standard** (800,
+24, ~25 min) and **Deep** (1,280, 36, ~40 min) — with blinds that rise ×1.5 on a
 clock and a hard time cap after which stacks are ranked. Every seat brings a
 deck of **1 Leader + 1 Location + power cards**. Powers are **Units** (★ stars,
 a token that stays out until showdown), **Items** (⚙ gears; Charm, Weapon or

@@ -46,7 +46,7 @@ export const MODES: Record<ModeId, ModeConfig> = {
   quick: {
     id: 'quick',
     label: 'Quick',
-    stackChips: 400,
+    stackChips: 480,
     bigBlindUnits: 1,
     blindGrowth: 1.5,
     levelMs: 2 * MIN,
@@ -63,7 +63,7 @@ export const MODES: Record<ModeId, ModeConfig> = {
   standard: {
     id: 'standard',
     label: 'Standard',
-    stackChips: 750,
+    stackChips: 800,
     bigBlindUnits: 1,
     blindGrowth: 1.5,
     levelMs: 3 * MIN,
@@ -80,7 +80,7 @@ export const MODES: Record<ModeId, ModeConfig> = {
   deep: {
     id: 'deep',
     label: 'Deep',
-    stackChips: 1250,
+    stackChips: 1280,
     bigBlindUnits: 1,
     blindGrowth: 1.5,
     levelMs: 4 * MIN,
