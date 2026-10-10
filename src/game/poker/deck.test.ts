@@ -16,6 +16,23 @@ describe('deck rules', () => {
     }
   });
 
+  it('CPU decks keep a curve and their share of revives', () => {
+    const rng = rngOn({ rng: 23 });
+    const revive = new Set(['Redraw', 'Windfall', 'Wild', 'Exhume']);
+    for (const leader of POOL_LEADERS) {
+      for (const mode of MODE_IDS) {
+        const cfg = MODES[mode];
+        const deck = buildDeck(leader, cfg, rng);
+        const tier = (t: number) => deck.powers.filter((p) => p.tier === t).length;
+        const revives = deck.powers.filter((p) => p.effect && revive.has(p.effect.kw)).length;
+        expect(tier(4), `${leader.name} ${mode}`).toBeLessThanOrEqual(
+          Math.max(1, Math.floor(cfg.powers * 0.125)),
+        );
+        expect(revives, `${leader.name} ${mode}`).toBe(Math.round(cfg.powers * 0.15));
+      }
+    }
+  });
+
   it('flags the wrong count, a missing Location and too many copies', () => {
     const rng = rngOn({ rng: 2 });
     const leader = POOL_LEADERS[0];

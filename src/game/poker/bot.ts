@@ -80,15 +80,19 @@ export function estimateEquity(
   trials = BOT.equityTrials,
   /** Only the seats expected to contest the pot (bots); default: all live. */
   against?: number[],
+  /** Hand reading: per-seat range floors (see `rangeFloors`). */
+  floors?: Map<number, number>,
 ): number {
   const h = v.hand!;
   const hole = h.holes[seat].filter((c) => !isHidden(c));
   const board = visibleBoard(v);
   const opps: Card[][] = [];
+  const oppFloors: number[] = [];
   for (let i = 0; i < h.holes.length; i++) {
     if (i === seat || !inHand(h, i)) continue;
     if (against && !against.includes(i)) continue;
     opps.push(h.holes[i].filter((c) => !isHidden(c)).slice(0, 2));
+    oppFloors.push(floors?.get(i) ?? 0);
   }
   if (hole.length < 2) {
     // A blinded hole card: estimate from what we can see.
@@ -103,6 +107,8 @@ export function estimateEquity(
     dead: hole.length > 2 ? hole.filter((c) => !best2.includes(c)) : [],
     trials: board.length === 0 ? Math.round(trials * 0.6) : trials,
     rng,
+    floors: oppFloors,
+    bluffMix: BOT.bluffMix,
   });
 }
 
@@ -122,12 +128,50 @@ function bestTwo(hole: Card[], board: Card[]): Card[] {
   return best;
 }
 
+/**
+ * Hand reading: for each opponent, the weakest holding (handStrength on the
+ * visible board) their betting this hand is consistent with — a raise
+ * before the flop, a big bet now, or calls along the way each narrow it.
+ * Only public betting is used. How much a bot reads scales with skill: a
+ * naive bot prices every bet against any two cards and pays it off.
+ */
+export function rangeFloors(v: Match, seat: number): Map<number, number> {
+  const h = v.hand!;
+  const p = v.seats[seat].persona;
+  const reading = BOT.readDepth * Math.max(0, Math.min(1, (p.skill - 0.3) / 0.6));
+  const out = new Map<number, number>();
+  if (reading <= 0) return out;
+  const pot = potTotal(h);
+  for (let i = 0; i < h.holes.length; i++) {
+    if (i === seat || !inHand(h, i)) continue;
+    const put = h.committed[i];
+    const blind = i === h.bbSeat ? h.bb : i === h.sbSeat ? h.bb / 2 : 0;
+    let f = 0;
+    if (h.street === 'preflop') {
+      if (h.aggressorByStreet[0] === i) f = 0.3 + 0.3 * Math.min(1, h.currentBet / (4 * h.bb));
+      else if (put > blind && h.currentBet > h.bb) f = 0.3;
+      else if (put > blind) f = 0.1;
+    } else {
+      // Raised before the flop, or put money in on an earlier street.
+      if (h.aggressorByStreet.some((a) => a === i)) f = 0.25;
+      else if (h.committed[i] - h.streetBet[i] > blind) f = 0.15;
+      // Betting this street: the bigger the bet against the pot, the stronger.
+      if (h.lastAggressor === i && h.streetBet[i] > 0) {
+        const size = h.streetBet[i] / Math.max(1, pot - h.streetBet[i]);
+        f = Math.max(f, 0.3 + 0.3 * Math.min(1, size));
+      }
+    }
+    if (f > 0) out.set(i, f * reading);
+  }
+  return out;
+}
+
 function read(v: Match, seat: number, rng: Rng): Read {
   const h = v.hand!;
   const against = contestants(v, seat);
   const opponents = against.length;
   const p = v.seats[seat].persona;
-  let eq = estimateEquity(v, seat, rng, BOT.equityTrials, against);
+  let eq = estimateEquity(v, seat, rng, BOT.equityTrials, against, rangeFloors(v, seat));
   // Low skill misjudges its hand.
   eq = Math.max(0, Math.min(1, eq + (rng.next() - 0.5) * (1 - p.skill) * 0.45));
   return {
@@ -195,7 +239,9 @@ function powerValue(v: Match, seat: number, def: CardDef, r: Read): number {
     case 'Straddle':
       return r.equity > 0.55 ? 1 : 0;
     case 'Rerun':
-      return r.stackBB < 10 ? 0.8 : 0.1;
+      // Chip-neutral, but a second board halves the chance of busting when
+      // behind with the stack at risk — worth it in a freezeout.
+      return r.equity < 0.5 && (r.stackBB < 10 || r.potBB >= r.stackBB * 0.5) ? 1 : 0.1;
     case 'Burn':
     case 'Cut':
       return !pre && r.equity < 0.4 ? 0.3 * r.potBB : 0;
@@ -356,7 +402,9 @@ function betDecision(v: Match, seat: number, r: Read, rng: Rng): Action {
   const naive = 1 - p.skill;
   const strong =
     fair +
-    (h.street === 'preflop' ? 0.12 : 0.17) +
+    (h.street === 'preflop' ? 0.12 : 0.17) -
+    // A skilled bot bets thinner for value: loose callers pay it off.
+    p.skill * 0.06 +
     tight +
     (facingRaise ? 0.15 : 0) +
     naive * 0.12 -

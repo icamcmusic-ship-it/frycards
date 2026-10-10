@@ -9,6 +9,18 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v35.1 — Bot balance
+
+- **Sharper Hard bots.** Skilled CPU seats read your betting: a raise or a big
+  bet narrows the hands they price you on, so they stop paying off big river
+  bets with bottom pair. Easy bots still don't read.
+- **Fairer CPU decks.** CPU decks keep a sensible cost curve, always carry a
+  couple of revives (Redraw and friends) and at most one situational card.
+- **Balance report.** `npm run sim:poker` measures the skill gap as "finishes
+  above a naive bot", plays deck-spread series in duplicate format with
+  neutral bot styles, and corrects its band flags for multiple comparisons.
+  See ROADMAP for the one target still open (deck spread, a Leader-data call).
+
 ### v35.0 — FryCards Poker
 
 FryCards is a poker game now. The MTG-style card battler — Essence and

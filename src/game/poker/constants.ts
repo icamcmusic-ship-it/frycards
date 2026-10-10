@@ -194,6 +194,13 @@ export const BOT = {
   castMargin: 0.5,
   /** Monte Carlo trials for an equity estimate. */
   equityTrials: 220,
+  /** Hand reading: share of equity trials that treat a bet as a bluff (any
+   * two cards) instead of drawing from the bettor's read range. */
+  bluffMix: 0.15,
+  /** How far a fully skilled bot narrows an opponent's range from their
+   * betting (0 = never reads, 1 = takes every bet at face value). Reading
+   * fully makes a bot fold its way to second place on the clock. */
+  readDepth: 0.5,
   /** Pacing (nominal ms) — independent of hand strength so it is never a tell. */
   slowActionMs: [5000, 7000],
   fastActionMs: [1000, 2000],
