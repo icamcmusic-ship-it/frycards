@@ -149,10 +149,10 @@ export const MAX_EXCLUSIONS = 2;
 // ---------------------------------------------------------------------------
 export const TIER_N: Record<string, number[]> = {
   Kindle: [0, 0.5, 1, 2, 3, 5],
-  Tax: [0, 0.25, 0.5, 1, 1.5, 2],
+  Tax: [0, 0.5, 1, 1.5, 3, 4],
   Bounty: [0, 2, 3, 5, 8, 12],
   Foresee: [0, 1, 2, 3, 4, 5],
-  Bulwark: [0, 1, 2, 3, 5, 8],
+  Bulwark: [0, 1, 2, 3, 4, 6],
   Fuse: [0, 1, 1, 1, 2, 2],
   Peek: [0, 1, 1, 1, 2, 2],
   Toll: [0, 0.5, 1, 1.5, 2, 3],
@@ -160,7 +160,8 @@ export const TIER_N: Record<string, number[]> = {
   Siphon: [0, 0.5, 1, 2, 3, 5],
   Blessed: [0, 0.5, 1, 2, 3, 5],
   Needle: [0, 1, 1, 2, 2, 3],
-  Venomous: [0, 1, 2, 3, 5, 8],
+  Venomous: [0, 1, 1.5, 2.5, 4, 6],
+  Erode: [0, 0.5, 0.5, 1, 1.5, 2],
   Burn: [0, 1, 1, 1, 2, 2],
 };
 
@@ -231,6 +232,10 @@ export const REWARD_BASE = { credits: [40, 60], xp: [25, 35], bpXp: [20, 30] };
 // open to every colour, so it is weighted down or it would swamp the pool.
 // ---------------------------------------------------------------------------
 export const KEYWORD_WEIGHT: Record<string, number> = {
+  // Bloom is gated to Root, which has few home effects to share with; at 1
+  // it printed on a single card.
+  Bloom: 2.5,
+
   Redraw: 0.8,
   Surge: 0.6,
   Peek: 2,

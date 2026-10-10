@@ -401,7 +401,7 @@ export function PokerTable({
     };
   }, [myWindow, composing, match, humanAct]);
 
-  // A choice (Windfall, Pineapple, Redraw, Wild, Exhume) has no other way to
+  // A choice (Windfall, Pineapple, Redraw, Exhume) has no other way to
   // time out, and the table waits on it: past the turn timer, make the pick a
   // bot would (keep the best cards).
   useEffect(() => {
@@ -1163,7 +1163,6 @@ function HumanPanel({
     windfall: 'Windfall: pick a hole card to DISCARD (keep your best two)',
     pineapple: 'Pineapple: pick a hole card to DISCARD',
     redraw: 'Redraw: pick a hole card to REPLACE',
-    wild: 'Wild: pick a hole card to make WILD (any suit)',
     exhume: 'Exhume: pick a hole card to swap for a random mucked card',
   };
   const timerSecs = Math.ceil(Math.max(0, turnLeft) / 1000);

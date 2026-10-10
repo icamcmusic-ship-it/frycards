@@ -157,7 +157,7 @@ function defaultLocation(identity: Color[]): CardDef {
  * cast to answer, a Feint to call); a CPU deck carries at most one. */
 const SITUATIONAL = new Set<string>(['Rerun', 'Snuff', 'Call Out']);
 /** Effects that rebuild a losing hand (the spec's revive target). */
-const REVIVES = new Set<string>(['Redraw', 'Windfall', 'Wild', 'Exhume']);
+const REVIVES = new Set<string>(['Redraw', 'Windfall', 'Wild', 'Bloom', 'Exhume']);
 
 export function buildDeck(leader: CardDef, mode: ModeConfig, rng: Rng, name?: string): DeckDef {
   const identity = cardColors(leader);

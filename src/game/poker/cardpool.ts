@@ -135,6 +135,7 @@ const MIN_TIER: Partial<Record<EffectKeyword, number>> = {
   Redraw: 2,
   Windfall: 3,
   Wild: 3,
+  Bloom: 2,
   Exhume: 2,
   Cut: 3,
   Burn: 3,
@@ -275,10 +276,38 @@ export function powerText(def: CardDef): string {
 // Leaders: a persona plus two nerve abilities. The minus ability spends nerve
 // and is strong; the plus ability builds nerve, is weaker and costs chips.
 // ---------------------------------------------------------------------------
+/** Effects that barely move chips or cards on their own (a doubled blind,
+ * a split board, a burned card, a card cut to the bottom) or only pay when
+ * someone else acts (Toll waits to be targeted, Bounty for a bust, Lock for
+ * a cast to stop). Fine on a
+ * power card; as a Leader's nerve ability they left a Leader with nothing
+ * worth spending nerve on, which was most of the gap between the best and
+ * worst Leaders. */
+const SITUATIONAL_FOR_LEADERS = new Set<EffectKeyword>([
+  'Straddle',
+  'Rerun',
+  'Burn',
+  'Cut',
+  'Toll',
+  'Bounty',
+  'Lock',
+]);
+
+/** Leader abilities that rebuild the caster's hand cost 3 nerve, not 2. */
+const HAND_REBUILDERS = new Set<EffectKeyword>([
+  'Windfall',
+  'Wild',
+  'Bloom',
+  'Redraw',
+  'Exhume',
+  'Pass',
+]);
+
 function leaderEffects(color: Color, tier: number): EffectKeyword[] {
   return effectsForColors([color]).filter(
     (k) =>
       KEYWORD_SPECS[k].target !== 'cast' &&
+      !SITUATIONAL_FOR_LEADERS.has(k) &&
       KEYWORD_SPECS[k].color === color &&
       (MIN_TIER[k] ?? 1) <= tier,
   );
@@ -308,8 +337,14 @@ function ability(
 function mapLeader(c: CardTemplate, o: CardOverrides = {}): CardDef {
   const seed = seedOf(c);
   const colors = colorsOf(c);
-  const spendNerve = -(2 + roll(seed, 'spend', 2)); // -2 or -3
-  const minus = ability(seed, 'leader-minus', colors[0], 4, spendNerve);
+  // A hand-rebuilding ability costs 3 nerve, anything else 2: the old coin
+  // flip between the two left a Leader paying 3 for a weak ability while
+  // another paid 2 for a revive.
+  const minus = ability(seed, 'leader-minus', colors[0], 4, -2);
+  if (HAND_REBUILDERS.has(minus.effect.kw as EffectKeyword)) {
+    minus.nerve = -3;
+    minus.text = minus.text.replace(/^-2 nerve/, '-3 nerve');
+  }
   const plus = ability(
     seed,
     'leader-plus',

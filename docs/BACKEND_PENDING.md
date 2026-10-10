@@ -82,15 +82,31 @@ backend; these are the server-side gaps it works around today.
    (`recordMatchPlacement` in `src/lib/supabase.ts`) still falls back to
    `record_match_result` (`won` = 1st place) if the RPC is ever missing.
 
-2. **`save_deck`'s `is_valid` still grades the retired 60-card rule.** The client
-   works out poker legality itself (`checkDeck` / `legalModes` in
-   `src/game/poker/deck.ts`) and ignores `is_valid`. A follow-up migration could
-   drop the 60-card check, or replace it with a poker check.
-3. **`claim_deck_box` still builds and saves a 60-card list (12 Locations).** Right
-   after the claim, the client rebuilds the saved deck as a legal Standard poker
-   deck from the cards the box granted (`convertRetiredList` in
-   `src/meta/deckEdits.ts`, called from `StoreScreen`). Moving that rebuild to the
-   server needs the poker tiers, which are currently derived on the client.
+2. **Deck functions on poker rules — applied live 2026-10-10** (live migration
+   `poker_deck_rules`, file `20261010000000_poker_deck_rules.sql`, tested in
+   `supabase/migrations-2026-10-10.test.ts` against the real card pool):
+   - `poker_deck_modes(leader, card_ids)` is the server mirror of
+     `checkDeck` / `legalModes`; it agrees with the client on built decks and
+     on every kind of broken one.
+   - `save_deck` grades `is_valid` with it (legal in some mode) instead of the
+     60-card rule, and caps copies at 3 (the Deep limit) instead of the
+     per-rarity cap that refused two copies of a Mythic.
+   - `claim_deck_box` keeps the 60-card grant and its rarity mix, with 2
+     Locations instead of 12 and at most 2 copies of a card, and saves a legal
+     Standard deck built from the grant (`poker_box_deck`: the CPU builder's
+     curve and revive share). The client no longer rebuilds it. Ruin-Walker
+     Overseer (no on-colour Super-Rare) could not be claimed before; the
+     Super-Rare slots now fall back to Rares.
+   - `pick_deck_bucket`'s "cheap first" reads the tier (`might` ≤ 2), not the
+     retired essence cost.
+   - `apply_card_upsert` (Creator imports, approved submissions) accepted only
+     MTG-era mechanics (essence cost required; grit required on Units), so it
+     refused every card `mechanicsFromDef` produces. It now requires a tier
+     (1–5, in `might`) on powers and rules text on every card.
+   Verified live: each Deck Box Leader's grant builds a 25-card deck that
+   `poker_deck_modes` grades legal in Standard.
+3. **Bloom revive share — applied live 2026-10-10** (`20261010000001_bloom_revive.sql`):
+   `poker_box_deck` counts Bloom as a revive, like the client builder.
 4. **`cards` table mechanics columns.** These are written by
    `scripts/sync-cards-db.ts` through `mechanicsFromDef` (`src/meta/submissions.ts`):
    `might` = tier, `keywords` = poker keywords, and `essence_types` = colours
@@ -101,9 +117,12 @@ backend; these are the server-side gaps it works around today.
    keywords / tier / subtype / rules text / colours matching the local
    derivation exactly; no card changed colour. The previous MTG-era values are
    kept in `public.cards_mechanics_backup_20261009` (RLS on, no player access)
-   should a rollback ever be needed. `pick_deck_bucket` still reads
-   `essence_cost` for its "cheap first" ordering; `deck_card_cost(null)` is 0,
-   so every card now counts as cheap there (harmless: the client rebuilds the
-   Deck Box deck).
+   should a rollback ever be needed.
+   **Resynced again 2026-10-10** for Bloom, Erode and the Leader / number
+   changes (v35.2): 69 rows changed, mechanics columns only. All 297 rows
+   verified against the local derivation by one combined md5
+   (`95a93fa5d07925aa11616d7b59d24b73`). The values from before this resync
+   are in `public.cards_mechanics_backup_20261010` (RLS on). `pick_deck_bucket` now orders "cheap
+   first" by tier (see 2.).
 5. **`submit_card` has no star-hint parameter.** The Creator sets a submitted
    card's tier at review.

@@ -56,9 +56,9 @@ import { EssenceIcon } from '../components/EssenceIcon';
 // 16 / Standard 24 / Deep 36). The format also sets the copy limit and the
 // tier-5 budget. Old 60-card lists are illegal in every format.
 //
-// The server's `decks.is_valid` flag still applies the retired 60-card rule,
-// so it is never shown: every verdict on this screen comes from checkDeck /
-// legalModes on the client.
+// The server grades `decks.is_valid` with the same rules (poker_deck_modes),
+// but only as "legal in some mode"; the per-format verdicts on this screen
+// come from checkDeck / legalModes on the client.
 
 /** Longest list any format takes (Deep powers + the Location); a saved list
  * longer than this is a 60-card deck from the retired game. */
@@ -277,8 +277,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {decks.map((d) => {
             const leader = POOL_BY_ID[d.leader_id];
-            // The client's own verdict — `d.is_valid` still applies the
-            // retired 60-card rule and means nothing for poker.
+            // Per-format verdict; `d.is_valid` only says "legal in some mode".
             const legal = legalModes(d.leader_id, d.card_ids);
             const mode = formatOf(d);
             const retired = d.card_ids.length > LIST_MAX;
@@ -932,7 +931,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 <th className="text-left font-bold">By hand</th>
                 <th
                   className="text-right font-bold"
-                  title="A chips-only Redraw, Windfall, Wild or Exhume"
+                  title="A chips-only Redraw, Windfall, Wild, Bloom or Exhume"
                 >
                   Revive
                 </th>

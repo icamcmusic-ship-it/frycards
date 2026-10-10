@@ -9,6 +9,30 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v35.2 — Bloom, Erode and fairer Leaders
+
+- **Two new keywords** fill the thinnest colours, both gated to their colour:
+  - **Bloom** (Root): when the next street is dealt, a random one of your
+    hole cards grows one rank higher (nothing to grow into on the river).
+    Root's own effects were only Bulwark and Rerun; now it has a revive.
+  - **Erode** (Void, hostile): take N from a target's stack. Void's tier-2
+    choices were only Lock.
+- **Leader abilities** are never a situational effect (Straddle, Rerun, Burn,
+  Cut, Toll, Bounty, Lock), and the nerve they spend follows what they do: 3
+  for a hand rebuilder (Windfall, Wild, Bloom, Redraw, Exhume, Pass), 2
+  otherwise. Changed Leaders: Sentinel (Kindle 3 / Mark), Ruin-Walker (Bloom /
+  Erode ½), Sovereign (Tax 3 / Erode ½), Void Mother (Erode 1½ / Needle 1),
+  Avatar (Venomous 4 / Erode ½), Sea Witch (Wild for 3 / Mark), Mer-King
+  (Windfall for 3 / Bulwark 2).
+- **Numbers:** Venomous 1 / 1½ / 2½ / 4 / 6 (was 1 / 2 / 3 / 5 / 8); Bulwark
+  tops out at 4 / 6 (was 5 / 8); Tax ½ / 1 / 1½ / 3 / 4 (was ¼ / ½ / 1 / 1½ /
+  2).
+- **Bots** cast Wild and Bloom only when the change helps their hand, and no
+  longer try to blind a hole card that is already blinded.
+- **Server deck rules** now match the client: `save_deck` grades poker
+  legality, a Deck Box saves a legal Standard deck (and Ruin-Walker's box can
+  be claimed), and card imports accept poker mechanics.
+
 ### v35.1 — Bot balance
 
 - **Sharper Hard bots.** Skilled CPU seats read your betting: a raise or a big
