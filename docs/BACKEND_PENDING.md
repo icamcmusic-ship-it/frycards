@@ -94,7 +94,16 @@ backend; these are the server-side gaps it works around today.
 4. **`cards` table mechanics columns.** These are written by
    `scripts/sync-cards-db.ts` through `mechanicsFromDef` (`src/meta/submissions.ts`):
    `might` = tier, `keywords` = poker keywords, and `essence_types` = colours
-   (unchanged). The live rows only show poker mechanics after a re-sync.
-   `essence_types` already match.
+   (unchanged); `essence_cost`, `grit` and `resolve` are retired (null).
+   **Resynced live 2026-10-09/10**: all 297 rows were rewritten (mechanics
+   columns only — names, art, templates untouched) from the same derivation
+   the client uses. Verified by an md5 fingerprint over every row's
+   keywords / tier / subtype / rules text / colours matching the local
+   derivation exactly; no card changed colour. The previous MTG-era values are
+   kept in `public.cards_mechanics_backup_20261009` (RLS on, no player access)
+   should a rollback ever be needed. `pick_deck_bucket` still reads
+   `essence_cost` for its "cheap first" ordering; `deck_card_cost(null)` is 0,
+   so every card now counts as cheap there (harmless: the client rebuilds the
+   Deck Box deck).
 5. **`submit_card` has no star-hint parameter.** The Creator sets a submitted
    card's tier at review.
