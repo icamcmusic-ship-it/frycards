@@ -82,3 +82,20 @@ describe('card pool', () => {
     expect(deriveCardMechanics({ ...t, overrides: {} })).toEqual(base);
   });
 });
+
+describe('Leader abilities', () => {
+  const situational = ['Straddle', 'Rerun', 'Burn', 'Cut', 'Toll', 'Bounty', 'Lock'];
+  it('no Leader rolls a situational effect (Straddle, Rerun, …) as either ability', () => {
+    for (const l of POOL_LEADERS)
+      for (const a of l.abilities ?? [])
+        expect(situational, `${l.name}: ${a.text}`).not.toContain(a.effect.kw);
+  });
+
+  it('hand-rebuilding abilities spend 3 nerve, the rest 2', () => {
+    const rebuild = ['Windfall', 'Wild', 'Bloom', 'Redraw', 'Exhume', 'Pass'];
+    for (const l of POOL_LEADERS) {
+      const minus = l.abilities![0];
+      expect(minus.nerve, l.name).toBe(rebuild.includes(minus.effect.kw) ? -3 : -2);
+    }
+  });
+});
