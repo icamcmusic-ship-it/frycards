@@ -23,8 +23,8 @@ import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
 import { usePersistedState } from './usePersistedState';
 import { cn, visibleInterval } from '../lib/utils';
-import { POOL_BY_ID, POOL_V4 } from '../game/v3/cardpool';
-import { CardDef } from '../game/v3/cards';
+import { POOL_BY_ID, POOL } from '../game/poker/cardpool';
+import { CardDef } from '../game/poker/cards';
 import { CardFace } from '../components/CardFaceV4';
 import { RARITY_CHIP } from './rarity';
 import {
@@ -116,6 +116,7 @@ function defFor(cardId: string): CardDef {
   return (
     POOL_BY_ID[cardId] || {
       id: cardId,
+      colors: [],
       name: cardId,
       type: 'Unit' as CardDef['type'],
       rarity: 'Common' as CardDef['rarity'],
@@ -887,10 +888,7 @@ function CardSearchPick({ value, onChange }: { value: string; onChange: (id: str
   const matches = useMemo(() => {
     if (!search) return [];
     const q = search.toLowerCase();
-    return POOL_V4.filter((c) => c.type !== 'Leader' && c.name.toLowerCase().includes(q)).slice(
-      0,
-      8,
-    );
+    return POOL.filter((c) => c.type !== 'Leader' && c.name.toLowerCase().includes(q)).slice(0, 8);
   }, [search]);
   const current = value ? POOL_BY_ID[value] : null;
   return (

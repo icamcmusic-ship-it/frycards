@@ -7,13 +7,26 @@
  * it in `submit_card` / `apply_card_upsert`; these are the client-side mirror
  * that keeps a player from round-tripping just to be told the URL was wrong.
  */
-import { CardOverrides, CardType, Rarity, RARITIES, CardTemplate } from '../types';
+import {
+  CardOverrides,
+  CardType,
+  Rarity,
+  RARITIES,
+  CardTemplate,
+  OVERRIDABLE_FIELDS,
+} from '../types';
 import { isMeteredStorageUrl, METERED_ART_MESSAGE } from '../lib/media';
-import { EssenceCost } from '../game/v3/cards';
-import { KEYWORDS } from '../game/v3/keywords';
-import { COLORS as ESSENCE_TYPES } from '../game/v3/colors';
-import { deriveCardMechanics } from '../game/v3/cardpool';
-import { cardColors } from '../game/v3/colors';
+import { isPower, type CardDef, type CardSubtype, type KwRef } from '../game/poker/cards';
+import {
+  CHIP_KEYWORDS,
+  KEYWORDS,
+  KEYWORD_SPECS,
+  keywordAllowed,
+  tierN,
+  type Keyword,
+} from '../game/poker/keywords';
+import { deriveCardMechanics } from '../game/poker/cardpool';
+import { cardColors, type Color } from '../game/poker/colors';
 
 /** The set every player submission lands in. Renamed in v13; the server's
  * `submit_card` pins the same string, so the two must move together. */
@@ -32,8 +45,9 @@ export const SHOWCASE_SET = 'Players Showcase 2026';
 export const SHOWCASE_MIN_CARDS = 100;
 
 /** Types a player may submit. Leaders are Creator-authored only: their colour
- * identity, Resolve and two abilities are fixed per-Leader data in
- * `colors.ts`/`cardpool.ts`, not something a submission can carry. */
+ * identity and two nerve abilities are fixed per-Leader data in
+ * `poker/colors.ts`/`poker/cardpool.ts`, not something a submission can
+ * carry. */
 export const SUBMITTABLE_TYPES: CardType[] = ['Unit', 'Item', 'Event', 'Location'];
 
 export type Treatment = 'standard' | 'full_art' | 'video_mythic';
@@ -75,7 +89,7 @@ export const ART_SPECS: Record<
     ratio: '5:7',
     orientation: 'portrait',
     recommended: '1500 x 2100',
-    note: 'Edge-to-edge — the art IS the card. Keep faces and focal points clear of the outer ~8%, where the name, cost and stat plate print over it.',
+    note: 'Edge-to-edge — the art IS the card. Keep faces and focal points clear of the outer ~8%, where the name, tier mark and chip-cost plate print over it.',
   },
   video_mythic: {
     ratio: '5:7',
@@ -182,7 +196,29 @@ export function isValidCardId(id: string): boolean {
   return /^[a-z0-9_]{3,64}$/.test(id);
 }
 
-/** The `mechanics` object `apply_card_upsert` writes into the derived columns. */
+/**
+ * The `mechanics` object `apply_card_upsert` writes into the derived columns.
+ *
+ * The column NAMES are the MTG-era schema and stay as they are (renaming a
+ * column is a migration and a server change). What each one now carries for
+ * FryCards Poker — `mechanicsFromDef` is the single source of this mapping,
+ * shared by the Creator tools and `scripts/{sync,backfill}-cards-db.ts`:
+ *
+ *  | column          | FryCards Poker value                                      |
+ *  |-----------------|-----------------------------------------------------------|
+ *  | keywords        | `def.keywords` joined with ", " (effect + modifiers, or a  |
+ *  |                 | Leader's two ability keywords); null when there are none  |
+ *  | essence_cost    | null — retired. A power's chip cost is a function of its  |
+ *  |                 | tier (poker/constants.ts), not an essence payment         |
+ *  | essence_types   | the card's colours, unchanged from the MTG-style game     |
+ *  | might           | the power's TIER (Unit stars / Item gears / Event bolts,  |
+ *  |                 | 1–5) — the closest analogue of "how strong is it";        |
+ *  |                 | null for Leaders and Locations                            |
+ *  | grit            | null — retired (no toughness in poker)                    |
+ *  | card_subtype    | `def.subtype` (Charm / Weapon / Tool, Quick / Slow)       |
+ *  | resolve         | null — retired (a Leader's nerve is per-match state)      |
+ *  | rules_text      | `def.text` (generated, or the Creator's override)         |
+ */
 export interface MechanicsPayload {
   keywords: string | null;
   essence_cost: unknown | null;
@@ -194,24 +230,29 @@ export interface MechanicsPayload {
   rules_text: string | null;
 }
 
+/** Package an already-derived card for the `cards` mechanics columns — see
+ * the mapping table on `MechanicsPayload`. */
+export function mechanicsFromDef(def: CardDef): MechanicsPayload {
+  return {
+    keywords: (def.keywords ?? []).join(', ') || null,
+    essence_cost: null,
+    essence_types: cardColors(def),
+    might: isPower(def) ? (def.tier ?? null) : null,
+    grit: null,
+    card_subtype: def.subtype ?? null,
+    resolve: null,
+    rules_text: def.text ?? null,
+  };
+}
+
 /**
  * Run the card through the same deterministic assignment every client uses and
  * package the result for the server. Without this the new row's mechanics
- * columns stay null, which `pick_deck_bucket` reads as "colourless, cost 0"
- * and `verify:pool` reports as drift.
+ * columns stay null, which `pick_deck_bucket` reads as "colourless" and
+ * `verify:pool` reports as drift.
  */
 export function mechanicsFor(t: CardTemplate): MechanicsPayload {
-  const def = deriveCardMechanics(t);
-  return {
-    keywords: (def.keywords ?? []).join(', ') || null,
-    essence_cost: def.cost ?? null,
-    essence_types: cardColors(def),
-    might: def.might ?? null,
-    grit: def.grit ?? null,
-    card_subtype: def.subtype ?? null,
-    resolve: def.resolve ?? null,
-    rules_text: def.text ?? null,
-  };
+  return mechanicsFromDef(deriveCardMechanics(t));
 }
 
 export interface CardUpsertPayload {
@@ -269,79 +310,266 @@ export function buildCardPayload(input: {
 // Creator mechanics overrides
 // ---------------------------------------------------------------------------
 
-/** Drop undefined entries so "opened the editor and changed nothing" never
- * writes an override object (and so removing every field removes it).
+/**
+ * Keep only the fields the poker card model can override
+ * (`OVERRIDABLE_FIELDS`: tier, effect, mods, subtype, text) and drop
+ * undefined/null entries, so "opened the editor and changed nothing" never
+ * writes an override object (and removing every field removes it).
  *
- * An EMPTY ARRAY is kept, and that is the whole point: `keywords: []` is the
- * Creator clearing a card's generated keywords, not an absent override.
- * Pruning it (as this did until the v14 bug hunt) made emptying the KEYWORDS
- * box a silent no-op — the card printed with its generated keywords intact and
- * the review panel reported "No overrides". `overridesFrom` only ever emits a
- * field that actually differs from the generated card, so an override equal to
- * the generated value cannot reach here in the first place. */
+ * Unknown keys are dropped on purpose: a template saved under the MTG-style
+ * game can still carry `cost`, `might`, `bond`, `keywords`… overrides, which
+ * mean nothing to the poker derivation. Re-approving such a card must not
+ * write them back.
+ *
+ * An EMPTY `mods` array is kept: it is the Creator stripping a card's
+ * generated modifiers, not an absent override. */
 export function pruneOverrides(o?: CardOverrides | null): CardOverrides | undefined {
   if (!o) return undefined;
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(o)) {
-    if (v === undefined) continue;
+  for (const k of OVERRIDABLE_FIELDS) {
+    const v = (o as Record<string, unknown>)[k];
+    if (v === undefined || v === null) continue;
     out[k] = v;
   }
   return Object.keys(out).length > 0 ? (out as CardOverrides) : undefined;
 }
 
-/** Parse the editor's "2 Ember, 1 Void, 3 generic" cost box. Returns null on
- * anything it can't read, so the caller can keep the generated cost. */
-export function parseCostInput(raw: string): EssenceCost | null {
-  const text = raw.trim();
-  if (!text) return null;
-  const cost: EssenceCost = { generic: 0, pips: {} };
-  let sawSomething = false;
-  for (const part of text.split(/[,+]/)) {
-    const m = part.trim().match(/^(\d+)\s*([a-z]*)$/i);
-    if (!m) return null;
-    const n = Number(m[1]);
-    const word = m[2].toLowerCase();
-    if (!word || word === 'generic' || word === 'g') {
-      cost.generic += n;
-      sawSomething = true;
-      continue;
+/** Effect keywords the engine never deals on a type (mirrors `NOT_ON` in
+ * poker/cardpool.ts): Snuff is a response-only Event, Straddle can't bond. */
+const EFFECT_NOT_ON: Partial<Record<CardType, Keyword[]>> = {
+  Unit: ['Snuff'],
+  Item: ['Snuff', 'Straddle'],
+};
+
+/** Effect keywords a Creator may print on a card of this type and colour:
+ * every ungated effect plus the gated ones of the card's own colours. */
+export function effectChoices(type: CardType, colors: Color[]): Keyword[] {
+  const banned = EFFECT_NOT_ON[type] ?? [];
+  return KEYWORDS.filter(
+    (k) => KEYWORD_SPECS[k].kind === 'effect' && keywordAllowed(k, colors) && !banned.includes(k),
+  );
+}
+
+/** Modifier keywords a Creator may print on a card of these colours. */
+export function modifierChoices(colors: Color[]): Keyword[] {
+  return KEYWORDS.filter((k) => KEYWORD_SPECS[k].kind === 'modifier' && keywordAllowed(k, colors));
+}
+
+/** The number a keyword prints with at a tier when nothing overrides it. */
+export function defaultN(kw: Keyword, tier: number): number | undefined {
+  return KEYWORD_SPECS[kw].numbered ? tierN(kw, tier) : undefined;
+}
+
+/** "½" / "1½" / "0.5" / "2" → number; null on anything else. */
+export function parseKwNumber(raw: string): number | null {
+  const t = raw.trim().replace(/¼/g, '.25').replace(/½/g, '.5').replace(/¾/g, '.75');
+  if (!/^\d*\.?\d+$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Validate a keyword's number: chip keywords run in quarter units, every
+ * other numbered keyword (Peek, Fuse, Burn…) counts whole things. */
+function kwNumberProblem(kw: Keyword, n: number): string | null {
+  if (!KEYWORD_SPECS[kw].numbered) return `${kw} takes no number.`;
+  if (CHIP_KEYWORDS.has(kw)) {
+    return Number.isInteger(n * 4) ? null : `${kw} is a chip amount in quarter units (½, 1½…).`;
+  }
+  return Number.isInteger(n) ? null : `${kw} must be a whole number.`;
+}
+
+/** Parse one "Keyword N" token ("Fuse 1", "Kindle ½", "Veil"). Keyword names
+ * may contain a space ("Call Out"), so match against the known names. */
+export function parseKwRef(raw: string): KwRef | null {
+  const text = raw.trim().replace(/\s+/g, ' ');
+  const lower = text.toLowerCase();
+  // Longest name first, so "Call Out 1" never matches a shorter prefix.
+  const names = [...KEYWORDS].sort((a, b) => b.length - a.length);
+  for (const k of names) {
+    const kl = k.toLowerCase();
+    if (lower === kl) return { kw: k };
+    if (lower.startsWith(`${kl} `)) {
+      const n = parseKwNumber(text.slice(k.length + 1));
+      return n === null ? null : { kw: k, n };
     }
-    const color = ESSENCE_TYPES.find((c) => c.toLowerCase().startsWith(word));
-    if (!color) return null;
-    cost.pips[color] = (cost.pips[color] ?? 0) + n;
-    sawSomething = true;
   }
-  return sawSomething ? cost : null;
+  return null;
 }
 
-/** Render a cost back into the editor's input format. */
-export function formatCostInput(cost?: EssenceCost): string {
-  if (!cost) return '';
-  const parts = Object.entries(cost.pips)
-    .filter(([, n]) => n)
-    .map(([c, n]) => `${n} ${c}`);
-  if (cost.generic > 0 || parts.length === 0) parts.unshift(`${cost.generic} generic`);
-  return parts.join(', ');
+/** Render keyword refs back into the editor's "Fuse 1, Veil" form. */
+export function formatKwRefs(refs: KwRef[] = []): string {
+  return refs.map((r) => (r.n === undefined ? r.kw : `${r.kw} ${r.n}`)).join(', ');
 }
 
-/** Split the editor's comma-separated keyword box, rejecting anything the
- * engine has never heard of — an invented keyword prints a chip with no rules
- * text and does nothing at all in a match. */
-export function parseKeywordsInput(raw: string): { keywords: string[]; unknown: string[] } {
-  const wanted = raw
-    .split(',')
-    .map((k) => k.trim())
-    .filter(Boolean);
-  const keywords: string[] = [];
+/** Split the editor's comma-separated modifier box. `unknown` = not a poker
+ * keyword at all (an invented or retired MTG keyword prints a chip with no
+ * rules text and does nothing); `illegal` = a real keyword this card can't
+ * carry (an effect keyword, or a modifier gated to another colour). */
+export function parseModsInput(
+  raw: string,
+  colors: Color[],
+): { mods: KwRef[]; unknown: string[]; illegal: string[] } {
+  const mods: KwRef[] = [];
   const unknown: string[] = [];
-  for (const w of wanted) {
-    const match = (KEYWORDS as readonly string[]).find((k) => k.toLowerCase() === w.toLowerCase());
-    if (match) {
-      if (!keywords.includes(match)) keywords.push(match);
-    } else unknown.push(w);
+  const illegal: string[] = [];
+  const allowed = modifierChoices(colors);
+  for (const part of raw
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean)) {
+    const ref = parseKwRef(part);
+    if (!ref) unknown.push(part);
+    else if (!allowed.includes(ref.kw)) illegal.push(ref.kw);
+    else if (!mods.some((m) => m.kw === ref.kw)) mods.push(ref);
   }
-  return { keywords, unknown };
+  return { mods, unknown, illegal };
 }
+
+/** The editor's raw (string) form of every overridable field.
+ *
+ * Pure diffing logic — it decides what actually gets written into
+ * `cards.template.overrides` — so it lives here, testable without mounting
+ * the panel. */
+export interface OverrideForm {
+  /** Stars / gears / bolts, "1"–"5". The Creator's STAR HINT. */
+  tier: string;
+  /** The effect keyword. */
+  effect: string;
+  /** The effect's number; blank = the tier's default. */
+  effectN: string;
+  /** Modifiers, "Fuse 1, Veil". */
+  mods: string;
+  subtype: string;
+  /** Rules-text override; blank = generated text. */
+  text: string;
+}
+
+/** A card, rendered into the editor's string form — the baseline every field
+ * is compared against to decide whether it is an override. Rules text starts
+ * blank (generated) so an effect edit re-generates it. */
+export function formFor(def: CardDef): OverrideForm {
+  return {
+    tier: def.tier != null ? String(def.tier) : '',
+    effect: def.effect?.kw ?? '',
+    effectN: def.effect?.n != null ? String(def.effect.n) : '',
+    mods: formatKwRefs(def.mods),
+    subtype: (def.subtype as string) ?? '',
+    text: '',
+  };
+}
+
+/** Same keyword list (order-insensitive), with each number filled in from the
+ * tier when absent. */
+function sameMods(a: KwRef[], b: KwRef[], tier: number): boolean {
+  if (a.length !== b.length) return false;
+  const key = (r: KwRef) => `${r.kw}:${r.n ?? defaultN(r.kw, tier) ?? ''}`;
+  const bs = new Set(b.map(key));
+  return a.every((r) => bs.has(key(r)));
+}
+
+/**
+ * Diff the editor's form against the generated card and return only what
+ * actually changed. An unparseable value is reported instead of silently
+ * dropped, because a box reading "Kindle two" must not quietly print the
+ * generated effect.
+ *
+ * The STAR HINT re-derives the card: the generator picks effects by tier (a
+ * Windfall needs 3★), so the effect/modifier/subtype boxes are compared
+ * against the card derived WITH the tier override — `template` is the card's
+ * identity, without overrides.
+ */
+export function overridesFrom(
+  form: OverrideForm,
+  template: CardTemplate,
+): { overrides?: CardOverrides; problems: string[] } {
+  const identity: CardTemplate = { ...template, overrides: undefined };
+  const generated = deriveCardMechanics(identity);
+  const out: CardOverrides = {};
+  const problems: string[] = [];
+
+  if (isPower(generated)) {
+    if (form.tier.trim() !== String(generated.tier ?? '')) {
+      const t = Number(form.tier.trim());
+      if (!Number.isInteger(t) || t < 1 || t > 5) problems.push('Tier must be 1–5.');
+      else out.tier = t;
+    }
+    const base = out.tier
+      ? deriveCardMechanics({ ...identity, overrides: { tier: out.tier } })
+      : generated;
+    const tier = base.tier ?? 1;
+    const colors = base.colors;
+
+    const kw = form.effect.trim() as Keyword;
+    const effectChanged = kw !== (base.effect?.kw ?? '');
+    const nRaw = form.effectN.trim();
+    const baseN = base.effect?.n != null ? String(base.effect.n) : '';
+    if (effectChanged || nRaw !== baseN) {
+      if (!effectChoices(generated.type, colors).includes(kw)) {
+        problems.push(
+          KEYWORD_SPECS[kw]
+            ? `${kw} can't print on this card (wrong colour or type).`
+            : 'Pick an effect keyword.',
+        );
+      } else if (nRaw && !KEYWORD_SPECS[kw].numbered) {
+        problems.push(`${kw} takes no number.`);
+      } else {
+        const n = nRaw ? parseKwNumber(nRaw) : undefined;
+        if (n === null) problems.push(`${kw}'s number must be a positive number.`);
+        else {
+          const bad = n !== undefined ? kwNumberProblem(kw, n) : null;
+          if (bad) problems.push(bad);
+          else if (n !== undefined && n !== defaultN(kw, tier)) out.effect = { kw, n };
+          else if (effectChanged) out.effect = { kw };
+        }
+      }
+    }
+
+    const { mods, unknown, illegal } = parseModsInput(form.mods, colors);
+    if (unknown.length) {
+      problems.push(`Not a poker keyword: ${unknown.join(', ')}.`);
+    } else if (illegal.length) {
+      problems.push(`Not a modifier this card's colours allow: ${illegal.join(', ')}.`);
+    } else {
+      const bad = mods
+        .map((m) => (m.n !== undefined ? kwNumberProblem(m.kw, m.n) : null))
+        .find(Boolean);
+      if (bad) problems.push(bad);
+      else if (!sameMods(mods, base.mods ?? [], tier)) {
+        // Numbers equal to the tier default are left off, so a later tier
+        // change keeps scaling them.
+        out.mods = mods.map((m) =>
+          m.n === undefined || m.n === defaultN(m.kw, tier) ? { kw: m.kw } : m,
+        );
+      }
+    }
+
+    if (form.subtype.trim() !== String(base.subtype ?? '')) {
+      const allowed = SUBTYPE_CHOICES[generated.type] ?? [];
+      const st = form.subtype.trim() as CardSubtype;
+      if (!allowed.includes(st)) problems.push(`${generated.type}s can't be ${st || 'blank'}.`);
+      else out.subtype = st;
+    }
+  }
+
+  if (form.text.trim()) out.text = form.text.trim();
+
+  return { overrides: pruneOverrides(out), problems };
+}
+
+/** Subtypes the Creator may set per card type — the same values `cardpool.ts`
+ * generates, so an override can only ever pick a subtype the engine reads. */
+export const SUBTYPE_CHOICES: Partial<Record<CardType, CardSubtype[]>> = {
+  Item: ['Charm', 'Weapon', 'Tool'],
+  Event: ['Quick', 'Slow'],
+};
+
+const OVERRIDE_LABEL: Record<string, string> = {
+  tier: 'tier',
+  effect: 'effect',
+  mods: 'modifiers',
+  subtype: 'subtype',
+  text: 'rules text',
+};
 
 /** Human summary of what an override actually changes, for the review row and
  * the confirmation prompt. */
@@ -349,7 +577,7 @@ export function describeOverrides(o?: CardOverrides): string {
   const pruned = pruneOverrides(o);
   if (!pruned) return '';
   return Object.keys(pruned)
-    .map((k) => (k === 'text' ? 'rules text' : k))
+    .map((k) => OVERRIDE_LABEL[k] ?? k)
     .join(', ');
 }
 

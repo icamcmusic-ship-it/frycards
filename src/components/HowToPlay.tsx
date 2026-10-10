@@ -1,14 +1,15 @@
+import { PlayingCard as SpriteCard } from './PlayingCard';
 import React from 'react';
 import {
+  Coins,
   Flag,
+  Gauge,
   Gavel,
   Hand,
   Layers,
   Library,
   Package,
-  Sparkles,
-  Shield,
-  Swords,
+  Spade,
   Trophy,
   Zap,
   type LucideIcon,
@@ -20,228 +21,484 @@ import { restartCoach } from '../meta/coachPractice';
 import { useMeta } from '../meta/MetaContext';
 import { usePersistedState } from '../meta/usePersistedState';
 import { RARITY_CHIP, RARITY_ORDER } from '../meta/rarity';
-import { KEYWORDS, KEYWORD_TEXT, KEYWORD_TYPES, UNPRINTED_KEYWORDS } from '../game/v3/keywords';
-import { COLORS, COLOR_IDENTITY } from '../game/v3/colors';
+import { KEYWORDS, KEYWORD_SPECS, KEYWORD_TEXT, fmtUnits } from '../game/poker/keywords';
+import { COLORS, COLOR_IDENTITY, type Color } from '../game/poker/colors';
+import {
+  CAPS,
+  COST_LADDER_UNITS,
+  MAX_EXCLUSIONS,
+  MODES,
+  MODE_IDS,
+  NERVE,
+  PLACE_FACTORS,
+  SECOND_COST_TIER,
+  STACK_CAP_SHARE,
+} from '../game/poker/constants';
+import { LOCATION_TEMPLATES } from '../game/poker/locations';
+import { ordinal, placementReward } from '../game/poker/rewards';
 import { COLOR_PIP } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 
-// Condensed view of docs/RULEBOOK.md (Rulebook v6.0), plus a
-// standalone rarity-system explainer and an app feature guide — reachable
-// any time from the Main Menu's HOW TO PLAY button (and auto-opened on a
-// first-ever visit).
-const SECTIONS: { title: string; body: [string, string][] }[] = [
+// Condensed view of docs/RULEBOOK.md (FryCards Poker rulebook v1.0), plus a
+// standalone rarity-system explainer and an app feature guide — reachable any
+// time from the Main Menu's HOW TO PLAY button (and auto-opened on a first-ever
+// visit). Written for card players who have never played Hold'em: real poker
+// first, then the FryCards layers on top. Every number below is read from the
+// engine's own tables (constants.ts, keywords.ts, locations.ts, rewards.ts) so
+// a balance pass cannot leave this page quoting stale rules.
+
+type Row = [string, string];
+
+interface Section {
+  title: string;
+  body: Row[];
+  /** Terms are colours: print each one's pip beside it. */
+  colourPips?: boolean;
+  /** Something drawn under the rows (the rarity ladder). */
+  footer?: React.ReactNode;
+}
+
+const STANDARD = MODES.standard;
+const tierCost = (t: number) => fmtUnits(COST_LADDER_UNITS[t]);
+
+/** The nine hand categories, best first, with an example of each. */
+export const HAND_RANKS: { name: string; example: string; note: string }[] = [
   {
-    title: '1 · Objective & Setup',
+    name: 'Straight flush',
+    example: '9♥ 8♥ 7♥ 6♥ 5♥',
+    note: 'Five in a row, all one suit. A-K-Q-J-10 suited is a royal flush, the best hand there is.',
+  },
+  { name: 'Four of a kind', example: 'Q♠ Q♥ Q♦ Q♣ 4♠', note: 'All four cards of one rank.' },
+  {
+    name: 'Full house',
+    example: '7♠ 7♦ 7♣ K♥ K♠',
+    note: 'Three of a kind plus a pair. Higher trips win first.',
+  },
+  {
+    name: 'Flush',
+    example: 'A♦ J♦ 8♦ 6♦ 2♦',
+    note: 'Any five of one suit. Compare the highest card, then the next.',
+  },
+  {
+    name: 'Straight',
+    example: '10♣ 9♦ 8♠ 7♥ 6♣',
+    note: 'Five ranks in a row, mixed suits. The ace plays high (A-K-Q-J-10) or low (5-4-3-2-A).',
+  },
+  {
+    name: 'Three of a kind',
+    example: '8♠ 8♥ 8♦ K♣ 3♠',
+    note: 'Three cards of one rank ("trips").',
+  },
+  {
+    name: 'Two pair',
+    example: 'J♠ J♦ 4♣ 4♥ A♠',
+    note: 'Two different pairs. The higher pair decides, then the lower, then the fifth card.',
+  },
+  { name: 'Pair', example: '10♥ 10♠ K♦ 6♣ 2♥', note: 'Two cards of one rank.' },
+  {
+    name: 'High card',
+    example: 'A♣ Q♦ 9♠ 5♥ 3♣',
+    note: 'Nothing above. The highest card wins, then the next.',
+  },
+];
+
+/** Keyword glossary rows, grouped by colour (the common set first). */
+function keywordRows(): Row[] {
+  const groups: { label: string; colour: Color | null }[] = [
+    { label: 'Common set — every colour', colour: null },
+    ...COLORS.map((c) => ({
+      label: `${c} — ${COLOR_IDENTITY[c].split(':')[0].toLowerCase()}`,
+      colour: c,
+    })),
+  ];
+  return groups.flatMap(({ label, colour }) => {
+    const kws = KEYWORDS.filter((k) => KEYWORD_SPECS[k].color === colour);
+    if (kws.length === 0) return [];
+    return [
+      [`— ${label} —`, ''] as Row,
+      ...kws.map((k) => {
+        const s = KEYWORD_SPECS[k];
+        const tags = [
+          s.gated ? `Only ${s.color} cards carry it.` : '',
+          s.hostile ? 'Hostile.' : '',
+        ].filter(Boolean);
+        return [s.numbered ? `${k} N` : k, [KEYWORD_TEXT[k], ...tags].join(' ')] as Row;
+      }),
+    ];
+  });
+}
+
+function rewardRows(): Row[] {
+  const rows: Row[] = Object.keys(PLACE_FACTORS).map((n) => {
+    const seats = Number(n);
+    const pays = Array.from(
+      { length: seats },
+      (_, i) => placementReward(i + 1, seats, 'standard').credits,
+    );
+    return [`${seats} seats`, pays.map((c, i) => `${ordinal(i + 1)} ${c}`).join(' · ')] as Row;
+  });
+  return [
+    [
+      'Placement only',
+      'Rewards pay by where you finish, never by chips. Chips exist only inside a match: they reset every game and can never be bought, carried over or traded.',
+    ],
+    ['Credits (Standard)', ''],
+    ...rows,
+    [
+      'Mode multiplier',
+      MODE_IDS.map((m) => `${MODES[m].label} ×${MODES[m].rewardMult}`).join(' · ') +
+        '. XP and battle-pass XP scale the same way.',
+    ],
+    [
+      'Minimum length',
+      `A match must run at least ${MODE_IDS.map((m) => `${MODES[m].minMatchMs / 60000} min (${MODES[m].label})`).join(', ')} to pay out.`,
+    ],
+  ];
+}
+
+const SECTIONS: Section[] = [
+  {
+    title: '1 · The Goal & the Table',
     body: [
       [
-        'Win Condition',
-        "Reduce your opponent's Vitality from 20 to 0, or force them to Deal (draw) from an empty deck — either ends the game on the spot.",
+        'Freezeout',
+        `FryCards Poker is Texas Hold'em for 2 to 6 seats. Everyone starts with the same stack (${STANDARD.stackUnits} chip units in Standard). Lose all your chips and you are out; the last seat with chips wins.`,
       ],
+      [
+        'The clock',
+        `Blinds rise on a clock, not a hand count (×${STANDARD.blindGrowth} every ${STANDARD.levelMs / 60000} minutes in Standard). When the mode's time cap runs out (${STANDARD.capMs / 60000} minutes in Standard) the current hand finishes, then everyone still in is ranked by stack.`,
+      ],
+      [
+        'Placement',
+        'Seats that bust are ranked by when they went out. Rewards follow your finishing place.',
+      ],
+      [
+        'Your deck',
+        'You do not play with your deck cards as poker cards. The poker cards are a normal 52-card deck the table shares. Your deck is a Leader, one Location and a stack of power cards that bend the poker.',
+      ],
+    ],
+  },
+  {
+    title: "2 · A Hand of Hold'em",
+    body: [
+      [
+        'Button & blinds',
+        'The dealer button moves one seat left every hand. The two seats after it post forced bets: the small blind (half) and the big blind (one full blind). Heads-up, the dealer posts the small blind.',
+      ],
+      [
+        'Hole cards',
+        'Each seat gets two private cards face-down: your hole cards. Only you can see them.',
+      ],
+      [
+        'Pre-flop',
+        'The first betting round. It starts with the seat after the big blind and goes around the table.',
+      ],
+      [
+        'Flop',
+        'Three community cards are dealt face-up in the middle. Everyone shares them. Second betting round.',
+      ],
+      ['Turn', 'A fourth community card. Third betting round.'],
+      ['River', 'The fifth and last community card. Final betting round.'],
+      [
+        'Showdown',
+        'If two or more seats are still in after the river, they show. Each makes the best five-card hand from their two hole cards plus the five on the board (any five of the seven). Best hand wins the pot; an exact tie splits it.',
+      ],
+      [
+        'Your options',
+        'FOLD: give up the hand. CHECK: pass the action when there is no bet to you. CALL: match the current bet. BET or RAISE: put in more and make everyone else match it. ALL-IN: bet everything you have left.',
+      ],
+      ['Keyboard', 'F folds, C checks or calls, R raises. The raise slider sets the size.'],
+      [
+        'Winning without a showdown',
+        'If everyone else folds, you win the pot without showing. That is what makes a bluff work.',
+      ],
+    ],
+  },
+  {
+    title: '3 · Betting: Pot-Limit, All-In & Side Pots',
+    body: [
+      [
+        'Pot-limit',
+        'The biggest raise you may make is the size of the pot after you call. The smallest raise is the size of the last bet or raise (at least one big blind).',
+      ],
+      [
+        'All-in',
+        'You can never be forced out of a hand for lack of chips. Going all-in keeps you in for the part of the pot you matched.',
+      ],
+      [
+        'Side pots',
+        'When a short stack is all-in, the chips the others keep betting go into a side pot that the all-in seat cannot win. Each pot is awarded on its own at showdown.',
+      ],
+      [
+        'Who shows',
+        'Pot winners show. The last seat that bet or raised must show too. Everyone else mucks (hides) a losing hand unless the Location is Open Table.',
+      ],
+      [
+        'Odd chips',
+        'A pot that will not split evenly gives the odd chip to the first winner left of the button.',
+      ],
+      [
+        'Busting',
+        'Once you are out you can watch the rest of the match at 4× speed or skip to the result.',
+      ],
+    ],
+  },
+  {
+    title: '4 · Your Deck & the Modes',
+    body: [
       [
         'Deck',
-        'At least 60 cards (Units, Sanctums, Items, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Ultra-Rare/Full-Art up to 2, Alt-Art/Mythic up to 1.',
+        "One Leader + one Location + power cards. The Leader's two colours decide which colours the deck may hold; colourless cards fit any deck.",
+      ],
+      ...MODE_IDS.map((id) => {
+        const m = MODES[id];
+        return [
+          m.label,
+          `${m.stackUnits}-unit stacks · blinds ×${m.blindGrowth} every ${m.levelMs / 60000} min · ~${m.capMs / 60000} min · ${m.powers} powers · up to ${m.maxCopies} copies, ${m.maxTier5} tier-5 card${m.maxTier5 === 1 ? '' : 's'} · power hand ${m.handStart} to start, draw ${m.handDraw} a hand, hold ${m.handCap} max.`,
+        ] as Row;
+      }),
+      [
+        'Power hand',
+        'Your power cards are a separate hand, hidden from the table. When your power deck runs out, your discard is reshuffled.',
       ],
       [
-        'Color legality',
-        "A card's color identity is the colored pips in its Essence Cost. Every colored pip in your deck must fall inside your Leader's two-color identity; colorless cards (generic-only costs) fit any deck.",
-      ],
-      [
-        'Setup',
-        'Both players draw a 7-card opening hand. To offset going second, the second player may play TWO basic Wellsprings on their opening turn — the second one arrives exhausted, so it powers their next turn. The first player skips the Deal on their very first Dawn.',
-      ],
-      [
-        'Mulligan',
-        'Before the first turn you may shuffle your hand back and draw one card FEWER — as many times as you like (7 → 6 → 5 → …). Keep only when you are happy with the hand.',
+        'Old decks',
+        'Decks from the retired 60-card game, and their share links, no longer work. Your collection is untouched.',
       ],
     ],
   },
   {
-    title: '2 · Turn Structure',
+    title: '5 · Power Cards: Units, Items, Events',
     body: [
       [
-        'Dawn',
-        'Recover (untap) all your exhausted permanents, "At Dawn" keywords and triggers fire, then Deal one card. Fully automatic in this client — but not empty: Regenerate heals, Thriving and Empowering grow bodies, Sacred and Radiant restore Vitality, Archivist draws, Resolute rebuilds Leader Resolve, and Glaciate reaches across the table to freeze one of the OPPONENT\'s units. Every one of those is now a line in the Battle Log, and the opponent\'s Dawn is narrated on the board before its turn begins.',
+        'Tiers',
+        'Every power has a tier from 1 to 5: ★ stars on Units, ⚙ gears on Items, ϟ bolts on Events. The tier sets the chip cost and the number N in its keywords. Tier is not rarity.',
       ],
       [
-        'Main Phase I',
-        'Invoke Units, Items, Events, Sanctums, or your Leader — and play one basic Wellspring (once per turn, free, any Essence Type in your Leader’s identity).',
+        'Unit ★',
+        `One effect. It stays on the table as a visible token until the hand ends, then goes to your discard. Up to ${CAPS.unitCount} Units a hand with ${CAPS.unitStars} stars between them (5, 4+1, 3+2, 2+2… two 3-stars is too many).`,
       ],
       [
-        'Clash',
-        'Declare attackers → the defender assigns guards → a reaction window (Quick Events / Ambush units) → simultaneous clash damage.',
+        'Item ⚙',
+        `Bonds to your Unit. With no Unit out it bonds to a hole card at one cost step more. Up to ${CAPS.itemCount} Items and ${CAPS.itemGears} gears a hand.`,
+      ],
+      ['Charm', 'An Item that works this hand, then goes to your discard.'],
+      ['Weapon', 'An Item that returns to your hand after use.'],
+      [
+        'Tool',
+        "An Item that also marks one of the target's hole cards: you learn it for the hand.",
       ],
       [
-        'Main Phase II',
-        'A second main phase. Unspent essence from the previous phase is gone; Locations stay exhausted until Dawn. Use any Locations still ready to keep developing.',
+        'Event ϟ',
+        `Resolves once, then goes to your discard. Up to ${CAPS.eventBolts} bolts a hand and ${CAPS.eventsPerStreet} Events a street.`,
       ],
       [
-        'Keyboard',
-        'The clash bar carries exactly one loud button at a time — TO CLASH, DECLARE ATTACK, CONFIRM GUARDS, RESOLVE CLASH, PASS, END TURN, SKIP — and the SPACE bar presses whichever one it is currently showing, so a whole match can be played without moving the pointer back to the middle of the board eighty times. The button says SPACE on it whenever the key is live. Escape is the other half: it cancels a target pick, clears an attacker or guard assignment, and closes whatever overlay is frontmost, one layer per press.',
+        'Quick Event',
+        'Castable on your turn and in the short response windows after a cast or a raise.',
       ],
-      [
-        'Dusk',
-        '"At Dusk" keywords and triggers fire — Entropic and Blighted erode cards off the opponent\'s deck, Scorched-Earth sweeps their whole board — then you Shed (discard) down to 7 cards and the turn passes.',
-      ],
-      [
-        'The opponent’s turn',
-        'Never a black box: every move it makes is narrated one action at a time, and the cards involved light up on the board — yellow for what it is acting WITH, red for what it is aimed AT — with the card it just played held up in the middle of the screen. That covers every moment it acts: its Dawn (where a Glaciate can freeze one of your units before it has played anything), its own turn, its blocks the instant you declare an attack, its Dusk sweeps, and its ANSWERS to a card you just played (it can counter you, or kill the unit you were aiming at, before your card resolves). When it declares an attack, your own Vitality plate lights up too — that is what the attackers are pointed at until you guard them. ⏱ sets the pace (CINEMATIC / SLOW / NORMAL / FAST), ❚❚ HOLD freezes a move on screen and ▸ STEP then walks the turn one action at a time, and SKIP ▸▸ fast-forwards the rest (and releases the hold). Missed something? ▴ LOG opens the Battle Log on the newest line, with a divider marking everything that happened since your last turn.',
-      ],
+      ['Slow Event', 'Castable only on your own turn, before you act on that street.'],
     ],
   },
   {
-    title: '3 · Essence & Wellsprings',
+    title: '6 · Casting & Costs',
     body: [
       [
-        'Producing essence',
-        'Exhaust a Location to produce one Essence of its type. Basic Wellsprings take no deck slots — once per turn you simply play one from the game itself. Sanctums are invoked from hand for their cost and produce essence AND carry an ability.',
+        'When',
+        'On your turn, before you bet, check, call or fold. Casting does not use up your turn. Folded seats cannot cast.',
       ],
       [
-        'Paying costs',
-        'A cost’s colored pips must be paid with matching Essence; the generic part (the gray numeral) with any Essence. In this client, invoking auto-taps the Locations needed — you can also tap them manually.',
+        'Cost ladder',
+        `Tier 1: ${tierCost(1)} · tier 2: ${tierCost(2)} · tier 3: ${tierCost(3)} · tier 4: ${tierCost(4)} · tier 5: ${tierCost(5)} chip units. Costs are fixed for the whole match, so powers get relatively cheaper as the blinds climb.`,
       ],
       [
-        'Pool empties',
-        'Unspent Essence disappears at the end of every phase — there is no banking essence across phases or turns.',
+        'Into the pot',
+        'Chips you pay go into the pot, never out of the game. Whoever wins the pot wins them too, so a big payment is a signal the table can read.',
       ],
       [
-        'Timing',
-        'Slow Events, Items, Sanctums, and Leaders: your own main phases only. Quick Events and Ambush units: any priority window — your main phases, the guard-step reaction window of either player’s Clash, and whenever an opponent’s card is on the stack waiting to resolve.',
+        'Steps',
+        `Some things move a cost along the ladder: Surge and Happy Hour make it one step cheaper (never below ${fmtUnits(COST_LADDER_UNITS[0])}), tilt and an unbonded Item one step dearer.`,
       ],
       [
-        'Responding (the stack)',
-        'Invoked Units, Events, Items and Sanctums go on the stack, and the other player gets a window to answer with a Quick Event or Ambush unit before they take effect. Responses resolve last-in-first-out, and a response whose locked target is gone or illegal when it resolves fizzles. Leaders and Leader abilities are immediate digital actions and do not use the stack. PASS when you have no answer (or don’t want to spend one).',
+        'Second cost',
+        `Tier ${SECOND_COST_TIER} and ${SECOND_COST_TIER + 1} powers also need a non-chip cost, your choice of: SHED another power card from your hand; BLIND one of your hole cards (you cannot look at it until the street ends); or a HAND EXCLUSION.`,
+      ],
+      [
+        'Hand exclusion',
+        `Name a hand you could still make (pair, two pair, trips, straight or flush). If that is your best hand at showdown you cannot win the pot; it goes to the best eligible hand. It does nothing if everyone else folds. At most ${MAX_EXCLUSIONS} a hand, announced to the table. If every contender is excluded, exclusions are ignored.`,
+      ],
+      [
+        'Stack cap',
+        `No cast costs more than ${STACK_CAP_SHARE * 100}% of your current stack. The excess becomes one more second cost. That is also how an all-in seat can still cast.`,
+      ],
+      [
+        'Public',
+        'A cast shows its full card face, the caster and the target to everyone. Casting is itself a bluff: the face tells the table what you want them to think.',
+      ],
+      [
+        'Response window',
+        'After a cast (and after a raise) every other seat holding a Quick Event or an Ambush card gets a short window to answer. A response resolves at once; there are no responses to responses, and no stack. Then the original cast resolves. Quickstrike skips the window.',
+      ],
+      [
+        'Fizzle',
+        'If your target folds before your cast resolves, it fizzles. The cost is not refunded.',
+      ],
+      [
+        'Hostile limit',
+        'A hostile power (marked Hostile in the glossary) attacks a seat. Each seat can be hit by at most one hostile power per street, and being hit costs it nerve.',
       ],
     ],
   },
   {
-    title: '4 · Card Types & Invoking',
+    title: '7 · Information & Bluffing',
     body: [
       [
-        'Unit',
-        'Has Might (damage it deals) and Grit (damage it takes). Attacks and guards. Freshly invoked units are "summoning sick" — they can’t attack until your next turn unless they have Reckless.',
+        'What you see',
+        'Your own hole cards, the board and every public play. Everything else is granted by a power. Other seats see how many power cards you hold, never which.',
       ],
       [
-        'Location',
-        'Wellspring (basic, essence-only) or Sanctum (essence + a static/triggered ability, invoked from hand).',
+        'Private results',
+        'Everyone sees that you peeked at a seat; only you see what you saw. Peek, Mark, Foresee and Redraw results are yours alone. Reveal turns a card face-up for the whole table.',
+      ],
+      ['Veil', 'Hides where a cast points until the street ends.'],
+      [
+        'Feint',
+        'About 1 card in 12 can Feint: cast face-up, secretly choosing to let it fizzle. To the table it looks resolved.',
       ],
       [
-        'Item',
-        'Bonds to one of your units and grants stats/keywords. Three subtypes: a Charm goes to the Ash-pile when its unit leaves the field, and may instead be cast on YOU for Vitality; a Weapon survives its unit and can re-bond to another for its re-bond cost; a Tool is a Weapon that also weakens a target enemy unit as it bonds.',
+        'Call Out',
+        "Light's truth tool: test a seat's last cast. A caught Feint costs its caster nerve and refunds the Call Out. A real cast keeps your chips in the pot.",
       ],
       [
-        'Event',
-        'Resolves once, then goes to the Ash-pile. Quick = any priority window; Slow = your own main phases only.',
-      ],
-      [
-        'Leader',
-        'Starts in the Leader zone; invoke it during your own main phase with the stack empty once you can afford its cost. It has Resolve instead of Might/Grit: one ability may be activated per turn, during your own main phase with the stack empty. Leader invocation and abilities resolve immediately in this digital client; at 0 Resolve the Leader is shattered and gone for the game.',
+        'Bots',
+        "CPU seats only ever see their own seat's view. Harder bots decide better; they never see more.",
       ],
     ],
   },
   {
-    title: '5 · The Clash (Combat)',
+    title: '8 · Nerve & Leaders',
     body: [
       [
-        'Attacking',
-        'Only recovered, non-Immobile units without summoning sickness (unless Reckless) may attack. Attacking exhausts the unit unless it has Alert.',
+        'Nerve',
+        `A public meter from 0 to ${NERVE.max}; everyone starts at ${NERVE.start}. It is a readable tell: a seat low on nerve is close to tilting.`,
       ],
       [
-        'Guarding',
-        'The defender assigns any of their un-exhausted units to guard attackers — several guards may gang up on one attacker. Unguarded attackers deal their Might straight to the defender’s Vitality.',
+        'Gain nerve',
+        `+${NERVE.winShowdown} winning a showdown · +${NERVE.bluffWin} when a bluff gets through (everyone folds to a hand that had nothing) · +${NERVE.strongFold} folding a strong hand.`,
       ],
       [
-        'Guard shortcuts',
-        'Pick an attacker line in the clash bar, then click your units to guard it. The bar shows live how much Vitality is coming through if you confirm as-is, and ✦ SUGGEST fills the lines with the same blocking heuristic the CPU uses — a starting point you can then edit. Escape clears the whole assignment.',
+        'Lose nerve',
+        `${NERVE.caughtBluff} caught bluffing at showdown · ${NERVE.hostileHit} each time a hostile power hits you · ${NERVE.calledOutFizzle} when a Call Out catches your Feint · Needle drains it directly.`,
       ],
       [
-        'Guard restrictions',
-        'Aerial attackers can only be guarded by Aerial or Skywatch units. Nimble attackers can only be guarded by a unit with LESS Might. Swarmproof attackers must be guarded by two or more units, or not at all. Once an attacker is guarded it stays guarded — removing the blocker mid-clash does not let the attack through (only Overrun spills).',
+        'Tilt',
+        'At 0 nerve you are tilted: your Leader is locked and every power costs one step more until your nerve recovers. Nerve never knocks you out; only chips do.',
       ],
       [
-        'Reaction window',
-        'After guards are set, EITHER player may still invoke Quick Events and Ambush units (tapping Locations for essence as needed) before damage resolves — the attacker gets the window in their own Clash too.',
+        'Leader abilities',
+        'Each Leader has two: one SPENDS nerve (strong) and one BUILDS nerve (weaker, and it costs a few chips into the pot). One Leader ability per hand, on your own turn.',
       ],
       [
-        'Damage',
-        'Simultaneous, except Quickstrike/Doublestrike deal a first-strike sub-step. Venomous damage is lethal at any amount, Siphon converts damage into Vitality (never above 20), and Overrun sends excess damage past shattered guards through to the defender.',
-      ],
-      [
-        'State checks',
-        'Lethal damage shatters a unit to the Ash-pile — an Unbreakable unit prevents the first lethal-damage or shatter effect once per game and survives wounded with 1 remaining Grit (effective Grit minus marked damage). Banish and being reduced to 0 Grit bypass that save. Grit lost to Withering or a -X/-X effect is permanent, so healing cannot bring a 0-Grit unit back. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
+        'Personas',
+        'The same Leaders drive the CPU seats. Their colours set the style: Ember and Shadow bluff more, Void plays tight, Light bluffs least.',
       ],
     ],
   },
   {
-    title: '6 · Keywords',
-    // v6.0 gave every card type its own keyword vocabulary and v6.9 added
-    // one more per Essence Type, which made a single flat A-to-Z list of 31
-    // entries hard to read. Grouped under a heading per card type instead,
-    // in the order a player meets them.
-    body: (['Unit', 'Event', 'Item', 'Location', 'Leader'] as const).flatMap((type) => [
-      [`— ${type} keywords —`, ''] as [string, string],
-      // UNPRINTED_KEYWORDS: engine-ready but on no card yet — a glossary
-      // entry the player can never meet is dead text (catalog.test.ts owns
-      // the same rule for the pool).
-      ...KEYWORDS.filter(
-        (kw) => KEYWORD_TYPES[kw] === type && !UNPRINTED_KEYWORDS.includes(kw),
-      ).map((kw) => [kw, KEYWORD_TEXT[kw]] as [string, string]),
-    ]),
-  },
-  {
-    title: '7 · Essence Identity (the Seven Colors)',
-    body: COLORS.map((c) => [c, COLOR_IDENTITY[c]] as [string, string]),
-  },
-  {
-    title: '8 · Strategy Primer',
+    title: '9 · Locations (the Table Rule)',
     body: [
       [
-        'Curve out',
-        'Play your free Wellspring every single turn — it is your mana growth. Missing one puts you a full essence behind for the rest of the game.',
+        'The bag',
+        "Every seat's Location goes into a shared bag with one Plain Table. Each hand plays the next one, in an order that ignores who is dealing, so a Location is the table's weather, not anyone's perk. The bag refills when it empties and never repeats the same Location twice in a row.",
+      ],
+      ['Forecast', 'The table shows the next two Locations, so you can plan casts around them.'],
+      [
+        'Small tables',
+        'With 2 or 3 seats, house Locations join the bag so the table sees at least five different ones.',
       ],
       [
-        'Color discipline',
-        'Double-pip costs want multiple Wellsprings of that color. Check your hand’s pips before choosing which Wellspring type to play.',
+        'Credit',
+        "The owner's name and the card art are shown when their Location comes up. The owner gets no bonus.",
+      ],
+      ['— The rules —', ''],
+      ...Object.values(LOCATION_TEMPLATES).map((t) => [t.name, t.text()] as Row),
+    ],
+  },
+  {
+    title: '10 · Keywords',
+    // Read straight from KEYWORD_SPECS, grouped by colour the way the colour
+    // gating works: the common set first, then each colour's own vocabulary.
+    body: [
+      [
+        'Reading a card',
+        'A power is one effect keyword plus modifiers. N is set by the tier; chip amounts are in chip units. Light owns reading other seats, Void owns denial: those keywords only appear on cards of that colour.',
+      ],
+      ...keywordRows(),
+    ],
+  },
+  {
+    title: '11 · The Seven Colours',
+    colourPips: true,
+    body: COLORS.map((c) => [c, COLOR_IDENTITY[c]] as Row),
+  },
+  {
+    title: '12 · Strategy Primer',
+    body: [
+      [
+        'Play fewer hands',
+        'Most two-card starts lose. Pairs, two high cards (A-K, A-Q, K-Q) and suited aces are worth playing; fold most of the rest, especially early.',
       ],
       [
-        'Guard math',
-        'A guard that kills the attacker OR survives the hit is usually worth it; chump-guarding only to save Vitality is a last resort. Remember multiple guards can pile onto one big attacker.',
+        'Position',
+        'Acting last is a big edge: you see what everyone else did first. Play more hands on the button, fewer just after the blinds.',
       ],
       [
-        'Leader timing',
-        'Leader abilities are repeating value every turn — invoke your Leader as soon as it’s affordable, but mind its Resolve: spending it to 0 shatters the Leader for good.',
+        'Price your calls',
+        'Compare the call to the pot. Calling 1 into a pot of 4 only needs you to win one time in five to break even.',
       ],
       [
-        'Reaction plays',
-        'Hold Quick Events and Ambush units to punish the opponent’s Clash — a surprise guard-step unit or removal spell can flip a whole attack.',
+        'Bet for a reason',
+        'Bet to get called by worse hands, or to make better hands fold. A bet that does neither just costs chips.',
       ],
       [
-        'Hand discipline',
-        'Dusk sheds you down to 7 — if you’re over, invoke something in Main II rather than discarding it for free.',
+        'Cast with intent',
+        'A cast is information for the table. A big Peek tells everyone you are unsure; a Bait or a Gambit can be there purely to draw a raise.',
+      ],
+      [
+        'Watch the nerve meters',
+        'A tilted seat cannot use its Leader and pays more for powers. A seat near zero may play scared — or reckless.',
       ],
     ],
   },
   {
-    title: '9 · Rarity System',
+    title: '13 · Rewards',
+    body: rewardRows(),
+  },
+  {
+    title: '14 · Rarity System',
     body: [
       [
         'The ladder',
         'Common < Uncommon < Rare < Super-Rare < Ultra-Rare < Full-Art < Alt-Art < Mythic, low to high. Full-Art sits ABOVE Ultra-Rare — the third-rarest tier there is, behind Alt-Art and Mythic only.',
       ],
       [
-        'Copy caps',
-        'Common/Uncommon/Rare: up to 4 copies in a deck (the rulebook maximum). Super-Rare/Ultra-Rare/Full-Art: up to 2. Alt-Art/Mythic: exactly 1.',
+        'Rarity is not power',
+        "A card's tier (stars, gears, bolts) is generated separately. Rarity only nudges it: a Mythic is more often tier 3+ than a Common, but not always. Commons get simple, reliable effects; Mythics get odd, high-variance ones.",
+      ],
+      [
+        'Copy limits',
+        `Set by the mode, not the rarity: up to ${MODES.quick.maxCopies} copies in Quick and Standard, ${MODES.deep.maxCopies} in Deep.`,
       ],
       [
         'Full-Art',
-        'A visually distinct print tier whose still art fills the entire card edge-to-edge — not stronger than other cards at the same power level, just a rarer, flashier version. Priced, dropped and capped above Ultra-Rare in every system.',
+        'A visually distinct print tier whose still art fills the entire card edge-to-edge — not stronger than other cards, just a rarer, flashier version. Priced, dropped and capped above Ultra-Rare in every system.',
       ],
       [
         'Alt-Art',
-        "A separately-illustrated alternate printing of a hand-picked existing card — same identity and stats, striking new art. Rarer than Full-Art, behind only Mythic. Its own holographic 'Prism Ink' template shifts color slowly across the full-bleed art, distinct from both Mythic's video and a Serialized print's rotating rainbow frame.",
+        "A separately-illustrated alternate printing of a hand-picked existing card — same identity, striking new art. Rarer than Full-Art, behind only Mythic. Its own holographic 'Prism Ink' template shifts color slowly across the full-bleed art.",
       ],
       [
         'Mythic',
-        'The top of the ladder and the only tier whose art moves: every Mythic is a short looping video clip printed full-bleed behind a glowing gold inner frame. One copy per deck.',
+        'The top of the ladder and the only tier whose art moves: every Mythic is a short looping video clip printed full-bleed behind a glowing gold inner frame.',
       ],
       [
         'Foil',
@@ -256,9 +513,21 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         'There is no pity system of any kind. Chase slots always pay at least a Rare — everything above that is genuine luck. Every pack shows its exact server-side odds under VIEW DROP ODDS before you spend anything.',
       ],
     ],
+    footer: (
+      <div className="flex flex-wrap gap-1.5 mt-1">
+        {RARITY_ORDER.map((r) => (
+          <span
+            key={r}
+            className={`fs-xs font-black px-1.5 py-0.5 rounded-full ${RARITY_CHIP[r] || ''}`}
+          >
+            {r}
+          </span>
+        ))}
+      </div>
+    ),
   },
   {
-    title: '10 · Packs, Boxes & Opening',
+    title: '15 · Packs, Boxes & Opening',
     body: [
       [
         'Pack anatomy',
@@ -270,7 +539,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Deck Box',
-        'Every operative claims one free Deck Box from the Store: pick any Rare-or-below Leader and it opens into that Leader plus a ready-to-play, colour-legal 60-card deck built around them — 2 Super-Rares, 8 Rares, and Uncommons/Commons to fill the curve. The deck is saved to your decks automatically.',
+        'Every operative claims one free Deck Box from the Store: pick any Rare-or-below Leader and it opens into that Leader plus a ready-to-play, colour-legal deck built around them. The deck is saved to your decks automatically.',
       ],
       [
         'Mass opening',
@@ -278,7 +547,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'No dupe protection',
-        'Every slot is a straight random pull — packs can repeat cards you already own. Duplicates are always kept; there is no per-rarity copy cap, so extra copies stack in your collection to quick-sell or trade whenever you like.',
+        'Every slot is a straight random pull — packs can repeat cards you already own. Duplicates are always kept, so extra copies stack in your collection to quick-sell or trade whenever you like.',
       ],
       [
         'Daily freebies',
@@ -287,11 +556,11 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     ],
   },
   {
-    title: '11 · Economy & Currencies',
+    title: '16 · Economy & Currencies',
     body: [
       [
         'Credits',
-        'The base currency. Earned from matches, level-ups, missions, achievements, daily logins and quickselling. Spent on packs, boxes, cosmetics and the Marketplace.',
+        'The base currency. Earned from matches (by finishing place), level-ups, missions, achievements, daily logins and quickselling. Spent on packs, boxes, cosmetics and the Marketplace.',
       ],
       [
         'Vouchers',
@@ -303,7 +572,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Player-to-player',
-        'The Marketplace (fixed listings and auctions, 5% seller fee), direct friend Trades, and level-50 Player Shops all move cards between real players.',
+        'The Marketplace (fixed listings and auctions, 5% seller fee), direct friend Trades, and Player Shops all move cards between real players.',
       ],
       [
         'XP sources',
@@ -312,7 +581,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     ],
   },
   {
-    title: '12 · Using Fry Cards — Every Feature',
+    title: '17 · Using Fry Cards — Every Feature',
     body: [
       [
         'Collection',
@@ -320,7 +589,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Deck Builder',
-        'Assemble a legal 60-card deck plus Leader from your Collection. QUICKBUILD auto-fills a legal deck; the stats panel shows your essence-cost curve, card types and keywords. The same physical copy can never be locked into two decks at once.',
+        'Pick a Leader, one Location and the power cards for a mode (16, 24 or 36). The builder checks copies, tier-5 limits and colours as you go. The same physical copy can never be locked into two decks at once.',
       ],
       [
         'Store',
@@ -348,7 +617,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         '3D Showroom',
-        'A card as an object, not a picture. Drag it and it turns all the way round — front, edge, back, edge, front — because it has real thickness. Tilt it over the top edge or under the bottom one, zoom from across the room to close enough to read the smallest line of rules text, flick it to set it coasting, or leave it turning by itself. Wheel or pinch to zoom, arrow keys to tilt, F to flip, R to reset, SPACE for auto-spin. SUPER-RARE and above each stand in an environment of their own — ION SWEEP, GILDED HALL, AURORA VAULT, PRISM CHAMBER, EMBER FORGE — with card effects only those rarities get: motes orbiting in the space around the card, a rim light that swings as you turn it, and a floor glow in the room’s colour. Your graded slabs stand in there too. Reach it from the menu, from VIEW IN 3D in the card inspector, or from any slab on your Collection shelf.',
+        'A card as an object, not a picture. Drag it and it turns all the way round, tilt it, zoom close enough to read the smallest line of text, or leave it turning by itself. Wheel or pinch to zoom, arrow keys to tilt, F to flip, R to reset, SPACE for auto-spin. Reach it from the menu, from VIEW IN 3D in the card inspector, or from any slab on your Collection shelf.',
       ],
       [
         'News Center',
@@ -356,7 +625,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Profile & Settings',
-        'Track your stats, equip cosmetics, pick a color theme, set how fast the opponent’s turn is narrated (CINEMATIC / SLOW / NORMAL / FAST), and opt out of username recognition in the Serialized feed.',
+        'Track your stats, equip cosmetics, pick a color theme, set how fast the CPU seats act (1× / 2× / INSTANT), and opt out of username recognition in the Serialized feed.',
       ],
     ],
   },
@@ -375,10 +644,86 @@ interface StepCard {
   action: Action;
 }
 
-/** The seven Essence Types as the pips they print on cards. */
-function EssenceRow() {
+/** A playing card as text: "K♥" in red, "7♠" in ink. */
+const SUIT_GLYPHS = ['♠', '♥', '♦', '♣'];
+
+/** A card from its printed label ("9♥", "10♣"), drawn with the same Kenney
+ * sprites the table uses. */
+function PlayingCard({
+  label,
+  size = 'sm',
+}: {
+  key?: React.Key;
+  label: string;
+  size?: 'sm' | 'xs';
+}) {
+  const rank = label.slice(0, -1);
+  const suit = SUIT_GLYPHS.indexOf(label.slice(-1));
+  const r = rank === '10' ? 10 : '23456789TJQKA'.indexOf(rank) + 2;
   return (
-    <div className="flex flex-wrap gap-1" aria-label="The seven Essence Types">
+    <SpriteCard
+      r={r}
+      s={Math.max(0, suit)}
+      scale={1}
+      title={label}
+      className={size === 'xs' ? '-mr-1' : undefined}
+    />
+  );
+}
+
+/** Two hole cards, fanned. */
+function HoleCards() {
+  return (
+    <div className="flex items-end h-12 pl-2" aria-hidden>
+      {(['A♠', 'K♥'] as const).map((c, i) => (
+        <span
+          key={c}
+          className="-ml-2 first:ml-0"
+          style={{ transform: `rotate(${i ? 8 : -8}deg)` }}
+        >
+          <PlayingCard label={c} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The board: flop (three), turn, river. */
+function BoardRow() {
+  const cards = ['Q♣', '7♦', '2♠', 'J♥', '10♠'];
+  const label = ['FLOP', '', '', 'TURN', 'RIVER'];
+  return (
+    <div className="flex items-end gap-1" aria-hidden>
+      {cards.map((c, i) => (
+        <span
+          key={c}
+          className={`flex flex-col items-center gap-0.5 ${i === 3 ? 'ml-2' : ''} ${i === 4 ? 'ml-1' : ''}`}
+        >
+          <span className="fs-xs font-mono font-black text-[var(--c-steel)] h-3 leading-none">
+            {label[i]}
+          </span>
+          <PlayingCard label={c} size="xs" />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The three tier marks. */
+function TierMarks() {
+  return (
+    <div className="flex items-center gap-3 font-black text-sm" aria-hidden>
+      <span>★★★ Unit</span>
+      <span>⚙⚙ Item</span>
+      <span>ϟ Event</span>
+    </div>
+  );
+}
+
+/** The seven colours as the pips they print on cards. */
+function ColourRow() {
+  return (
+    <div className="flex flex-wrap gap-1" aria-label="The seven colours">
       {COLORS.map((c) => (
         <span
           key={c}
@@ -393,73 +738,60 @@ function EssenceRow() {
   );
 }
 
-/** Three mini cards fanned out: "your hand". */
-function HandFan() {
-  return (
-    <div className="flex items-end h-12 pl-2" aria-hidden>
-      {[-8, 0, 8].map((deg, i) => (
-        <span
-          key={deg}
-          className="w-8 h-11 -ml-2 first:ml-0 ink-border-sm bg-[var(--c-paper)] flex items-start justify-center pt-1"
-          style={{ transform: `rotate(${deg}deg)`, zIndex: i }}
-        >
-          <span className="w-4 h-4 rounded-full bg-[var(--c-yellow)] ink-border-sm" />
-        </span>
-      ))}
-    </div>
-  );
-}
-
 const STEPS: StepCard[] = [
   {
-    title: 'Pick a Leader and a deck',
-    body: 'Your Leader fixes your two colours. A deck is 60+ cards with at most 4 copies of any card, all inside those colours.',
+    title: 'Build a deck',
+    body: `Pick a Leader (it sets your two colours), one Location and your power cards: ${MODE_IDS.map((m) => `${MODES[m].powers} for ${MODES[m].label}`).join(', ')}.`,
     icon: Layers,
+    art: <ColourRow />,
     action: { kind: 'screen', screen: 'decks', label: 'OPEN DECK BUILDER' },
   },
   {
-    title: 'Keep your hand',
-    body: 'You draw 7 cards. Not happy? Mulligan: shuffle back and draw one fewer, as often as you like.',
+    title: 'Look at your two cards',
+    body: 'You get two private hole cards. Your hand is the best five cards out of those two plus the five on the board. See HAND RANKS below.',
+    icon: Spade,
+    art: <HoleCards />,
+    action: { kind: 'practice' },
+  },
+  {
+    title: 'Bet, or get out',
+    body: 'Fold, check, call or raise (F / C / R). Pot-limit: you can never raise more than the pot. The blinds force a little action every hand.',
+    icon: Coins,
+    action: { kind: 'practice' },
+  },
+  {
+    title: 'Watch the board',
+    body: 'Three shared cards on the flop, one on the turn, one on the river, with a betting round after each.',
     icon: Hand,
-    art: <HandFan />,
+    art: <BoardRow />,
     action: { kind: 'practice' },
   },
   {
-    title: 'Play a Wellspring',
-    body: 'Once a turn, play a free Wellspring. Locations make Essence, your mana. Going second? You may play two on your first turn.',
-    icon: Sparkles,
-    art: <EssenceRow />,
-    action: { kind: 'practice' },
-  },
-  {
-    title: 'Invoke cards',
-    body: 'Select a card and press INVOKE. Ready Locations pay its cost for you. Pick a highlighted target if it asks for one.',
+    title: 'Cast a power',
+    body: `Units ★, Items ⚙ and Events ϟ bend what players see and receive. A cast costs ${tierCost(1)}–${tierCost(5)} chip units into the pot, and everyone sees the card. Casting is a bluff too.`,
     icon: Zap,
+    art: <TierMarks />,
     action: { kind: 'practice' },
   },
   {
-    title: 'Clash',
-    body: 'TO CLASH opens combat. Select ready units, then DECLARE ATTACK. Brand-new units cannot attack unless they have Reckless.',
-    icon: Swords,
-    action: { kind: 'practice' },
-  },
-  {
-    title: 'Guard and respond',
-    body: 'Under attack, assign your ready units to guard. Quick Events and Ambush units can answer first. PASS lets a card resolve; it does not end your turn.',
-    icon: Shield,
-    action: { kind: 'practice' },
-  },
-  {
-    title: 'End your turn and win',
-    body: 'END TURN runs Dusk and sheds you down to 7 cards. Reduce your opponent from 20 Vitality to 0 to win. Drawing from an empty deck loses.',
-    icon: Flag,
+    title: 'Read the table',
+    body: "Each hand plays a Location rule (with the next two forecast). Every seat's nerve is public: at 0 it tilts and its Leader locks.",
+    icon: Gauge,
     art: (
       <div className="flex items-center gap-2" aria-hidden>
-        <span className="fs-xs font-black">20</span>
-        <ProgressBar value={20} max={20} className="flex-1" />
-        <span className="fs-xs font-black">0</span>
+        <span className="fs-xs font-black">NERVE</span>
+        <ProgressBar value={NERVE.start} max={NERVE.max} className="flex-1" />
+        <span className="fs-xs font-black">
+          {NERVE.start}/{NERVE.max}
+        </span>
       </div>
     ),
+    action: { kind: 'practice' },
+  },
+  {
+    title: 'Outlast the table',
+    body: `Win chips at showdown or by making everyone fold. The last seat with chips wins; at the time cap, stacks are ranked. Rewards pay by place (Standard: ${placementReward(1, 6, 'standard').credits} credits for 1st of 6).`,
+    icon: Flag,
     action: { kind: 'practice' },
   },
 ];
@@ -490,6 +822,40 @@ const BEYOND: { title: string; body: string; icon: LucideIcon; screen: MetaScree
     screen: 'market',
   },
 ];
+
+/** Always-open list of the nine hands, best first. */
+function HandRanks() {
+  return (
+    <section aria-label="Hand ranks" className="mb-4">
+      <h2 className="heading-font text-lg mb-1">HAND RANKS, BEST TO WORST</h2>
+      <p className="text-sm font-bold text-[var(--c-steel)] mb-2">
+        Suits are never ranked. A higher hand always beats a lower one; inside the same rank, the
+        higher cards win.
+      </p>
+      <ol className="grid gap-1.5">
+        {HAND_RANKS.map((h, i) => (
+          <li
+            key={h.name}
+            className="ink-border-sm bg-[var(--c-paper)] px-3 py-2 grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-2 items-baseline"
+          >
+            <span className="heading-font text-sm text-[var(--c-steel)]">{i + 1}</span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h3 className="heading-font text-sm">{h.name}</h3>
+                <span className="flex gap-0.5" aria-label={h.example}>
+                  {h.example.split(' ').map((c, k) => (
+                    <PlayingCard key={k} label={c} size="xs" />
+                  ))}
+                </span>
+              </div>
+              <p className="text-[12px] font-medium leading-snug mt-0.5">{h.note}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
 export function HowToPlayScreen({
   onBack,
@@ -540,11 +906,12 @@ export function HowToPlayScreen({
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="HOW TO PLAY" onBack={onBack} />
       <div className="p-4 sm:p-6 max-w-3xl mx-auto flex flex-col gap-2">
-        <section aria-label="Your first turn" className="mb-3">
-          <h2 className="heading-font text-lg mb-1">YOUR FIRST TURN IN 7 STEPS</h2>
+        <section aria-label="Your first hand" className="mb-3">
+          <h2 className="heading-font text-lg mb-1">FRYCARDS POKER IN 7 STEPS</h2>
           <p className="text-sm font-bold text-[var(--c-steel)] mb-3">
-            Essence clears every phase and Locations recover at Dawn. The practice match opens with
-            a coach that explains each step as it happens.
+            Texas Hold&apos;em for up to six seats, with a deck of power cards that bend what
+            players see and receive. Never played poker? The practice match opens with a coach that
+            explains one idea at a time as it happens.
           </p>
           {cpuLocked && (
             <p className="ink-border-sm bg-[var(--c-paper)] fs-sm font-bold px-3 py-2 mb-3">
@@ -575,6 +942,8 @@ export function HowToPlayScreen({
             })}
           </ol>
         </section>
+
+        <HandRanks />
 
         <section aria-label="Beyond the match" className="mb-4">
           <h2 className="heading-font text-lg mb-2">BEYOND THE MATCH</h2>
@@ -644,20 +1013,20 @@ export function HowToPlayScreen({
                       className="grid grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)] gap-2 items-baseline"
                     >
                       <dt className="font-black text-[11px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 justify-self-start flex items-center gap-1">
-                        {sec.title.includes('Essence Identity') && (
+                        {sec.colourPips && (
                           <span
                             className="inline-flex items-center justify-center rounded-full font-mono font-black shrink-0"
                             style={{
                               width: 14,
                               height: 14,
                               fontSize: 8,
-                              backgroundColor: COLOR_PIP[term as (typeof COLORS)[number]]?.bg,
-                              color: COLOR_PIP[term as (typeof COLORS)[number]]?.fg,
+                              backgroundColor: COLOR_PIP[term as Color]?.bg,
+                              color: COLOR_PIP[term as Color]?.fg,
                             }}
                           >
                             <EssenceIcon
-                              type={term as (typeof COLORS)[number]}
-                              color={COLOR_PIP[term as (typeof COLORS)[number]]?.fg}
+                              type={term as Color}
+                              color={COLOR_PIP[term as Color]?.fg}
                               size={8}
                             />
                           </span>
@@ -670,29 +1039,14 @@ export function HowToPlayScreen({
                     </div>
                   ),
                 )}
-                {sec.title === '9 · Rarity System' && (
-                  <div className="flex flex-wrap gap-1.5 mt-1">
-                    {RARITY_ORDER.map((r) => (
-                      <span
-                        key={r}
-                        className={`fs-xs font-black px-1.5 py-0.5 rounded-full ${RARITY_CHIP[r] || ''}`}
-                      >
-                        {r}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {sec.footer}
               </dl>
             )}
           </div>
         ))}
         <div className="text-center fs-xs font-mono font-bold text-[var(--c-steel)] mt-2 mb-6">
-          {/* Kept equal to the version `docs/RULEBOOK.md` actually prints
-              (and to PlayScreen's "Fry Cards rules v6.0" strip) — this had
-              drifted to a V9.0 that no rulebook has ever carried, so the one
-              page telling a player which rules they are reading named a
-              document that does not exist. */}
-          FRY CARDS RULEBOOK V6.0
+          {/* Kept equal to the version `docs/RULEBOOK.md` actually prints. */}
+          FRYCARDS POKER RULEBOOK V1.0
         </div>
       </div>
     </div>

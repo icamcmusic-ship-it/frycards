@@ -1,5 +1,13 @@
 # Balance & Sim Findings — v24 (August 2026)
 
+> **2026-10-09: historical.** In 2026-10 the MTG-style game this pass measured
+> was retired in favour of **FryCards Poker** (`docs/RULEBOOK.md`). The
+> instruments named here, `scripts/simulate-v5.ts` and `npm run drive:match`,
+> were removed with it. Poker balance is measured with `npm run sim:poker`
+> (`scripts/simulate-poker.ts`) against the design spec's four targets. See
+> "Poker follow-ups" in `docs/ROADMAP.md` for the current read. Nothing below
+> applies to the live game. It is kept as the record of the old one.
+
 The pass where a keyword died in the lab instead of in the pool.
 
 v23 left the Mer-King lever authorized-but-unspent, a Leader keyword
@@ -211,16 +219,16 @@ not blink.
 Bug/QoL pass. **Runs:** eight cohorts, 5,952 games each — **47,616 games** —
 `npx tsx scripts/simulate-v5.ts 6 32 <gameSeed> <deckSeed>`:
 
-| Cohort | gameSeed | deckSeed | Why                              |
-| ------ | -------- | -------- | -------------------------------- |
-| A      | 1337     | 1337     | standing                         |
-| B      | 1337     | 42       | standing                         |
-| C      | 1337     | 7        | standing                         |
+| Cohort | gameSeed | deckSeed | Why                               |
+| ------ | -------- | -------- | --------------------------------- |
+| A      | 1337     | 1337     | standing                          |
+| B      | 1337     | 42       | standing                          |
+| C      | 1337     | 7        | standing                          |
 | D      | 1337     | 4242     | new deck roll, standing game seed |
 | E      | 1337     | 9001     | new deck roll, standing game seed |
-| F      | 20260815 | 20260815 | fresh game seed                  |
-| G      | 20260815 | 777      | fresh game seed                  |
-| H      | 20260815 | 31415    | fresh game seed                  |
+| F      | 20260815 | 20260815 | fresh game seed                   |
+| G      | 20260815 | 777      | fresh game seed                   |
+| H      | 20260815 | 31415    | fresh game seed                   |
 
 Plus the fuzz soak at **1,200 seeds** (6x the CI default) and the chaos monkey
 at **600** (10x), both through the new `FUZZ_SEEDS` / `CHAOS_SEEDS` env knobs
@@ -333,15 +341,15 @@ eight cohorts (−3.5 / −5.4 / −14.7 / −0.5 / −8.2 / −17.9 / −15.8 /
 its lemon keeps. Run over all eight reports at once, the aggregator flags a
 15-points-under-median deck recipe for **seven of the nine Leaders**:
 
-| Leader                      | lemon deck | cross-cohort mean |
-| --------------------------- | ---------- | ----------------- |
-| Ethereal Sea Witch          | #8         | 12.8%             |
-| Sentinel of the Nether Pit  | #2         | 15.6%             |
-| Ruin-Walker Overseer        | #1         | 17.2%             |
-| Kuro, the Unseen            | #2         | 30.5%             |
-| Legendary Diver             | #6         | 31.3%             |
-| Mer-King                    | #4         | 36.7%             |
-| Avatar of the Abyss         | #3         | 42.0%             |
+| Leader                     | lemon deck | cross-cohort mean |
+| -------------------------- | ---------- | ----------------- |
+| Ethereal Sea Witch         | #8         | 12.8%             |
+| Sentinel of the Nether Pit | #2         | 15.6%             |
+| Ruin-Walker Overseer       | #1         | 17.2%             |
+| Kuro, the Unseen           | #2         | 30.5%             |
+| Legendary Diver            | #6         | 31.3%             |
+| Mer-King                   | #4         | 36.7%             |
+| Avatar of the Abyss        | #3         | 42.0%             |
 
 Ruin-Walker's lemon is real, and it is the THIRD worst of seven — the two
 Leaders carrying a worse one (Ethereal Sea Witch at 12.8%, Sentinel at 15.6%)
@@ -424,11 +432,11 @@ whole Ruin-Walker case on, is conditional on the recipe draw.
 
 Both tests agree, and they are independent of each other:
 
-| measurement                            | per-cohort gap                                       | mean | one-signed? |
-| -------------------------------------- | ---------------------------------------------------- | ---- | ----------- |
-| all nine decks (v26, v27, v28 draw 1)   | −3.4 −5.4 −14.6 −0.5 −8.2 −17.9 −15.8 −8.0           | −9.2 | yes         |
-| lemon deck #1 excluded (v27's own test) | −0.1 −1.8 −11.6 **+3.3** −5.6 −15.0 −12.0 −5.0       | −6.0 | **no**      |
-| recipes #1..#8 re-rolled (draw 2)       | −1.8 −1.0 −11.9 **+1.4** −4.3 −15.1 −11.4 −4.3       | −6.0 | **no**      |
+| measurement                             | per-cohort gap                                 | mean | one-signed? |
+| --------------------------------------- | ---------------------------------------------- | ---- | ----------- |
+| all nine decks (v26, v27, v28 draw 1)   | −3.4 −5.4 −14.6 −0.5 −8.2 −17.9 −15.8 −8.0     | −9.2 | yes         |
+| lemon deck #1 excluded (v27's own test) | −0.1 −1.8 −11.6 **+3.3** −5.6 −15.0 −12.0 −5.0 | −6.0 | **no**      |
+| recipes #1..#8 re-rolled (draw 2)       | −1.8 −1.0 −11.9 **+1.4** −4.3 −15.1 −11.4 −4.3 | −6.0 | **no**      |
 
 Removing the lemon and re-rolling every recipe land on the same residual
 (−6.0) and both break the sign in the same cohort. So the one-signedness —
@@ -502,12 +510,12 @@ reproduce.
 ### Carry-forward #2, answered: the top two survive a fourth draw
 
 v29's newest item was the first per-Leader statement to clear the two-draws
-rule, and it recorded rather than acted on it: *"Mer-King and Avatar of the
+rule, and it recorded rather than acted on it: _"Mer-King and Avatar of the
 Abyss take #1 and #2 in all three draws, in one order or the other… re-measure
-first next pass, with a fourth draw."* Run without regard to the claim:
+first next pass, with a fourth draw."_ Run without regard to the claim:
 
-| Leader                      | draw 1 | draw 2 | draw 3 | draw 4 | rank range |
-| --------------------------- | ------ | ------ | ------ | ------ | ---------- |
+| Leader                      | draw 1  | draw 2  | draw 3  | draw 4  | rank range |
+| --------------------------- | ------- | ------- | ------- | ------- | ---------- |
 | Mer-King                    | 65.8 #1 | 58.6 #2 | 60.6 #1 | 58.0 #2 | 1          |
 | Avatar of the Abyss         | 55.1 #2 | 63.7 #1 | 54.1 #2 | 59.3 #1 | 1          |
 | Ethereal Sea Witch          | 51.8 #3 | 42.8 #8 | 53.6 #3 | 49.4 #5 | **5**      |
@@ -620,8 +628,8 @@ draws have already been shown to reproduce.
 
 ### The instrument: `scripts/leader-rank-stability.ts`
 
-v28 ended with a standing rule — *two draws, always, for anything about a
-Leader* — and shipped no way to apply it. The ρ = 0.417 it quoted was computed
+v28 ended with a standing rule — _two draws, always, for anything about a
+Leader_ — and shipped no way to apply it. The ρ = 0.417 it quoted was computed
 by hand from two nine-row tables that were themselves assembled by hand out of
 sixteen reports. That is precisely the situation `aggregate-cohorts.ts` was
 written to end for the sign table ("either the sim gains a cross-run mode or
@@ -667,11 +675,11 @@ Ruin-Walker case on it, and v28 showed it was conditional on the recipe draw by
 finding a different Leader carrying it in draw 2. The third draw settles what
 kind of statistic it is:
 
-| draw            | Leaders one-signed across all eight cohorts |
-| --------------- | ------------------------------------------- |
-| 1 (unsalted)    | Ruin-Walker Overseer, negative (−9.3)       |
-| 2 (salt v28)    | Avatar of the Abyss, positive (+9.1)        |
-| 3 (salt v29)    | **none**                                    |
+| draw         | Leaders one-signed across all eight cohorts |
+| ------------ | ------------------------------------------- |
+| 1 (unsalted) | Ruin-Walker Overseer, negative (−9.3)       |
+| 2 (salt v28) | Avatar of the Abyss, positive (+9.1)        |
+| 3 (salt v29) | **none**                                    |
 
 Three independent draws of deck-space; three different answers, one of them
 empty. A statistic that names a different Leader every time it is asked is not

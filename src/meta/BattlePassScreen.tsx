@@ -389,7 +389,8 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
               <div className="fs-xs font-bold text-[var(--c-paper)]/60 mt-2">
-                Earn season XP by playing matches (+50 win / +20 loss) and completing missions.
+                Earn season XP by playing matches (Standard: +50 for 1st, +20 for last — more the
+                higher you finish) and completing missions.
               </div>
             </div>
 

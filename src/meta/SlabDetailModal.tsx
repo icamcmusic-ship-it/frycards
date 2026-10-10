@@ -11,7 +11,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Pin, PinOff, Hammer, Coins, Box, FlaskConical } from 'lucide-react';
 import { useEscapeClose, useFocusTrap } from '../components/useFocusTrap';
-import { POOL_BY_ID } from '../game/v3/cardpool';
+import { POOL_BY_ID } from '../game/poker/cardpool';
 import { PopButton, Notice, Credits } from './ui';
 import { GradedSlab, conditionOf, premiumTier } from './GradedSlab';
 import {

@@ -19,9 +19,14 @@ import {
   DEFAULT_FILTERS,
   MAX_PRESET_NAME,
   RARITY_FILTERS,
+  RULE_FILTERS,
   SORTS,
+  TIER_FILTERS,
   TYPES,
   activeFilterCount,
+  cardMatchesFilters,
+  compareCards,
+  ruleFilterLabel,
   deletePreset,
   isFilters,
   isPresetList,
@@ -47,8 +52,8 @@ import {
   toggleWishlisted,
 } from './wishlist';
 import { Card3DInspector } from '../components/Card3DInspector';
-import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
-import { CardDef, totalCost } from '../game/v3/cards';
+import { POOL, POOL_BY_ID } from '../game/poker/cardpool';
+import { CardDef } from '../game/poker/cards';
 import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
 import { GradedCard, fetchGradedCards, gradedQuicksellPrice } from './grading';
@@ -58,7 +63,7 @@ import { AnimatePresence } from 'motion/react';
 import type { ShowroomSubject } from './ShowroomScreen';
 import { isPremiumRarity } from '../components/Card3DShowroom';
 import { fmtCredits, quicksellPrice } from './economy';
-import { cardColors, Color, LEADER_COLORS } from '../game/v3/colors';
+import { cardColors } from '../game/poker/colors';
 
 const MAX_SHOWCASE = 6;
 
@@ -88,7 +93,7 @@ async function runBulkQuicksell(
 ): Promise<{ credits: number; cards: number; error: string | null }> {
   let totalCredits = 0;
   let totalCards = 0;
-  for (const c of POOL_V4) {
+  for (const c of POOL) {
     if (c.type === 'Leader' || (c.rarity || 'Common') !== targetRarity) continue;
     const o = owned.get(c.id);
     if (!o) continue;
@@ -272,7 +277,7 @@ export function CollectionScreen({
     isFilters,
   );
   const filters = useMemo(() => sanitizeFilters(storedFilters), [storedFilters]);
-  const { view, type, rarity, color, sort } = filters;
+  const { view, type, rarity, color, tier, rule, sort } = filters;
   const setFilter = <K extends keyof CollectionFilters>(k: K, v: CollectionFilters[K]) =>
     setStoredFilters({ ...filters, [k]: v });
   const [presets, setPresets] = usePersistedState<FilterPreset[]>(
@@ -371,11 +376,17 @@ export function CollectionScreen({
   const [showcaseBusy, setShowcaseBusy] = useState(false);
   const [showcaseError, setShowcaseError] = useState('');
 
-  // Every keyword some card in the pool carries, for the keyword filter.
+  // Every poker keyword some card in the pool carries, for the keyword filter.
   const keywordOptions = useMemo(() => {
     const kws = new Set<string>();
-    for (const c of POOL_V4) for (const k of c.keywords ?? []) kws.add(k);
+    for (const c of POOL) for (const k of c.keywords ?? []) kws.add(k);
     return ['All', ...[...kws].sort()];
+  }, []);
+  // Location rules some Location in the pool prints, for the rule filter.
+  const ruleOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of POOL) if (c.rule) ids.add(c.rule.id);
+    return RULE_FILTERS.filter((r) => r === 'All' || ids.has(r));
   }, []);
 
   // Set filter. Derived from the live pool rather than a constant so the
@@ -384,12 +395,13 @@ export function CollectionScreen({
   // tell community cards from Volume #1 ones.
   const setFilters = useMemo(() => {
     const names = new Set<string>();
-    for (const c of POOL_V4) if (c.set) names.add(c.set);
+    for (const c of POOL) if (c.set) names.add(c.set);
     return ['All', ...[...names].sort()];
   }, []);
   // A remembered keyword/set that the pool no longer has must not silently
   // empty the grid with no control showing why.
   const keyword = keywordOptions.includes(filters.keyword) ? filters.keyword : 'All';
+  const ruleSel = ruleOptions.includes(rule) ? rule : 'All';
   const setName = setFilters.includes(filters.set) ? filters.set : 'All';
 
   const showcase = profile?.showcase_cards || [];
@@ -477,7 +489,7 @@ export function CollectionScreen({
   const { spareByCard, spareValues } = useMemo(() => {
     const byCard = new Map<string, number>();
     const rows: { rarity: string; normal: number; foil: number }[] = [];
-    for (const c of POOL_V4) {
+    for (const c of POOL) {
       if (c.type === 'Leader') continue;
       const o = owned.get(c.id);
       if (!o) continue;
@@ -547,39 +559,17 @@ export function CollectionScreen({
     }
   };
 
-  const filtered = POOL_V4.filter((c) => {
+  const filtered = POOL.filter((c) => {
     const o = owned.get(c.id);
     const total = (o?.q || 0) + (o?.f || 0);
     if (view === 'wishlist' && !wishlist.has(c.id)) return false;
     if (view === 'owned' && total === 0) return false;
     if (view === 'spares' && !spareByCard.has(c.id)) return false;
-    if (type !== 'All' && c.type !== type) return false;
-    if (rarity !== 'All' && (c.rarity || 'Common') !== rarity) return false;
-    if (setName !== 'All' && (c.set || '') !== setName) return false;
-    if (color !== 'All') {
-      // Leaders carry no essence pips of their own (cardColors would always
-      // read them as colorless) — their real identity lives in LEADER_COLORS,
-      // same lookup DeckBuilderScreen uses. Falling back to cardColors keeps
-      // any Leader missing from that map from vanishing under every filter.
-      const cc = c.type === 'Leader' ? LEADER_COLORS[c.id] || cardColors(c) : cardColors(c);
-      if (color === 'Colorless' ? cc.length > 0 : !cc.includes(color as Color)) return false;
-    }
-    if (keyword !== 'All' && !c.keywords?.includes(keyword)) return false;
+    if (!cardMatchesFilters(c, { type, rarity, color, keyword, tier, rule: ruleSel, set: setName }))
+      return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  }).sort((a, b) => {
-    if (sort === 'Rarity') {
-      const d = RARITIES.indexOf(b.rarity || 'Common') - RARITIES.indexOf(a.rarity || 'Common');
-      if (d !== 0) return d;
-    } else if (sort === 'Type') {
-      const d = a.type.localeCompare(b.type);
-      if (d !== 0) return d;
-    } else if (sort === 'Cost') {
-      const d = totalCost(a.cost) - totalCost(b.cost);
-      if (d !== 0) return d;
-    }
-    return a.name.localeCompare(b.name);
-  });
+  }).sort(compareCards(sort));
 
   // Foil and Serialized copies are their own standalone tiles in the grid —
   // not a count badge folded into the normal tile — so each is inspectable/
@@ -612,12 +602,12 @@ export function CollectionScreen({
 
   const totalOwned = collection.reduce((s, c) => s + c.quantity + c.foil_quantity, 0);
   const uniqueOwned = collection.filter((c) => c.quantity + c.foil_quantity > 0).length;
-  const pctOwned = POOL_V4.length > 0 ? Math.round((uniqueOwned / POOL_V4.length) * 100) : 0;
+  const pctOwned = POOL.length > 0 ? Math.round((uniqueOwned / POOL.length) * 100) : 0;
 
   // Per-rarity completion for the progress panel.
   const rarityProgress = useMemo(() => {
     const totals = new Map<string, { total: number; owned: number }>();
-    for (const c of POOL_V4) {
+    for (const c of POOL) {
       const r = c.rarity || 'Common';
       const e = totals.get(r) || { total: 0, owned: 0 };
       e.total += 1;
@@ -645,7 +635,7 @@ export function CollectionScreen({
       if (has) e.owned += 1;
       totals.set(k, e);
     };
-    for (const c of POOL_V4) {
+    for (const c of POOL) {
       const o = owned.get(c.id);
       const has = (o?.q || 0) + (o?.f || 0) > 0;
       if (progressBy === 'set') bump(c.set ?? 'FryCards', has);
@@ -680,7 +670,7 @@ export function CollectionScreen({
     );
   }, [collection, dataLoading]);
 
-  const activeFilters = activeFilterCount({ ...filters, keyword, set: setName });
+  const activeFilters = activeFilterCount({ ...filters, keyword, rule: ruleSel, set: setName });
   const filtersDirty = activeFilters > 0 || view !== 'owned' || search !== '';
   const clearFilters = () => {
     // Color was missing from this reset once — a color-filtered empty grid
@@ -844,6 +834,21 @@ export function CollectionScreen({
                 />
               )}
               <FilterSelect
+                label="Tier"
+                value={tier}
+                onChange={(v) => setFilter('tier', v)}
+                options={TIER_FILTERS.map((t) => ({
+                  value: t,
+                  label: t === 'All' ? 'Any' : `${t} (★ ⚙ ϟ)`,
+                }))}
+              />
+              <FilterSelect
+                label="Location rule"
+                value={ruleSel}
+                onChange={(v) => setFilter('rule', v)}
+                options={ruleOptions.map((r) => ({ value: r, label: ruleFilterLabel(r) }))}
+              />
+              <FilterSelect
                 label="Sort by"
                 value={sort}
                 onChange={(v) => setFilter('sort', v as SortKey)}
@@ -925,7 +930,7 @@ export function CollectionScreen({
               <PopButton
                 color="steel"
                 onClick={() => {
-                  const rows = POOL_V4.flatMap((c) => {
+                  const rows = POOL.flatMap((c) => {
                     const o = owned.get(c.id);
                     if (!o || o.q + o.f === 0) return [];
                     const serialized = serializedByCard.get(c.id)?.length || 0;
@@ -959,15 +964,11 @@ export function CollectionScreen({
             title="COLLECTION PROGRESS"
             summary={
               <>
-                {uniqueOwned}/{POOL_V4.length} ({pctOwned}%)
+                {uniqueOwned}/{POOL.length} ({pctOwned}%)
               </>
             }
             peek={
-              <ProgressBar
-                value={uniqueOwned}
-                max={POOL_V4.length}
-                ariaLabel="Collection progress"
-              />
+              <ProgressBar value={uniqueOwned} max={POOL.length} ariaLabel="Collection progress" />
             }
           >
             <Tabs
@@ -1236,8 +1237,7 @@ export function CollectionScreen({
             className="scroll-mt-[calc(var(--hdr,56px)+4.5rem)] flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 fs-xs font-bold text-[var(--c-steel)]"
           >
             <span aria-live="polite">
-              {entries.length} SHOWN · {uniqueOwned}/{POOL_V4.length} UNIQUE · {totalOwned} TOTAL
-              CARDS
+              {entries.length} SHOWN · {uniqueOwned}/{POOL.length} UNIQUE · {totalOwned} TOTAL CARDS
             </span>
             {filtersDirty && (
               <button type="button" onClick={clearFilters} className="underline min-h-[24px]">

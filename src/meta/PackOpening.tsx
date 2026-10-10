@@ -5,8 +5,8 @@ import { loadWishlist } from './wishlist';
 import { useReducedMotion } from './useMotionMode';
 import { Coins, Sparkles, SkipForward, Zap } from 'lucide-react';
 import { PackPull, quicksellCards } from '../lib/supabase';
-import { CardDef } from '../game/v3/cards';
-import { POOL_BY_ID } from '../game/v3/cardpool';
+import { CardDef } from '../game/poker/cards';
+import { POOL_BY_ID } from '../game/poker/cardpool';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
 import { PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
@@ -38,6 +38,7 @@ function pullToDef(pull: PackPull): CardDef {
   return (
     POOL_BY_ID[pull.card_id] || {
       id: pull.card_id,
+      colors: [],
       name: pull.name,
       rarity: pull.rarity as CardDef['rarity'],
       type: pull.card_type as CardDef['type'],

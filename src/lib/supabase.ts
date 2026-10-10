@@ -574,6 +574,43 @@ export async function recordMatchResult(
 }
 
 /**
+ * FryCards Poker result: the player's finishing PLACE at a `seats`-sized table
+ * in `mode` (Design Spec v0.1, "Rewards"). The server pays by placement —
+ * round((40 + 60 × place factor) × mode multiplier) — and checks the ticket
+ * against the mode's minimum match length (`record_match_placement`, migration
+ * 20261009000000). Placement is client-reported, as the win flag was; the
+ * ticket, its expiry and the daily caps bound the farming risk.
+ *
+ * Until that migration is applied to the live project the RPC does not exist,
+ * so this falls back to the old win/loss call (1st place = a win) and rewards
+ * keep flowing either way.
+ */
+export async function recordMatchPlacement(
+  place: number,
+  seats: number,
+  mode: 'quick' | 'standard' | 'deep',
+  matchId?: string,
+): Promise<{ data: MatchResult | null; error: string | null; status: MatchResultStatus | null }> {
+  const { data, error } = await supabase.rpc('record_match_placement', {
+    p_match_id: matchId ?? null,
+    p_place: place,
+    p_seats: seats,
+    p_mode: mode,
+  });
+  const missing =
+    !!error &&
+    ((error as { code?: string }).code === 'PGRST202' ||
+      /could not find the function|does not exist/i.test(error.message));
+  if (missing) return recordMatchResult(place === 1, matchId);
+  const status = (data as { status?: MatchResultStatus } | null)?.status ?? null;
+  return {
+    data: status ? null : (data as MatchResult) || null,
+    error: rpcError(error),
+    status,
+  };
+}
+
+/**
  * Server-authoritative deck save: the `save_deck` RPC re-checks that every
  * copy of every card is actually available (owned minus whatever the
  * player's *other* decks already reserve) before committing, so the same

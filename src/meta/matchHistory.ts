@@ -25,24 +25,39 @@ export const MATCH_HISTORY_KEY = 'frycards:match-history';
 export const MATCH_HISTORY_LIMIT = 50;
 
 export interface MatchRecord {
-  /** The seed `createGame` ran on — the whole point of the record. */
+  /** The seed the match ran on — with the action log it replays exactly. */
   seed: number;
   /** Epoch ms the match finished. */
   finishedAt: number;
+  /** Finished first. */
   won: boolean;
-  /** Turn count at the end, for a rough sense of the game. */
-  turns: number;
+  /** Finishing place (1 = winner) and table size. Absent on records from the
+   * retired MTG-style game, which were always two-player win/loss. */
+  place?: number;
+  seats?: number;
+  mode?: 'quick' | 'standard' | 'deep';
+  /** Hands played. */
+  hands?: number;
+  /** The match ended on the hard clock (stacks ranked) rather than a bust-out. */
+  capped?: boolean;
   humanLabel: string;
+  /** The other seats' names, joined. */
   cpuLabel: string;
-  /** Who took the first turn (`firstPlayerForSeed(seed)` for current matches). */
-  firstPlayer?: 'P1' | 'P2';
-  /** Both decks as deck codes (`FRY1:...`), so the seed can be replayed against
-   * them. Absent on records written before this field existed. */
+  /** The human's deck as a deck code, when it was a saved deck. */
   humanDeck?: string;
+  /** The human's final stack in chip units. */
+  finalStack?: number;
+  // -- Retired-game fields, still read from old records --
+  turns?: number;
+  firstPlayer?: 'P1' | 'P2';
   cpuDeck?: string;
-  /** Vitality both sides finished on, so a blowout reads as one. */
-  humanVitality: number;
-  cpuVitality: number;
+  humanVitality?: number;
+  cpuVitality?: number;
+}
+
+/** A record's finishing place; old two-player records are 1st or 2nd. */
+export function placeOf(r: MatchRecord): number {
+  return r.place ?? (r.won ? 1 : 2);
 }
 
 export function loadMatchHistory(): MatchRecord[] {
@@ -83,65 +98,82 @@ export function recordMatch(record: MatchRecord): void {
 
 export interface HistorySummary {
   games: number;
+  /** First-place finishes. */
   wins: number;
   /** Whole-percent win rate that never rounds up to 100 (see `winRatePct`). */
   winPct: number;
-  /** Newest first, `W` / `L`, at most 10. */
-  form: ('W' | 'L')[];
-  /** Win rate when going first / second, where the record says which. */
-  onPlay: { games: number; wins: number };
-  onDraw: { games: number; wins: number };
-  /** Per human deck: records grouped by deck code (or label when a record
-   * predates deck codes), best-played first. */
-  byDeck: { key: string; label: string; games: number; wins: number }[];
+  /** Average finishing place (0 when there are no games). */
+  avgPlace: number;
+  /** Newest first, finishing places, at most 10. */
+  form: number[];
+  /** Per human deck: records grouped by deck code (or label), most-played first. */
+  byDeck: { key: string; label: string; games: number; wins: number; avgPlace: number }[];
 }
 
 export function summarizeMatchHistory(records: MatchRecord[]): HistorySummary {
-  const onPlay = { games: 0, wins: 0 };
-  const onDraw = { games: 0, wins: 0 };
-  const decks = new Map<string, { key: string; label: string; games: number; wins: number }>();
+  const decks = new Map<
+    string,
+    { key: string; label: string; games: number; wins: number; places: number }
+  >();
   let wins = 0;
+  let places = 0;
   for (const r of records) {
-    if (r.won) wins++;
-    // The human is always P1's seat in the engine, so going first means P1.
-    if (r.firstPlayer) {
-      const side = r.firstPlayer === 'P1' ? onPlay : onDraw;
-      side.games++;
-      if (r.won) side.wins++;
-    }
+    const place = placeOf(r);
+    places += place;
+    if (place === 1) wins++;
     const key = r.humanDeck ?? `label:${r.humanLabel}`;
-    const d = decks.get(key) ?? { key, label: r.humanLabel, games: 0, wins: 0 };
+    const d = decks.get(key) ?? { key, label: r.humanLabel, games: 0, wins: 0, places: 0 };
     d.games++;
-    if (r.won) d.wins++;
+    d.places += place;
+    if (place === 1) d.wins++;
     decks.set(key, d);
   }
+  const avg = (sum: number, n: number) => (n ? Math.round((sum / n) * 10) / 10 : 0);
   return {
     games: records.length,
     wins,
     winPct: winRatePct(wins, records.length),
-    form: records.slice(0, 10).map((r) => (r.won ? 'W' : 'L')),
-    onPlay,
-    onDraw,
-    byDeck: [...decks.values()].sort((a, b) => b.games - a.games || b.wins - a.wins),
+    avgPlace: avg(places, records.length),
+    form: records.slice(0, 10).map(placeOf),
+    byDeck: [...decks.values()]
+      .map((d) => ({
+        key: d.key,
+        label: d.label,
+        games: d.games,
+        wins: d.wins,
+        avgPlace: avg(d.places, d.games),
+      }))
+      .sort((a, b) => b.games - a.games || a.avgPlace - b.avgPlace),
   };
 }
 
+const MODE_LABEL = { quick: 'Quick', standard: 'Standard', deep: 'Deep' } as const;
+
 /**
  * A plain-text report of one match, ready to paste into a bug report or a chat:
- * result, seed, who went first and both deck codes. With the seed and the deck
- * codes a developer can rebuild the same shuffles.
+ * place, seed, mode and the deck code. With the seed a developer can rebuild
+ * the same shuffles, seats and bots.
  */
 export function formatMatchReport(r: MatchRecord): string {
+  const place = placeOf(r);
+  const seats = r.seats ?? 2;
   const lines = [
-    `Fry Cards match — ${r.won ? 'WIN' : 'LOSS'} in ${r.turns} turns`,
+    r.place !== undefined
+      ? `Fry Cards Poker — ${ordinalOf(place)} of ${seats}${r.mode ? ` · ${MODE_LABEL[r.mode]}` : ''}${r.hands ? ` · ${r.hands} hands` : ''}${r.capped ? ' · ended on the clock' : ''}`
+      : `Fry Cards match (retired game) — ${r.won ? 'WIN' : 'LOSS'}${r.turns ? ` in ${r.turns} turns` : ''}`,
     `Seed: ${r.seed}`,
     `Finished: ${new Date(r.finishedAt).toISOString()}`,
   ];
-  if (r.firstPlayer) lines.push(`First player: ${r.firstPlayer === 'P1' ? 'you' : 'opponent'}`);
-  lines.push(`Final vitality: you ${r.humanVitality}, opponent ${r.cpuVitality}`);
+  if (r.finalStack !== undefined) lines.push(`Final stack: ${r.finalStack} chip units`);
   lines.push(`Your deck: ${r.humanLabel}`);
   if (r.humanDeck) lines.push(r.humanDeck);
-  lines.push(`Opponent deck: ${r.cpuLabel}`);
+  lines.push(`Table: ${r.cpuLabel}`);
   if (r.cpuDeck) lines.push(r.cpuDeck);
   return lines.join('\n');
+}
+
+export function ordinalOf(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 }

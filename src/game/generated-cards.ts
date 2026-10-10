@@ -1,7 +1,7 @@
-// AUTO-GENERATED universal card identities (FryCards v4.2 dice-placement game).
+// AUTO-GENERATED universal card identities (FryCards Poker).
 // Offline fallback for the Supabase 'cards' table. Only universal data lives
 // here — name, type, rarity, set, art, flavor. All game mechanics are assigned
-// by src/game/v3/cardpool.ts.
+// by src/game/poker/cardpool.ts.
 import { CardTemplate } from '../types';
 
 export const GENERATED_CARDS: CardTemplate[] = [

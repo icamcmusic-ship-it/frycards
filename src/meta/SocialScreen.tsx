@@ -26,7 +26,7 @@ import {
 import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
 import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
-import { POOL_BY_ID } from '../game/v3/cardpool';
+import { POOL_BY_ID } from '../game/poker/cardpool';
 import { spareSplit } from './CollectionScreen';
 import { RARITY_CHIP } from './rarity';
 import { PlayerLink } from './PlayerProfileModal';

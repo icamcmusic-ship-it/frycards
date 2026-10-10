@@ -1,5 +1,13 @@
 # PvP Design Spike
 
+> **2026-10-09:** this spike was written for the retired MTG-style game
+> (`GameV4.tsx`, `src/game/v3/engine.ts`, both since removed). The game is now
+> FryCards Poker (`src/game/poker/*`). The poker engine is already a pure
+> `(match, action) → match` reducer with redacted per-seat views
+> (`src/game/poker/view.ts`), so the reducer-wrapper prerequisite below is met. The
+> transport, hidden-information and anti-cheat reasoning still holds. See
+> "PvP" under "Poker follow-ups" in `docs/ROADMAP.md`.
+
 Status: proposal — no implementation yet.
 
 ## Problem
@@ -20,7 +28,7 @@ hand/deck and fabricate any action or outcome.
   already pure/deterministic given a `Game` state and a seeded RNG — the
   most valuable asset for PvP — but they currently mutate the `Game` object
   in place rather than returning new state through a single `(state,
-  action) → state` reducer entry point. That reducer-shaped wrapper doesn't
+action) → state` reducer entry point. That reducer-shaped wrapper doesn't
   exist yet and would need to be introduced as part of this work (it's a
   smaller lift than writing a server-side rules engine from scratch, since
   all the actual rules logic is reusable as-is).
@@ -37,7 +45,7 @@ hand/deck and fabricate any action or outcome.
 Keeps the existing stack; no new vendor.
 
 1. `matches` table: `id, p1, p2, state jsonb, seq, status`, RLS so players
-   can only read their own *redacted* views.
+   can only read their own _redacted_ views.
 2. Edge Function `submit-action(matchId, action, seq)`:
    - loads state, checks it is the caller's window to act,
    - runs the shared `gameReducer` (the engine compiles cleanly outside the
@@ -64,7 +72,7 @@ future spectator/replay mode.
 1. **Engine extraction** — make `src/game/v3/engine.ts` importable
    server-side with an injectable RNG seed (verify with the existing
    simulator), and wrap its mutation-based helpers in the `(state, action)
-   → state` reducer entry point described above.
+→ state` reducer entry point described above.
 2. **Redaction + view model** — `redactStateFor` with unit tests proving no
    hidden info leaks (serialize and grep for opponent card ids).
 3. **Hot-seat-over-network MVP** — two clients, one Edge Function, private

@@ -1,16 +1,18 @@
 /**
- * Visual palette for the Fry Cards v5.0 Essence Type system (the game's
- * seven colors: Ember, Tide, Root, Gale, Light, Shadow, Void). Mirrors
+ * Visual palette for the seven card colours (Ember, Tide, Root, Gale, Light,
+ * Shadow, Void) — frozen from the retired MTG-style game and, in FryCards
+ * Poker, the thing that decides deck legality and which keywords a card may
+ * carry. Mirrors
  * `rarity.ts`'s structure exactly (a fixed hex ladder + Tailwind chip/text
  * variants) — color, like rarity, is a signal players learn to recognize and
  * must read the same in light/dark mode.
  *
  * Game-logic color assignment (`cardColors`, `LEADER_COLORS`,
- * `isColorLegal`) lives in `src/game/v3/colors.ts` — this file is purely
+ * `isColorLegal`) lives in `src/game/poker/colors.ts` — this file is purely
  * the UI palette for it. A card with no colored pips is colorless and uses
  * the neutral gray treatment.
  */
-import { Color, COLORS } from '../game/v3/colors';
+import { Color, COLORS } from '../game/poker/colors';
 
 export { COLORS };
 export type { Color };
@@ -90,7 +92,7 @@ export function colorBg(colors: Color[]): string {
 }
 
 /** Pip palette — brighter, higher-chroma variants of COLOR_HEX used for
- * essence-cost pips so they pop off the tinted card body. `fg` is the
+ * the masthead's colour dots so they pop off the tinted card body. `fg` is the
  * letter color with proper contrast per swatch. */
 export const COLOR_PIP: Record<Color, { bg: string; fg: string }> = {
   Ember: { bg: '#F43F5E', fg: '#FFFFFF' },
@@ -102,7 +104,8 @@ export const COLOR_PIP: Record<Color, { bg: string; fg: string }> = {
   Void: { bg: '#9CA3AF', fg: '#111827' },
 };
 
-/** Neutral pip for the generic portion of an essence cost. */
+/** Neutral pip (the retired generic essence cost; kept for any caller that
+ * still draws a colourless dot). */
 export const GENERIC_PIP = { bg: '#CBD5E1', fg: '#0F172A' };
 
 /** Single representative hex for flat-fill UI (header tint, chips) — the

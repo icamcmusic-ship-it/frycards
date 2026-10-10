@@ -3,7 +3,7 @@
  * player, with no server involved. A pure function of the date string and the
  * pool, so it is stable across reloads and testable.
  */
-import type { CardDef } from '../game/v3/cards';
+import type { CardDef } from '../game/poker/cards';
 
 /** FNV-1a over the date string — small, well-spread, no dependencies. */
 function hash(s: string): number {

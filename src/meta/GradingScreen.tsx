@@ -48,7 +48,7 @@ import { MetaHeader, PopButton, Notice, Credits, Vouchers, ProgressBar, Tabs } f
 import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
 import { CardFace } from '../components/CardFaceV4';
-import { POOL_BY_ID } from '../game/v3/cardpool';
+import { POOL_BY_ID } from '../game/poker/cardpool';
 import { spareSplit } from './CollectionScreen';
 import { fmtCredits, fmtVouchers } from './economy';
 import { GradedSlab } from './GradedSlab';

@@ -9,7 +9,7 @@
 import type { ComponentProps } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { POOL_V4 } from '../game/v3/cardpool';
+import { POOL } from '../game/poker/cardpool';
 import type { PackPull } from '../lib/supabase';
 import { PackOpening } from './PackOpening';
 
@@ -32,7 +32,7 @@ function stubPointer(coarse: boolean) {
   })) as unknown as typeof window.matchMedia;
 }
 
-const cards = POOL_V4.filter((c) => c.type !== 'Leader');
+const cards = POOL.filter((c) => c.type !== 'Leader');
 const makePulls = (n: number): PackPull[] =>
   cards.slice(0, n).map((c, i) => ({
     card_id: c.id,

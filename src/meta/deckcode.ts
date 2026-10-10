@@ -1,43 +1,73 @@
 /**
- * Shareable one-line deck codes.
- * Format: FRY1:<leaderId>:<cardId>[*n][,<cardId>[*n]...]
- * Card ids contain only [a-z0-9_-], so ':' ',' '*' are safe separators.
+ * Shareable one-line deck codes for FryCards Poker.
+ *
+ * Format: FRY2:<mode>:<leaderId>:<cardId>[*n][,<cardId>[*n]...]
+ *
+ *  - `mode` is the table format the list is built for (quick / standard /
+ *    deep), so a shared deck opens in the format it was made for.
+ *  - The body holds the deck list exactly as `decks.card_ids` stores it: one
+ *    Location plus the power cards. The Leader travels in its own slot.
+ *  - Card ids contain only [a-z0-9_-], so ':' ',' '*' are safe separators.
+ *
+ * `FRY1:` codes and links came from the retired MTG-style card game. Their
+ * 60-card lists are illegal in every poker format, so they decode to a clear
+ * "retired game" error instead of a broken draft.
  *
  * Generic over any card-lookup map whose values at least carry a `type`
- * field, so this works for both the legacy CardTemplate pool and the v4.2
- * CardDef pool.
+ * field, so this works for both the CardTemplate catalog and the CardDef pool.
  */
-import { DECK_MAX, maxCopiesForRarity } from '../game/v3/decks';
+import { MODES, MODE_IDS, type ModeId } from '../game/poker/constants';
 
-const PREFIX = 'FRY1';
+const PREFIX = 'FRY2';
+/** The retired MTG-style game's code prefix. */
+const RETIRED_PREFIX = 'FRY1';
 
-export function encodeDeckCode(leaderId: string, cardIds: string[]): string {
+/** The shown error for a FRY1 code or link. */
+export const RETIRED_CODE_ERROR =
+  'This deck link is from the retired card game. Its 60-card list cannot be played in FryCards Poker, so build a new deck in the Deck Builder.';
+
+/** Longest list any format takes: the biggest power count plus the Location. */
+const LIST_MAX = Math.max(...MODE_IDS.map((m) => MODES[m].powers)) + 1;
+
+const isModeId = (s: string): s is ModeId => (MODE_IDS as string[]).includes(s);
+
+export function encodeDeckCode(
+  leaderId: string,
+  cardIds: string[],
+  mode: ModeId = 'standard',
+): string {
   const counts = new Map<string, number>();
   for (const id of cardIds) counts.set(id, (counts.get(id) || 0) + 1);
   const body = [...counts.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) // not localeCompare: the code must not vary by locale
     .map(([id, n]) => (n > 1 ? `${id}*${n}` : id))
     .join(',');
-  return `${PREFIX}:${leaderId}:${body}`;
+  return `${PREFIX}:${mode}:${leaderId}:${body}`;
 }
+
+export type DecodedDeck = { leaderId: string; cardIds: string[]; mode: ModeId };
 
 export function decodeDeckCode(
   code: string,
-  db: Map<string, { type: string; rarity?: string }>,
-): { leaderId: string; cardIds: string[] } | { error: string } {
+  db: Map<string, { type: string }>,
+): DecodedDeck | { error: string } {
   const trimmed = code.trim();
   const parts = trimmed.split(':');
-  if (parts.length !== 3 || parts[0] !== PREFIX) {
-    return { error: 'Not a valid deck code (expected FRY1:<leader>:<cards>).' };
+  if (parts[0] === RETIRED_PREFIX) return { error: RETIRED_CODE_ERROR };
+  if (parts.length !== 4 || parts[0] !== PREFIX) {
+    return { error: 'Not a valid deck code (expected FRY2:<format>:<leader>:<cards>).' };
   }
-  const [, leaderId, body] = parts;
+  const [, modeId, leaderId, body] = parts;
+  if (!isModeId(modeId))
+    return { error: `Unknown format: ${modeId} (expected ${MODE_IDS.join(', ')}).` };
+  const mode = MODES[modeId];
   const leader = db.get(leaderId);
   if (!leader || leader.type !== 'Leader') return { error: `Unknown Leader id: ${leaderId}` };
   const cardIds: string[] = [];
   const totals = new Map<string, number>();
   for (const entry of body.split(',').filter(Boolean)) {
     // Strict shape: `id` or `id*N` with N all digits — encodeDeckCode never
-    // emits anything else, and the lax split/parseInt silently accepted
+    // emits anything else, and a lax split/parseInt silently accepted
     // hand-mangled entries like `id**3` (as 1) or `id*4x` (as 4).
     const segs = entry.split('*');
     if (segs.length > 2 || (segs.length === 2 && !/^\d+$/.test(segs[1])))
@@ -49,33 +79,27 @@ export function decodeDeckCode(
     // The Leader lives in its own slot before the body — a Leader id smuggled
     // into the card list would import a deck the builder can never save.
     if (card.type === 'Leader')
-      return { error: `Leader card in the deck body: ${id} (Leaders go in the leader slot).` };
-    // Enforce the per-rarity copy caps (Mythic 1, Super-Rare/Full-Art/
-    // Ultra-Rare 2, else the rulebook's 4), not just the flat MAX_COPIES —
-    // an imported code could previously smuggle in an illegal 2x Mythic.
-    const cap = maxCopiesForRarity(card.rarity);
-    if (!Number.isFinite(n) || n < 1 || n > cap)
-      return { error: `Bad count for ${id} (max ${cap} cop${cap === 1 ? 'y' : 'ies'}).` };
-    // A code can spell the same id across more than one entry (e.g. a
-    // hand-edited or concatenated code) — cap the aggregate, not just
-    // each individual entry's own count.
+      return { error: `Leader card in the deck body: ${id} (Leaders go in the Leader slot).` };
+    // The format's copy limit. Counted across entries too: a hand-edited or
+    // concatenated code can spell the same id more than once.
+    const cap = mode.maxCopies;
     const total = (totals.get(id) || 0) + n;
-    if (total > cap)
+    if (!Number.isFinite(n) || n < 1 || total > cap)
       return {
-        error: `Too many total copies of ${id} (max ${cap} cop${cap === 1 ? 'y' : 'ies'}).`,
+        error: `Too many copies of ${id} for ${mode.label} (max ${cap} cop${cap === 1 ? 'y' : 'ies'}).`,
       };
     totals.set(id, total);
     for (let i = 0; i < n; i++) cardIds.push(id);
-    // Cap the whole deck, not just per-card copies — a concatenated code
-    // could otherwise import an illegal 100+ card list.
-    if (cardIds.length > DECK_MAX)
-      return { error: `Too many cards in the deck (max ${DECK_MAX}).` };
+    // Cap the whole list, not just per-card copies — a concatenated code
+    // could otherwise import a list no format can hold.
+    if (cardIds.length > LIST_MAX)
+      return { error: `Too many cards in the deck (no format holds more than ${LIST_MAX}).` };
   }
-  return { leaderId, cardIds };
+  return { leaderId, cardIds, mode: modeId };
 }
 
 // ---------------------------------------------------------------------------
-// Deck links: `https://…/?deck=FRY1:<leader>:<cards>`
+// Deck links: `https://…/?deck=FRY2:<format>:<leader>:<cards>`
 // ---------------------------------------------------------------------------
 
 /** Query parameter a shared deck link carries its code in. */
@@ -94,10 +118,12 @@ export function deckLink(
 }
 
 /** The deck code a URL's query string carries, or null when absent or not a
- * `FRY1:` code. Only the shape is checked here; `decodeDeckCode` validates it. */
+ * FryCards code. Old `FRY1:` links are passed through on purpose: the preview
+ * then explains that they came from the retired game. Only the shape is
+ * checked here; `decodeDeckCode` validates it. */
 export function deckCodeFromSearch(search: string): string | null {
   const raw = new URLSearchParams(search).get(DECK_LINK_PARAM)?.trim();
-  return raw && raw.startsWith(`${PREFIX}:`) ? raw : null;
+  return raw && (raw.startsWith(`${PREFIX}:`) || raw.startsWith(`${RETIRED_PREFIX}:`)) ? raw : null;
 }
 
 const PENDING_DECK_KEY = 'frycards:pending-deck';

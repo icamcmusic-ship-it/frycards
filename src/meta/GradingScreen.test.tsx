@@ -6,9 +6,9 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { POOL_V4 } from '../game/v3/cardpool';
+import { POOL } from '../game/poker/cardpool';
 
-const card = POOL_V4.find((c) => c.type !== 'Leader' && c.rarity === 'Rare')!;
+const card = POOL.find((c) => c.type !== 'Leader' && c.rarity === 'Rare')!;
 
 vi.mock('./MetaContext', () => ({
   useMeta: () => ({

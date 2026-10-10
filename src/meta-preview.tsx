@@ -1,5 +1,5 @@
 // Dev-only offline harness for the META screens (served at /meta-preview.html
-// by Vite dev), the counterpart to `board-preview.tsx`.
+// by Vite dev), the counterpart to `table-preview.tsx`.
 //
 // The collection, deck editor and pack opening all read from `useMeta`, which
 // needs a Supabase session — so until v7.5 none of them could be rendered, let
@@ -68,7 +68,10 @@ import { AuthScreen } from './meta/AuthScreen';
 import { HowToPlayScreen } from './components/HowToPlay';
 import { Card3DInspector } from './components/Card3DInspector';
 import { ShowroomScreen } from './meta/ShowroomScreen';
-import { POOL_V4 } from './game/v3/cardpool';
+import { POOL } from './game/poker/cardpool';
+import { MODES } from './game/poker/constants';
+import { buildDeck, deckCardIds } from './game/poker/deck';
+import { rngOn } from './game/poker/rng';
 import type { PackPull, PackType, Profile, ShopItem } from './lib/supabase';
 
 // Before any screen mounts (and so before any screen's own fetch fires).
@@ -104,27 +107,29 @@ const profile: Profile = {
 
 // Own a few copies of everything, so the collection grid renders at its real
 // worst case rather than as an empty state.
-const collection = POOL_V4.map((c, i) => ({
+const collection = POOL.map((c, i) => ({
   card_id: c.id,
   quantity: 1 + (i % 3),
   foil_quantity: i % 7 === 0 ? 1 : 0,
 }));
 
-const leader = POOL_V4.find((c) => c.type === 'Leader')!;
-const deckCards = POOL_V4.filter((c) => c.type !== 'Leader').slice(0, 60);
+// A legal FryCards Poker deck (1 Location + the Standard format's powers),
+// built the way the CPU builds one, from a fixed seed so the preview is stable.
+const leader = POOL.find((c) => c.type === 'Leader')!;
+const previewDeck = buildDeck(leader, MODES.standard, rngOn({ rng: 20261009 }));
 const decks = [
   {
     id: 'deck-preview',
     user_id: 'preview',
     name: 'Preview Deck',
     leader_id: leader.id,
-    card_ids: deckCards.map((c) => c.id),
+    card_ids: deckCardIds(previewDeck),
     is_valid: true,
     updated_at: new Date(0).toISOString(),
   },
 ];
 
-const pulls: PackPull[] = POOL_V4.filter((c) => c.type !== 'Leader')
+const pulls: PackPull[] = POOL.filter((c) => c.type !== 'Leader')
   .slice(0, 8)
   .map((c, i) => ({
     card_id: c.id,
@@ -274,7 +279,7 @@ const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar']
 // at phone width; three of them had no population to measure.
 const inventory = packTypes.map((p, i) => ({ pack_type_id: p.id, quantity: 1 + i * 2 }));
 const cosmetics = shopItems.map((s, i) => ({ shop_item_id: s.id, is_foil: i === 0 }));
-const serializedCards = POOL_V4.filter((c) => c.type !== 'Leader')
+const serializedCards = POOL.filter((c) => c.type !== 'Leader')
   .slice(0, 4)
   .map((c, i) => ({
     card_id: c.id,
@@ -319,7 +324,7 @@ const screen = params.get('screen') ?? 'collection';
 if (params.get('role') === 'creator') profile.role = 'creator';
 
 // A non-Leader card with some metadata rows, for the 3D inspector preview.
-const inspectDef = POOL_V4.find((c) => c.type !== 'Leader')!;
+const inspectDef = POOL.find((c) => c.type !== 'Leader')!;
 
 createRoot(document.getElementById('root')!).render(
   <MetaContext.Provider value={meta}>

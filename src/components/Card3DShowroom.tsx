@@ -31,7 +31,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from '../meta/useMotionMode';
-import { CardDef } from '../game/v3/cards';
+import { CardDef } from '../game/poker/cards';
 import { CardFace, CARD_SIZES } from './CardFaceV4';
 import { getCardBackImage } from '../meta/cardback';
 import { rarityTier } from '../meta/rarity';

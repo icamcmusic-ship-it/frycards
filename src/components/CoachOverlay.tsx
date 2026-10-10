@@ -1,18 +1,24 @@
 /**
- * A lightweight first-match coach: contextual, dismissible callouts that
- * walk a brand-new player through one real match's turn structure the first
- * time each phase actually happens, instead of front-loading everything
- * into a static wall of text before play starts. Shown once ever (tracked
- * in localStorage) — after that, or if skipped, it never renders again.
+ * A lightweight first-game coach: contextual, dismissible callouts that walk a
+ * card player who has never played Hold'em through their first FryCards Poker
+ * match, one idea at a time, the first time each idea actually matters —
+ * their two hole cards and the hand ranks, then betting, then the board, then
+ * casting a power, and (when the table shows them) the Location rule and
+ * nerve. Shown once ever (tracked in localStorage) — after that, or if
+ * skipped, it never renders again.
  *
  * Each step is anchored to the element it explains (`anchor`, a selector for a
- * `data-coach` hook on the board): that element gets a spotlight ring and the
- * callout is placed beside it, never on top of it. Without a target — the
- * element is not on screen yet — it falls back to a safe spot that covers none
- * of the board's primary controls.
+ * `data-coach` hook on the poker table — see COACH_ANCHORS): that element gets
+ * a spotlight ring and the callout is placed beside it, never on top of it.
+ * Without a target — the element is not on screen yet — it falls back to a
+ * safe spot that covers none of the table's primary controls.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { holdKeywordIntros } from './CardFaceV4';
+import { COACH_ANCHORS, REQUIRED_COACH_STAGES, type CoachStage } from '../meta/coachPractice';
+import { CAPS, NERVE } from '../game/poker/constants';
+
+export type { CoachStage };
 
 const DONE_KEY = 'frycards_coach_done';
 
@@ -32,45 +38,48 @@ function markCoachDone(): void {
   }
 }
 
-type CoachStage = 'main1' | 'clash' | 'main2' | 'cpu' | 'respond';
+// 'location' only appears on a hand with a real table rule and 'nerve' only
+// once the Leader matters, so completion must not depend on them, or the
+// tutorial (whose progress ref resets each match) replays the first four
+// steps in every match forever. These four always occur in a first game.
+const REQUIRED_STAGES: CoachStage[] = REQUIRED_COACH_STAGES;
 
-// The 'respond' step only appears if the CPU's play leaves the human holding
-// priority with an instant answer in hand — a window that never opens with
-// many decks. Completion must not depend on it, or the tutorial (whose
-// progress ref resets each match) replays steps 1-4 in every match forever.
-// These four stages always occur in a first turn cycle.
-const REQUIRED_STAGES: CoachStage[] = ['main1', 'clash', 'main2', 'cpu'];
-
-const SCRIPT: { stage: CoachStage; title: string; body: string; anchor: string }[] = [
+export const SCRIPT: { stage: CoachStage; title: string; body: string; anchor: string }[] = [
   {
-    stage: 'main1',
-    title: '1. MAIN PHASE — ESSENCE & INVOKING',
-    body: 'Essence is your mana: play one free Wellspring per turn (pick a color of your Leader), and exhaust Locations to produce it. Just hit INVOKE on a hand card — the Locations tap themselves to pay. Invoke Units, Items, Events, Sanctums, or your Leader.',
-    anchor: '[data-coach="locations"]',
+    stage: 'hand',
+    title: 'YOUR HAND — TWO HOLE CARDS',
+    body: 'These two cards are yours alone. Your poker hand is the best five cards out of these two plus the five shared cards that will land in the middle. Best to worst: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
+    anchor: COACH_ANCHORS.hand,
   },
   {
-    stage: 'clash',
-    title: '2. CLASH — ATTACK!',
-    body: 'Click your ready units to add them to the attack, then DECLARE ATTACK. The opponent assigns guards; unguarded attackers hit their Vitality directly. Freshly invoked units are exhausted-in-spirit (summoning sick) unless they have Reckless.',
-    anchor: '[data-coach="my-field"]',
+    stage: 'bet',
+    title: 'BETTING — FOLD, CHECK, CALL, RAISE',
+    body: 'Your turn. FOLD gives up the hand. CHECK passes when nobody has bet. CALL matches the bet. RAISE puts in more and makes everyone match it. This is pot-limit: the slider stops at the size of the pot. Keys: F fold, C check or call, R raise. The blinds are forced bets that rise on a clock.',
+    anchor: COACH_ANCHORS.bet,
   },
   {
-    stage: 'main2',
-    title: '3. MAIN PHASE II',
-    body: 'A second main phase after the Clash — spend fresh essence from any Locations you didn’t tap, then END TURN. At Dusk you shed down to 7 cards and the opponent takes their turn.',
-    anchor: '[data-coach="divider"]',
+    stage: 'board',
+    title: 'THE BOARD — FLOP, TURN, RIVER',
+    body: 'Shared cards everyone uses: three on the flop, one on the turn, one on the river, with a betting round after each. If two or more players are still in after the river, hands are shown and the best five-card hand wins the pot. Or make everyone fold and win without showing.',
+    anchor: COACH_ANCHORS.board,
   },
   {
-    stage: 'cpu',
-    title: '4. OPPONENT’S TURN',
-    body: 'Watch the opponent play — every move it makes is narrated, and the cards involved light up: yellow for what it is acting WITH, red for what it is aimed AT. ❚❚ HOLD freezes a move on screen and ▸ STEP walks the turn one action at a time; SKIP ▸▸ fast-forwards the rest. If it attacks, YOU assign guards — pick an attacker line, click your units to block, then confirm. A reaction window follows where Quick Events and Ambush units can still be invoked before damage.',
-    anchor: '[data-coach="divider"]',
+    stage: 'power',
+    title: 'POWERS — CASTING A CARD',
+    body: `Your power cards: Units ★, Items ⚙, Events ϟ. Cast one on your turn before you bet — it does not use up your turn. Casting is public: the table sees the full card, and its chip cost goes into the pot. So a cast is also a bluff. Per hand: ${CAPS.unitCount} Units (${CAPS.unitStars} stars), ${CAPS.itemCount} Items (${CAPS.itemGears} gears), ${CAPS.eventBolts} bolts of Events. Quick Events can answer someone else's cast or raise.`,
+    anchor: COACH_ANCHORS.power,
   },
   {
-    stage: 'respond',
-    title: '5. THE STACK — YOUR RESPONSE',
-    body: 'Cards don’t take effect the moment they’re played: they wait on THE STACK while you get a window to answer. Whatever goes on last resolves first, so a Quick Event you play now happens BEFORE the card it’s answering. Kill the target of an enemy spell and that spell fizzles. Nothing worth answering? Just PASS.',
-    anchor: '[data-coach="stack"], [data-coach="divider"]',
+    stage: 'location',
+    title: 'THE TABLE RULE — LOCATIONS',
+    body: 'Every hand plays one Location rule, shown here, with the next two forecast so you can plan your casts. Each deck brings one Location to a shared bag, and a Plain Table hand with no rule comes round once a cycle.',
+    anchor: COACH_ANCHORS.location,
+  },
+  {
+    stage: 'nerve',
+    title: 'NERVE & YOUR LEADER',
+    body: `Nerve is public, 0 to ${NERVE.max}. Win showdowns, land bluffs or fold strong hands to gain it; get caught bluffing or hit by hostile powers and it drops. Your Leader has two abilities, one use per hand: one spends nerve, one builds it. At 0 you tilt: your Leader locks and powers cost one step more.`,
+    anchor: COACH_ANCHORS.nerve,
   },
 ];
 
@@ -238,7 +247,8 @@ html[data-motion='reduced'] .coach-ring { animation: none; }
 
 export function CoachOverlay({ stage }: { stage: string }) {
   const [dismissed, setDismissed] = useState(isCoachDone);
-  const [step, setStep] = useState<(typeof SCRIPT)[number] | null>(null);
+  /** The step on screen; `last` = every scripted idea has now been shown. */
+  const [step, setStep] = useState<((typeof SCRIPT)[number] & { last: boolean }) | null>(null);
   const shown = useRef<Set<CoachStage>>(new Set());
 
   useEffect(() => {
@@ -246,11 +256,11 @@ export function CoachOverlay({ stage }: { stage: string }) {
     const next = SCRIPT.find((s) => s.stage === stage && !shown.current.has(s.stage));
     if (next) {
       shown.current.add(next.stage);
-      setStep(next);
+      setStep({ ...next, last: SCRIPT.every((s) => shown.current.has(s.stage)) });
     } else if (REQUIRED_STAGES.every((s) => shown.current.has(s))) {
       // Every always-occurring step has been shown at least once — treat it as
-      // a completion even if the final step's own button was never clicked (the
-      // 'cpu' stage advances itself on timers with no player input required).
+      // a completion even if the last step's own button was never clicked (the
+      // table moves on by itself while CPU seats act).
       markCoachDone();
       setDismissed(true);
       setStep(null);
@@ -271,8 +281,8 @@ export function CoachOverlay({ stage }: { stage: string }) {
   const [placed, setPlaced] = useState<{ top: number; left: number } | null>(null);
   const anchor = step?.anchor;
 
-  // The board re-lays itself out under the callout (a unit enters, the hint bar
-  // wraps, the phone rotates), so re-read the anchor on a short interval and on
+  // The table re-lays itself out under the callout (a card is dealt, a cast
+  // spotlight opens, the phone rotates), so re-read the anchor on a short interval and on
   // resize rather than once at mount.
   useLayoutEffect(() => {
     if (!anchor) return;
@@ -305,7 +315,7 @@ export function CoachOverlay({ stage }: { stage: string }) {
   };
 
   if (dismissed || !step) return null;
-  const isLast = step.stage === SCRIPT[SCRIPT.length - 1].stage;
+  const isLast = step.last;
 
   return (
     <>

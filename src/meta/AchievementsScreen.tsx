@@ -43,7 +43,7 @@ export function isMatchObjective(o: { id: string; stat_key: string; category?: s
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  battle: 'BATTLE',
+  battle: 'MATCHES',
   collection: 'COLLECTION',
   progress: 'PROGRESSION',
   social: 'SOCIAL',
@@ -279,9 +279,9 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
   const lockedChip = (
     <span
       className="fs-xs font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm"
-      title="Needs CPU battles, which are not open to your account yet"
+      title="Needs bot matches, which are not open to your account yet"
     >
-      NEEDS CPU BATTLES
+      NEEDS BOT MATCHES
     </span>
   );
 
@@ -346,8 +346,8 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
         )}
         {cpuLocked && tab !== 'bingo' && !loading && !loadError && (
           <p className="fs-xs font-bold text-[var(--c-steel)] mb-4 max-w-2xl">
-            Objectives that need a CPU battle are greyed out — CPU battles are not open to your
-            account yet, so they cannot be completed and are left out of CLAIM ALL.
+            Objectives that need a match are greyed out — poker tables against bots are not open to
+            your account yet, so they cannot be completed and are left out of CLAIM ALL.
           </p>
         )}
 

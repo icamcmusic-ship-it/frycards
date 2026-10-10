@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowDownUp,
+  Bot,
   Check,
-  Swords,
+  Eye,
+  GraduationCap,
   Palette,
   Sparkles,
   Timer,
@@ -20,15 +21,16 @@ import {
   saveCpuSpeed,
   MOTION_MODES,
   MotionMode,
-  HAND_SORTS,
-  HandSort,
-  loadHandSort,
-  saveHandSort,
   CPU_DIFFICULTIES,
   CpuDifficultyId,
   loadCpuDifficulty,
   saveCpuDifficulty,
+  loadHandHelper,
+  saveHandHelper,
+  loadFourColor,
+  saveFourColor,
 } from './matchPrefs';
+import { restartCoach } from './coachPractice';
 
 /** Once every 7 days for everyone except `creator` (Fry) — mirrors the
  * server-side cooldown in `reset_account()` so the button can grey itself out
@@ -65,14 +67,17 @@ export function SettingsScreen({
   const [resetError, setResetError] = useState('');
   const [resetDone, setResetDone] = useState(false);
   const [confirmText, setConfirmText] = useState('');
-  // Narration speed used to be reachable ONLY from the bubble that appears
-  // mid-CPU-turn, so a player had to sit through a turn at the wrong speed to
-  // find the control that changes it — and nothing outside a match said it
-  // existed. Guests get it too: it's a localStorage preference, not a profile
-  // field.
+  // Table preferences live in localStorage, not the profile, so guests get
+  // them too. Every one of them can also be flipped from the chips on the
+  // poker table's top bar; Settings is where a player finds them before their
+  // first match.
   const [cpuSpeed, setCpuSpeed] = useState(loadCpuSpeed);
-  const [handSort, setHandSort] = useState<HandSort>(loadHandSort);
   const [difficulty, setDifficulty] = useState<CpuDifficultyId>(loadCpuDifficulty);
+  // The table's guided first game turns the helper on regardless; outside it
+  // the stored choice (default off) applies.
+  const [handHelper, setHandHelper] = useState(() => loadHandHelper(false));
+  const [fourColor, setFourColor] = useState(loadFourColor);
+  const [coachQueued, setCoachQueued] = useState(false);
   // Two-step reset: the first press arms it, the second (within 6s) fires.
   const [resetArmed, setResetArmed] = useState(false);
   const pickSpeed = (idx: number) => {
@@ -262,19 +267,20 @@ export function SettingsScreen({
           </div>
         </div>
 
-        {/* Match pacing */}
+        {/* Bot pacing (Design Spec v0.1, "Bot pacing"). */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
             <Timer className="w-6 h-6 text-[var(--c-ink)]" />
-            <h2 className="heading-font text-lg">OPPONENT NARRATION SPEED</h2>
+            <h2 className="heading-font text-lg">BOT SPEED</h2>
           </div>
           <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
             <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
-              How long each line of the CPU's turn stays on screen while its cards and targets light
-              up on the board. You can also change this mid-match from the ⏱ button on the narration
-              bubble. Mid-turn there are two more controls next to it: ❚❚ HOLD freezes the move on
-              screen for as long as you like and ▸ STEP then walks the turn one action at a time,
-              while SKIP ▸▸ fast-forwards the rest of it.
+              How long the bots at your table take to act: 1× / 2× / INSTANT. At 1× a raise, cast or
+              large call takes 5–7 seconds and a check or fold 1–2; 2× halves that and INSTANT skips
+              the wait. The pause never depends on a bot's hand, so it is never a tell, and the
+              match clock is charged the same at every speed — this changes how long you wait, not
+              how fast the blinds rise. You can also cycle it mid-match from the BOTS chip on the
+              table.
             </p>
             <div className="flex flex-wrap gap-2">
               {CPU_SPEEDS.map((s, i) => (
@@ -291,16 +297,17 @@ export function SettingsScreen({
           </div>
         </div>
 
-        {/* CPU difficulty (AUDIT-2026-10-06 §3.2). */}
+        {/* Bot difficulty (AUDIT-2026-10-06 §3.2). */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
-            <Swords className="w-6 h-6 text-[var(--c-ink)]" />
-            <h2 className="heading-font text-lg">CPU DIFFICULTY</h2>
+            <Bot className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">BOT DIFFICULTY</h2>
           </div>
           <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
             <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
-              How hard the CPU plays. Takes effect from your next match; rewards are the same at
-              every level. Saved locally.
+              How well the bots at your table play — how they read their hands and when they bet and
+              cast. Takes effect from your next match; rewards are the same at every level. Saved
+              locally.
             </p>
             <div className="flex flex-wrap gap-2">
               {CPU_DIFFICULTIES.map((d) => (
@@ -320,31 +327,79 @@ export function SettingsScreen({
           </div>
         </div>
 
-        {/* Hand order — until 2026-10 only reachable from a chip mid-match. */}
+        {/* Table aids (Design Spec v0.1, "Onboarding"): the hand-strength
+            helper and the four-colour deck. Both are also chips on the table's
+            top bar; these are the same stored flags. */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
-            <ArrowDownUp className="w-6 h-6 text-[var(--c-ink)]" />
-            <h2 className="heading-font text-lg">HAND ORDER</h2>
+            <Eye className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">TABLE AIDS</h2>
           </div>
-          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
-            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
-              How the cards in your hand are arranged during a match. You can still flip it
-              mid-match from the ↕ chip by your hand. Saved locally.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {HAND_SORTS.map((h) => (
-                <PopButton
-                  key={h.id}
-                  color={handSort === h.id ? 'yellow' : 'steel'}
-                  ariaPressed={handSort === h.id}
-                  onClick={() => {
-                    setHandSort(h.id);
-                    saveHandSort(h.id);
-                  }}
-                >
-                  <OptionLabel label={h.label} blurb={h.blurb} />
-                </PopButton>
-              ))}
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4 flex flex-col gap-4">
+            {/* flex-wrap + min-w-0 on each row, the same idiom as the privacy
+                row below, so a large browser font size can't push the screen
+                sideways on a phone. */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="heading-font text-sm">HAND-STRENGTH HELPER</div>
+                <p className="text-[11px] font-bold text-[var(--c-steel)] mt-1 max-w-md">
+                  Shows what your hand makes right now and a rough chance of winning against the
+                  players still in, updated each street. Always on in the guided first game; off by
+                  default otherwise.
+                </p>
+              </div>
+              <PopButton
+                color={handHelper ? 'yellow' : 'steel'}
+                ariaPressed={handHelper}
+                ariaLabel={`Hand-strength helper ${handHelper ? 'on' : 'off'}`}
+                onClick={() => {
+                  setHandHelper(!handHelper);
+                  saveHandHelper(!handHelper);
+                }}
+              >
+                {handHelper ? 'ON' : 'OFF'}
+              </PopButton>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="heading-font text-sm">FOUR-COLOUR DECK</div>
+                <p className="text-[11px] font-bold text-[var(--c-steel)] mt-1 max-w-md">
+                  Gives every suit its own colour — ♦ diamonds blue and ♣ clubs green beside the red
+                  ♥ and black ♠ — so a flush draw can't hide in a glance.
+                </p>
+              </div>
+              <PopButton
+                color={fourColor ? 'yellow' : 'steel'}
+                ariaPressed={fourColor}
+                ariaLabel={`Four-colour deck ${fourColor ? 'on' : 'off'}`}
+                onClick={() => {
+                  setFourColor(!fourColor);
+                  saveFourColor(!fourColor);
+                }}
+              >
+                {fourColor ? 'ON' : 'OFF'}
+              </PopButton>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="heading-font text-sm flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4" aria-hidden /> FIRST-GAME COACH
+                </div>
+                <p className="text-[11px] font-bold text-[var(--c-steel)] mt-1 max-w-md">
+                  The coach walks you through your hole cards, betting, the board, powers, Locations
+                  and nerve once. Replay it to see the walkthrough again in your next match.
+                </p>
+              </div>
+              <PopButton
+                color={coachQueued ? 'yellow' : 'steel'}
+                disabled={coachQueued}
+                onClick={() => {
+                  restartCoach();
+                  setCoachQueued(true);
+                }}
+              >
+                {coachQueued ? 'NEXT MATCH ✓' : 'REPLAY COACH'}
+              </PopButton>
             </div>
           </div>
         </div>
@@ -476,7 +531,8 @@ export function SettingsScreen({
         {/* Info Section */}
         <div className="bg-[var(--c-paper)] border-4 border-[var(--c-ink)] p-4">
           <p className="fs-sm font-bold text-[var(--c-steel)] leading-relaxed">
-            Your theme preference is saved locally and will persist when you return to the game.
+            Your theme and table preferences are saved locally and will persist when you return to
+            the game.
           </p>
         </div>
       </div>

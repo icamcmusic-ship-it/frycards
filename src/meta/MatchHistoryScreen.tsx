@@ -4,6 +4,8 @@ import {
   MatchRecord,
   formatMatchReport,
   loadMatchHistory,
+  ordinalOf,
+  placeOf,
   summarizeMatchHistory,
 } from './matchHistory';
 import { cn } from '../lib/utils';
@@ -27,14 +29,12 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
-const fmtSplit = (s: { games: number; wins: number }) =>
-  s.games === 0 ? '—' : `${s.wins}-${s.games - s.wins}`;
-
 /**
  * Local match history: the last 50 matches this browser finished, read back
- * from the record `GameV4` has always written. Nothing here touches the
- * network. Each match can be copied as a plain-text report (seed, first
- * player, both deck codes) for a bug report or a chat.
+ * from the record the poker table writes at game over (older records from the
+ * retired MTG-style game still show, as 1st/2nd of 2). Nothing here touches
+ * the network. Each match can be copied as a plain-text report (place, seed,
+ * mode, deck code) for a bug report or a chat.
  */
 export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
   const [records] = useState<MatchRecord[]>(loadMatchHistory);
@@ -75,23 +75,29 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
           <>
             <div className="flex flex-wrap gap-3 mb-4">
               <StatTile
-                label="RECORD"
-                value={`${summary.wins}-${summary.games - summary.wins}`}
-                sub={`${summary.winPct}% win rate`}
+                label="FIRST PLACES"
+                value={`${summary.wins}/${summary.games}`}
+                sub={`${summary.winPct}% of matches`}
               />
-              <StatTile label="ON THE PLAY" value={fmtSplit(summary.onPlay)} sub="going first" />
-              <StatTile label="ON THE DRAW" value={fmtSplit(summary.onDraw)} sub="going second" />
+              <StatTile
+                label="AVERAGE PLACE"
+                value={summary.avgPlace.toFixed(1)}
+                sub="1 = winner"
+              />
               <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3">
                 <div className="fs-xs font-bold text-[var(--c-steel)] mb-1.5">
                   LAST {summary.form.length} (NEWEST FIRST)
                 </div>
-                <div className="flex gap-1" aria-label={`Recent form: ${summary.form.join(' ')}`}>
+                <div
+                  className="flex gap-1"
+                  aria-label={`Recent places: ${summary.form.map(ordinalOf).join(' ')}`}
+                >
                   {summary.form.map((f, i) => (
                     <span
                       key={i}
                       className={cn(
                         'heading-font text-[11px] w-6 h-6 flex items-center justify-center ink-border-sm',
-                        f === 'W'
+                        f === 1
                           ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
                           : 'bg-[var(--c-ink)] text-[var(--c-paper)]',
                       )}
@@ -116,7 +122,7 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
                     >
                       <span className="text-xs font-bold truncate">{d.label}</span>
                       <span className="heading-font text-xs shrink-0">
-                        {d.wins}-{d.games - d.wins} · {Math.round((d.wins / d.games) * 100)}%
+                        {d.wins} first of {d.games} · avg {d.avgPlace.toFixed(1)}
                       </span>
                     </div>
                   ))}
@@ -136,23 +142,23 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
                   <span
                     className={cn(
                       'heading-font text-xs px-2 py-1 ink-border-sm',
-                      r.won
+                      placeOf(r) === 1
                         ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
                         : 'bg-[var(--c-ink)] text-[var(--c-paper)]',
                     )}
                   >
-                    {r.won ? 'WIN' : 'LOSS'}
+                    {r.place !== undefined ? ordinalOf(r.place) : r.won ? 'WIN' : 'LOSS'}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-bold truncate">
                       {r.humanLabel} <span className="text-[var(--c-steel)]">vs</span> {r.cpuLabel}
                     </div>
                     <div className="fs-xs font-bold text-[var(--c-steel)]">
-                      {new Date(r.finishedAt).toLocaleString()} · {r.turns} turns · vitality{' '}
-                      {r.humanVitality}–{r.cpuVitality} · seed {r.seed}
-                      {r.firstPlayer
-                        ? ` · ${r.firstPlayer === 'P1' ? 'on the play' : 'on the draw'}`
-                        : ''}
+                      {new Date(r.finishedAt).toLocaleString()}
+                      {r.place !== undefined
+                        ? ` · ${r.seats ?? 2} seats · ${r.mode ?? 'standard'} · ${r.hands ?? 0} hands${r.capped ? ' · on the clock' : ''}`
+                        : ` · retired game${r.turns ? ` · ${r.turns} turns` : ''}`}{' '}
+                      · seed {r.seed}
                     </div>
                   </div>
                   <div className="flex gap-2">

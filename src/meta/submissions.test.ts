@@ -7,21 +7,26 @@ import {
   SUBMITTABLE_TYPES,
   buildCardPayload,
   describeOverrides,
-  formatCostInput,
+  effectChoices,
+  formFor,
+  formatKwRefs,
   isValidCardId,
   isVideoUrl,
   mechanicsFor,
+  mechanicsFromDef,
+  modifierChoices,
+  overridesFrom,
   parseBulkCards,
-  parseCostInput,
-  parseKeywordsInput,
+  parseKwRef,
+  parseModsInput,
   pruneOverrides,
   slugifyCardId,
   validateSubmission,
 } from './submissions';
-import { formFor, overridesFrom } from './CardSubmissionsScreen';
-import { POOL_BY_ID, POOL_V4, deriveCardMechanics } from '../game/v3/cardpool';
-import { RARITIES, Rarity } from '../types';
-import { COLORS } from '../game/v3/colors';
+import { POOL_BY_ID, POOL, deriveCardMechanics } from '../game/poker/cardpool';
+import { RARITIES, type CardOverrides, type CardTemplate } from '../types';
+import { COLORS } from '../game/poker/colors';
+import { KEYWORD_SPECS, tierN } from '../game/poker/keywords';
 import { ALL_SET_NAMES } from './rarity';
 
 const OK_IMAGE = 'https://cdn.midjourney.com/abc-123/0_0.png';
@@ -144,11 +149,36 @@ describe('mechanicsFor / buildCardPayload', () => {
       image: known.image,
       flavor: known.flavor,
     });
-    expect(m.might).toBe(known.might ?? null);
-    expect(m.grit).toBe(known.grit ?? null);
+    expect(m).toEqual(mechanicsFromDef(known));
     expect(m.rules_text).toBe(known.text ?? null);
     expect(m.keywords).toBe((known.keywords ?? []).join(', ') || null);
-    expect(m.essence_cost).toEqual(known.cost ?? null);
+    expect(m.essence_types).toEqual(known.colors);
+  });
+
+  it('maps poker mechanics onto the legacy column names', () => {
+    // might = tier for powers; the MTG-only columns are written null.
+    const unit = POOL.find((c) => c.type === 'Unit')!;
+    const mu = mechanicsFromDef(unit);
+    expect(mu.might).toBe(unit.tier);
+    expect(mu.might).toBeGreaterThanOrEqual(1);
+    expect(mu.might).toBeLessThanOrEqual(5);
+    expect(mu.grit).toBeNull();
+    expect(mu.resolve).toBeNull();
+    expect(mu.essence_cost).toBeNull();
+
+    const leader = POOL.find((c) => c.type === 'Leader')!;
+    const ml = mechanicsFromDef(leader);
+    expect(ml.might).toBeNull();
+    expect(ml.keywords).toBe(leader.abilities!.map((a) => a.effect.kw).join(', '));
+
+    const loc = POOL.find((c) => c.type === 'Location')!;
+    const mloc = mechanicsFromDef(loc);
+    expect(mloc.might).toBeNull();
+    expect(mloc.keywords).toBeNull();
+    expect(mloc.rules_text).toBe(loc.text);
+
+    const item = POOL.find((c) => c.type === 'Item')!;
+    expect(mechanicsFromDef(item).card_subtype).toBe(item.subtype);
   });
 
   it('is a pure function of id|type|rarity — the server-side hash seed', () => {
@@ -191,14 +221,16 @@ describe('mechanicsFor / buildCardPayload', () => {
       ].sort(),
     );
     expect(Array.isArray(p.mechanics.essence_types)).toBe(true);
+    // A Location prints its table rule as its rules text.
+    expect(p.mechanics.rules_text).toBeTruthy();
   });
 
   it('derives usable mechanics at every rarity a Creator can pick', () => {
-    // 13 of the 297 shipped cards are legitimately colourless (all-generic
-    // cost), so an empty essence_types is valid — pick_deck_bucket's
-    // `essence_types <@ identity` reads that as "legal in any deck". What must
-    // hold at every rarity is that a Unit gets stats and only ever names real
-    // Essence types.
+    // A slice of the pool is legitimately colourless, so an empty
+    // essence_types is valid — pick_deck_bucket's `essence_types <@ identity`
+    // reads that as "legal in any deck". What must hold at every rarity is
+    // that a Unit gets a 1–5 tier and an effect keyword, and only ever names
+    // real colours.
     const seen = new Set<string>();
     for (const rarity of RARITIES) {
       const m = mechanicsFor({
@@ -208,8 +240,9 @@ describe('mechanicsFor / buildCardPayload', () => {
         rarity,
         set: SHOWCASE_SET,
       });
-      expect(m.might).not.toBeNull();
-      expect(m.grit).not.toBeNull();
+      expect(m.might).toBeGreaterThanOrEqual(1);
+      expect(m.might).toBeLessThanOrEqual(5);
+      expect(m.keywords).toBeTruthy();
       for (const c of m.essence_types) {
         expect(COLORS).toContain(c);
         seen.add(c);
@@ -425,7 +458,8 @@ describe('parseBulkCards — JSON', () => {
 });
 
 // ---------------------------------------------------------------------------
-// v13: Creator mechanics overrides
+// Creator mechanics overrides (poker: tier hint, effect, modifiers, subtype,
+// text)
 // ---------------------------------------------------------------------------
 describe('mechanics overrides', () => {
   const base = {
@@ -437,6 +471,15 @@ describe('mechanics overrides', () => {
     flavor: 'probe',
     image: OK_IMAGE,
   };
+  const templateOf = (c: (typeof POOL)[number]): CardTemplate => ({
+    id: c.id,
+    name: c.name,
+    type: c.type,
+    rarity: c.rarity,
+    set: c.set,
+    image: c.image,
+    flavor: c.flavor,
+  });
 
   it('leaves the payload untouched when nothing is overridden', () => {
     const plain = buildCardPayload(base);
@@ -445,104 +488,136 @@ describe('mechanics overrides', () => {
     expect(buildCardPayload({ ...base, overrides: null }).overrides).toBeUndefined();
   });
 
-  it('writes the overridden value into the derived mechanics the server stores', () => {
-    const generated = buildCardPayload(base);
-    const overridden = buildCardPayload({ ...base, overrides: { might: 9, grit: 9 } });
-    expect(overridden.overrides).toEqual({ might: 9, grit: 9 });
-    expect(overridden.mechanics.might).toBe(9);
-    expect(overridden.mechanics.grit).toBe(9);
-    // Untouched fields still come from the hash.
-    expect(overridden.mechanics.keywords).toBe(generated.mechanics.keywords);
-  });
-
-  it('overriding the cost also moves the essence types the server indexes', () => {
-    const overridden = buildCardPayload({
-      ...base,
-      overrides: { cost: { generic: 1, pips: { Void: 2 } } },
-    });
-    expect(overridden.mechanics.essence_cost).toEqual({ generic: 1, pips: { Void: 2 } });
-    expect(overridden.mechanics.essence_types).toEqual(['Void']);
-  });
-
-  it('prunes undefined entries but KEEPS an empty keyword list', () => {
-    expect(pruneOverrides({ might: undefined })).toBeUndefined();
-    expect(pruneOverrides({ keywords: ['Aerial'] })).toEqual({ keywords: ['Aerial'] });
-    // `keywords: []` is the Creator clearing a card's generated keywords, not
-    // an absent override. Pruning it made emptying the KEYWORDS box a silent
-    // no-op — the card printed with its generated keywords intact.
-    expect(pruneOverrides({ keywords: [] })).toEqual({ keywords: [] });
-    expect(pruneOverrides({ keywords: [], might: undefined })).toEqual({ keywords: [] });
-  });
-
-  it('an empty keyword override actually strips the generated keywords', () => {
-    // Find a card the hash gives keywords to, then clear them.
-    const withKw = POOL_V4.find((c) => c.type === 'Unit' && (c.keywords?.length ?? 0) > 0);
-    expect(withKw).toBeDefined();
-    const cleared = buildCardPayload({
-      id: withKw!.id,
-      name: withKw!.name,
-      type: 'Unit',
-      rarity: (withKw!.rarity as Rarity) ?? 'Common',
-      set: SHOWCASE_SET,
-      flavor: 'x',
-      image: OK_IMAGE,
-      overrides: { keywords: [] },
-    });
-    expect(cleared.overrides).toEqual({ keywords: [] });
-    expect(cleared.mechanics.keywords).toBeNull();
-    // …and the layered CardDef the game renders really has none.
-    expect(deriveCardMechanics({ ...withKw!, overrides: { keywords: [] } }).keywords).toEqual([]);
-  });
-
-  it('an Item carries its stats in bond, not in might/grit', () => {
-    // The override editor used to offer MIGHT/GRIT on every card type. Only
-    // Units have them, so on an Item the boxes wrote a field nothing renders
-    // while `cards.might/grit` came back disagreeing with the printed card.
-    const items = POOL_V4.filter((c) => c.type === 'Item');
-    expect(items.length).toBeGreaterThan(0);
-    expect(items.every((c) => c.might == null && c.grit == null)).toBe(true);
-    expect(items.every((c) => c.bond != null)).toBe(true);
-
-    const item = items[0];
-    const bonded = deriveCardMechanics({
-      ...item,
-      overrides: { bond: { might: 4, grit: 2 } },
-    });
-    expect(bonded.bond).toEqual({ might: 4, grit: 2 });
-  });
-
-  it('editing an Item bond keeps the keyword that bond grants', () => {
-    // `bond` holds three things — might, grit and `grants`, the keyword the
-    // Item hands to the unit it bonds to (28 of the 61 Items print one) — and
-    // the editor only has boxes for the first two. Rebuilding the object from
-    // those boxes alone overwrote `grants` with nothing, so nudging BOND
-    // +MIGHT by one silently stripped the keyword off every unit the Item
-    // would ever bond to, while the panel called it a stats-only edit.
-    const granter = POOL_V4.find((c) => c.type === 'Item' && (c.bond?.grants?.length ?? 0) > 0);
-    expect(granter).toBeDefined();
-    const form = formFor(granter!);
-    const { overrides, problems } = overridesFrom(
-      { ...form, bondMight: String((granter!.bond?.might ?? 0) + 1) },
-      granter!,
+  it('a star hint writes the tier into the derived mechanics the server stores', () => {
+    const generated = deriveCardMechanics(base);
+    const hint = generated.tier === 5 ? 1 : 5;
+    const overridden = buildCardPayload({ ...base, overrides: { tier: hint } });
+    expect(overridden.overrides).toEqual({ tier: hint });
+    expect(overridden.mechanics.might).toBe(hint);
+    // Colour is identity, never a mechanic: a re-tier keeps it.
+    expect(overridden.mechanics.essence_types).toEqual(
+      buildCardPayload(base).mechanics.essence_types,
     );
-    expect(problems).toEqual([]);
-    expect(overrides?.bond?.might).toBe((granter!.bond?.might ?? 0) + 1);
-    expect(overrides?.bond?.grants).toEqual(granter!.bond!.grants);
-    // …and the card the game actually prints still grants it.
-    const printed = deriveCardMechanics({ ...granter!, overrides });
-    expect(printed.bond?.grants).toEqual(granter!.bond!.grants);
   });
 
-  it('clearing both bond boxes clears the bond outright', () => {
-    const item = POOL_V4.find((c) => c.type === 'Item' && !c.bond?.grants?.length);
-    expect(item).toBeDefined();
-    const { overrides, problems } = overridesFrom(
-      { ...formFor(item!), bondMight: '', bondGrit: '' },
-      item!,
+  it('an effect override prints that keyword at the tier default', () => {
+    const generated = deriveCardMechanics(base);
+    const kw = effectChoices('Unit', generated.colors).find((k) => k !== generated.effect?.kw)!;
+    const def = deriveCardMechanics({ ...base, overrides: { effect: { kw } } });
+    expect(def.effect?.kw).toBe(kw);
+    expect(def.effect?.n).toBe(KEYWORD_SPECS[kw].numbered ? tierN(kw, def.tier!) : undefined);
+    expect(def.keywords?.[0]).toBe(kw);
+    expect(buildCardPayload({ ...base, overrides: { effect: { kw } } }).mechanics.keywords).toMatch(
+      new RegExp(`^${kw}`),
     );
+  });
+
+  it('prunes undefined/null entries and every retired MTG field, but KEEPS an empty modifier list', () => {
+    expect(pruneOverrides({ tier: undefined })).toBeUndefined();
+    // A template saved under the MTG-style game can still carry these.
+    const legacy = { might: 9, cost: { generic: 1 }, bond: {}, keywords: ['Aerial'] };
+    expect(pruneOverrides(legacy as unknown as CardOverrides)).toBeUndefined();
+    expect(pruneOverrides({ ...legacy, tier: 3 } as unknown as CardOverrides)).toEqual({ tier: 3 });
+    expect(pruneOverrides({ text: null } as unknown as CardOverrides)).toBeUndefined();
+    // `mods: []` is the Creator stripping a card's generated modifiers.
+    expect(pruneOverrides({ mods: [] })).toEqual({ mods: [] });
+  });
+
+  it('an empty modifier override actually strips the generated modifiers', () => {
+    const withMods = POOL.find((c) => c.type === 'Unit' && (c.mods?.length ?? 0) > 0);
+    expect(withMods).toBeDefined();
+    const t = templateOf(withMods!);
+    const { overrides, problems } = overridesFrom({ ...formFor(withMods!), mods: '' }, t);
     expect(problems).toEqual([]);
-    expect(overrides?.bond).toBeNull();
-    expect(deriveCardMechanics({ ...item!, overrides }).bond).toBeUndefined();
+    expect(overrides).toEqual({ mods: [] });
+    const printed = deriveCardMechanics({ ...t, overrides });
+    expect(printed.mods).toEqual([]);
+    expect(printed.keywords).toEqual([withMods!.effect!.kw]);
+  });
+
+  it('the editor round-trips a card unchanged into no overrides at all', () => {
+    for (const c of POOL.filter((d) => d.type !== 'Leader').slice(0, 60)) {
+      const { overrides, problems } = overridesFrom(formFor(c), templateOf(c));
+      expect(problems).toEqual([]);
+      expect(overrides).toBeUndefined();
+    }
+  });
+
+  it('a tier hint re-baselines the effect and modifiers at the new tier', () => {
+    const c = POOL.find((d) => d.type === 'Item' && d.tier! <= 3)!;
+    const t = templateOf(c);
+    const hinted = deriveCardMechanics({ ...t, overrides: { tier: c.tier! + 2 } });
+    // What the editor shows after picking the new tier.
+    const form = { ...formFor(hinted), tier: String(c.tier! + 2) };
+    const { overrides, problems } = overridesFrom(form, t);
+    expect(problems).toEqual([]);
+    expect(overrides).toEqual({ tier: c.tier! + 2 });
+  });
+
+  it('limits effects to keywords the card’s colours allow', () => {
+    // Peek is Light-gated: a card with no Light can't carry it.
+    const nonLight = POOL.find((d) => d.type === 'Unit' && !d.colors.includes('Light'))!;
+    expect(effectChoices('Unit', nonLight.colors)).not.toContain('Peek');
+    expect(effectChoices('Unit', ['Light'])).toContain('Peek');
+    // Snuff is a response-only Event.
+    expect(effectChoices('Unit', ['Void'])).not.toContain('Snuff');
+    expect(effectChoices('Event', ['Void'])).toContain('Snuff');
+    // Modifiers are never effects.
+    expect(effectChoices('Event', ['Shadow'])).not.toContain('Veil');
+    expect(modifierChoices(['Shadow'])).toContain('Veil');
+
+    const { problems } = overridesFrom(
+      { ...formFor(nonLight), effect: 'Peek' },
+      templateOf(nonLight),
+    );
+    expect(problems.join(' ')).toMatch(/Peek can't print/);
+  });
+
+  it('writes an effect number only when it differs from the tier default', () => {
+    const c = POOL.find((d) => d.type === 'Unit' && d.colors.includes('Ember'))!;
+    const t = templateOf(c);
+    const def = tierN('Kindle', c.tier!);
+    const same = overridesFrom({ ...formFor(c), effect: 'Kindle', effectN: String(def) }, t);
+    expect(same.problems).toEqual([]);
+    expect(same.overrides?.effect ?? { kw: 'Kindle' }).toEqual({ kw: 'Kindle' });
+    const bumped = overridesFrom({ ...formFor(c), effect: 'Kindle', effectN: '½' }, t);
+    if (def === 0.5) expect(bumped.overrides?.effect).toEqual({ kw: 'Kindle' });
+    else expect(bumped.overrides?.effect).toEqual({ kw: 'Kindle', n: 0.5 });
+    // Whole-number keywords reject fractions; numberless ones reject numbers.
+    expect(overridesFrom({ ...formFor(c), effect: 'Redraw', effectN: '2' }, t).problems).toEqual([
+      'Redraw takes no number.',
+    ]);
+  });
+
+  it('parses modifier boxes, rejecting retired MTG keywords and off-colour ones', () => {
+    expect(parseKwRef('fuse 2')).toEqual({ kw: 'Fuse', n: 2 });
+    expect(parseKwRef('Kindle 1½')).toEqual({ kw: 'Kindle', n: 1.5 });
+    expect(parseKwRef('Call Out')).toEqual({ kw: 'Call Out' });
+    expect(parseKwRef('Aerial')).toBeNull();
+    expect(formatKwRefs([{ kw: 'Fuse', n: 1 }, { kw: 'Veil' }])).toBe('Fuse 1, Veil');
+
+    const r = parseModsInput('Fuse 1, Veil, Aerial, Peek, Fuse', ['Shadow']);
+    expect(r.mods).toEqual([{ kw: 'Fuse', n: 1 }, { kw: 'Veil' }]);
+    expect(r.unknown).toEqual(['Aerial']);
+    expect(r.illegal).toEqual(['Peek']); // an effect, not a modifier
+  });
+
+  it('a rules-text override is kept; a blank box means generated', () => {
+    const c = POOL.find((d) => d.type === 'Location')!;
+    const t = templateOf(c);
+    expect(overridesFrom({ ...formFor(c), text: '  ' }, t).overrides).toBeUndefined();
+    const { overrides } = overridesFrom({ ...formFor(c), text: 'House rules.' }, t);
+    expect(overrides).toEqual({ text: 'House rules.' });
+    expect(deriveCardMechanics({ ...t, overrides }).text).toBe('House rules.');
+  });
+
+  it('subtype overrides only accept the subtypes the engine reads', () => {
+    const item = POOL.find((d) => d.type === 'Item' && d.subtype !== 'Weapon')!;
+    const t = templateOf(item);
+    expect(overridesFrom({ ...formFor(item), subtype: 'Weapon' }, t).overrides).toEqual({
+      subtype: 'Weapon',
+    });
+    expect(overridesFrom({ ...formFor(item), subtype: 'Quick' }, t).problems).toHaveLength(1);
   });
 
   it('ALL_SET_NAMES names the real showcase set', () => {
@@ -552,29 +627,8 @@ describe('mechanics overrides', () => {
     expect(ALL_SET_NAMES).toContain(SHOWCASE_SET);
   });
 
-  it('parses and re-renders a cost', () => {
-    expect(parseCostInput('2 ember, 1 void, 3')).toEqual({
-      generic: 3,
-      pips: { Ember: 2, Void: 1 },
-    });
-    expect(parseCostInput('')).toBeNull();
-    expect(parseCostInput('two ember')).toBeNull();
-    expect(parseCostInput('4 nonsense')).toBeNull();
-    expect(formatCostInput({ generic: 2, pips: { Tide: 1 } })).toBe('2 generic, 1 Tide');
-    expect(parseCostInput(formatCostInput({ generic: 2, pips: { Tide: 1 } }))).toEqual({
-      generic: 2,
-      pips: { Tide: 1 },
-    });
-  });
-
-  it('rejects keywords the engine does not implement', () => {
-    const { keywords, unknown } = parseKeywordsInput('aerial, Overrun, Sparkly');
-    expect(keywords).toEqual(['Aerial', 'Overrun']);
-    expect(unknown).toEqual(['Sparkly']);
-  });
-
   it('describes what was overridden', () => {
-    expect(describeOverrides({ might: 3, text: 'x' })).toBe('might, rules text');
+    expect(describeOverrides({ tier: 3, mods: [], text: 'x' })).toBe('tier, modifiers, rules text');
     expect(describeOverrides(undefined)).toBe('');
   });
 });

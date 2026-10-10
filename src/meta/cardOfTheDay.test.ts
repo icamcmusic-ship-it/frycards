@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { CardDef } from '../game/v3/cards';
+import type { CardDef } from '../game/poker/cards';
 import { cardOfTheDay, utcDayKey } from './cardOfTheDay';
 
 const pool = Array.from({ length: 50 }, (_, i) => ({ id: `c${i}`, name: `C${i}` }) as CardDef);

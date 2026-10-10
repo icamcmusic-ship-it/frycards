@@ -17,50 +17,51 @@
  */
 export const CPU_SPEED_KEY = 'frycards:cpu-speed';
 
+/**
+ * Bot pacing at the poker table (Design Spec v0.1, "Bot pacing"): raises,
+ * casts and large calls take 5–7 s and checks/folds 1–2 s at 1×; 2× halves
+ * that and INSTANT skips it. The delay never depends on hand strength, so it
+ * is never a tell. The match clock is charged the nominal time either way, so
+ * the speed changes how long you wait, not how fast the blinds rise.
+ */
 export const CPU_SPEEDS = [
-  { label: 'CINEMATIC', mult: 2.6, blurb: 'Watch every move land' },
-  { label: 'SLOW', mult: 1.7, blurb: 'Read every line' },
-  { label: 'NORMAL', mult: 1, blurb: 'The default pace' },
-  { label: 'FAST', mult: 0.55, blurb: 'Skim the turn' },
+  { label: '1×', mult: 1, blurb: 'Table pace' },
+  { label: '2×', mult: 0.5, blurb: 'Brisk' },
+  { label: 'INSTANT', mult: 0, blurb: 'No waiting' },
 ] as const;
 
-export const DEFAULT_CPU_SPEED = CPU_SPEEDS.findIndex((s) => s.label === 'NORMAL');
+export const DEFAULT_CPU_SPEED = 0;
 
-/** The v17–v25 ladder, by stored index — the only values that can be in a
- * player's storage from before v26. */
-const LEGACY_LADDER = ['SLOW', 'NORMAL', 'FAST'] as const;
+/** Labels stored by the retired match screen, mapped onto the new ladder. */
+const LEGACY_LABELS: Record<string, string> = {
+  CINEMATIC: '1×',
+  SLOW: '1×',
+  NORMAL: '1×',
+  FAST: '2×',
+  '0': '1×',
+  '1': '1×',
+  '2': '2×',
+};
 
 function indexOfLabel(label: string): number {
   return CPU_SPEEDS.findIndex((s) => s.label === label);
 }
 
-/** Read the stored choice, defaulting to NORMAL. */
+/** Read the stored choice, defaulting to 1×. */
 export function loadCpuSpeed(): number {
   if (typeof window === 'undefined') return DEFAULT_CPU_SPEED;
   let raw: string | null;
   try {
     raw = window.localStorage.getItem(CPU_SPEED_KEY);
   } catch {
-    // Storage blocked (private mode, or a hardened browser profile).
     return DEFAULT_CPU_SPEED;
   }
-  // getItem returns null when unset, and Number(null) is 0 — which would
-  // silently make the slowest rung the default (the v17 bug). `Number('')` is
-  // 0 as well, so the empty string has to be rejected by the same rule and not
-  // just the null: a cleared or half-written key is not a choice of anything.
   if (raw === null || raw.trim() === '') return DEFAULT_CPU_SPEED;
-  const value = raw.trim();
-
-  const byLabel = indexOfLabel(value.toUpperCase());
+  const value = raw.trim().toUpperCase();
+  const byLabel = indexOfLabel(value);
   if (byLabel >= 0) return byLabel;
-
-  // Legacy numeric index from v17–v25.
-  const stored = Number(value);
-  if (Number.isInteger(stored) && stored >= 0 && stored < LEGACY_LADDER.length) {
-    const migrated = indexOfLabel(LEGACY_LADDER[stored]);
-    if (migrated >= 0) return migrated;
-  }
-  return DEFAULT_CPU_SPEED;
+  const legacy = LEGACY_LABELS[value];
+  return legacy ? indexOfLabel(legacy) : DEFAULT_CPU_SPEED;
 }
 
 export function saveCpuSpeed(idx: number): void {
@@ -93,7 +94,7 @@ export function saveCpuSpeed(idx: number): void {
 export const HAND_SORTS = [
   { id: 'drawn', label: '↕ DRAWN', blurb: 'The order you drew them' },
   { id: 'playable', label: '↕ PLAYABLE', blurb: 'What you can cast now, first' },
-  { id: 'cost', label: '↕ COST', blurb: 'Cheapest first' },
+  { id: 'cost', label: '↕ TIER', blurb: 'Lowest tier first' },
 ] as const;
 
 export type HandSort = (typeof HAND_SORTS)[number]['id'];
@@ -196,9 +197,9 @@ export function motionIsReduced(mode: MotionMode): boolean {
 // CPU difficulty (AUDIT-2026-10-06 §3.2). Stored by id, like the hand sort.
 // ---------------------------------------------------------------------------
 export const CPU_DIFFICULTIES = [
-  { id: 'easy', label: 'EASY', blurb: 'Misses attacks and blocks, never holds an answer' },
-  { id: 'normal', label: 'NORMAL', blurb: 'The standard opponent' },
-  { id: 'hard', label: 'HARD', blurb: 'Chumps to stay alive, always holds an answer' },
+  { id: 'easy', label: 'EASY', blurb: 'Loose bots that misread hands', skill: 0.25 },
+  { id: 'normal', label: 'NORMAL', blurb: 'The standard table', skill: 0.6 },
+  { id: 'hard', label: 'HARD', blurb: 'Sharp reads, well-timed casts', skill: 0.9 },
 ] as const;
 export type CpuDifficultyId = (typeof CPU_DIFFICULTIES)[number]['id'];
 export const CPU_DIFFICULTY_KEY = 'frycards:cpu-difficulty';
@@ -221,3 +222,34 @@ export function saveCpuDifficulty(id: CpuDifficultyId): void {
     /* private mode — the choice just won't persist */
   }
 }
+
+// ---------------------------------------------------------------------------
+// Table aids (Design Spec v0.1, "Onboarding"): the hand-strength helper is on
+// by default in the guided first game and optional otherwise; the four-colour
+// deck (♦ blue, ♣ green) is an accessibility option.
+// ---------------------------------------------------------------------------
+export const HELPER_KEY = 'frycards:hand-helper';
+export const FOUR_COLOR_KEY = 'frycards:four-color';
+
+function loadFlag(key: string, fallback: boolean): boolean {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw === null ? fallback : raw === '1';
+  } catch {
+    return fallback;
+  }
+}
+
+function saveFlag(key: string, on: boolean): void {
+  try {
+    window.localStorage.setItem(key, on ? '1' : '0');
+  } catch {
+    /* private mode — the choice just won't persist */
+  }
+}
+
+export const loadHandHelper = (fallback = false) => loadFlag(HELPER_KEY, fallback);
+export const saveHandHelper = (on: boolean) => saveFlag(HELPER_KEY, on);
+export const loadFourColor = () => loadFlag(FOUR_COLOR_KEY, false);
+export const saveFourColor = (on: boolean) => saveFlag(FOUR_COLOR_KEY, on);

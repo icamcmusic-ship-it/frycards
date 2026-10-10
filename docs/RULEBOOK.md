@@ -1,352 +1,580 @@
-# FRY CARDS Rulebook v6.0
+# FryCards Poker Rulebook v1.0
 
-Fry Cards plays under an essence-based trading card game ruleset (v6,
-formerly codenamed "Riftbound"). This document is the paper rulebook adapted
-for the digital client; digital adaptations are marked **[digital]**.
+> **The MTG-style rules were retired in October 2026.** FryCards no longer
+> plays the essence/Vitality card battler (Rulebook v6.x: Wellsprings, Clash,
+> Might/Grit, Resolve). Its rules live on in git history
+> (`git log -- docs/RULEBOOK.md`). The card collection, rarities, names, art
+> and flavor text carried over unchanged; every mechanic was replaced.
 
-## 1. Glossary of Terms
+This is the current, complete rulebook for **FryCards Poker**. Where a number
+appears it is the shipped value from `src/game/poker/constants.ts`; the
+engine (`src/game/poker/engine.ts`) is the final word on any edge case.
 
-### Core actions
+---
 
-| Term    | Meaning                                                |
-| ------- | ------------------------------------------------------ |
-| Invoke  | Play a spell from hand                                 |
-| Exhaust | Turn a card sideways to use its ability or pay a cost  |
-| Recover | Return a card to an upright, ready state               |
-| Deal    | Take a card from your deck (draw)                      |
-| Shed    | Put a card from hand into the ash-pile (discard)       |
-| Forfeit | Put your own permanent into the ash-pile as a cost     |
-| Shatter | Send a permanent to the ash-pile (destroy)             |
-| Banish  | Remove a card from the game (to The Void)              |
-| Erode   | Put cards from deck to ash-pile without drawing (mill) |
-| Bond    | Link an Item to a unit (attach)                        |
+## 1. The game in one paragraph
 
-### Keyword abilities
+FryCards Poker is a **pot-limit Texas Hold'em freezeout** for 2 to 6 seats.
+Everyone starts with the same stack; the last seat with chips wins, or, when
+the mode's clock runs out, the biggest stack. On top of the poker, each seat
+brings a **deck**: a **Leader** (a persona with a public nerve meter and two
+abilities), a **Location** (a table rule that joins a shared rotation) and
+**power cards** (Units ★, Items ⚙, Events ϟ) that bend what players see,
+receive, handle and lose. Casting a power is public and costs chips into the
+pot, so every cast is also a bet and a bluff. Poker skill still decides most
+outcomes.
 
-Unit keywords (rulebook §1):
+**Chips** exist only inside a match. They reset every game and can never be
+bought, carried over, won across matches or traded. Rewards pay by finishing
+place, never by chip count (§13).
 
-| Keyword      | Meaning                                                                                       |
-| ------------ | --------------------------------------------------------------------------------------------- |
-| Aerial       | Can only be guarded by other Aerial or Skywatch units                                         |
-| Overrun      | Excess clash damage carries through to the defending player                                   |
-| Quickstrike  | Deals damage before normal clash damage                                                       |
-| Doublestrike | Deals both quickstrike and normal damage                                                      |
-| Venomous     | Any damage dealt is lethal                                                                    |
-| Siphon       | Damage dealt also gains you that much Vitality (never above 20)                               |
-| Alert        | Doesn't exhaust when attacking                                                                |
-| Reckless     | Can act the turn it enters the field                                                          |
-| Swarmproof   | Must be guarded by two or more units                                                          |
-| Skywatch     | Can guard Aerial units                                                                        |
-| Warded       | Can't be targeted by an opponent                                                              |
-| Unbreakable  | Once per game, prevent the first shatter or lethal-damage effect; 0 Grit and banish bypass it |
-| Ambush       | Can be invoked at any time, even outside your main phase                                      |
-| Immobile     | Can't attack                                                                                  |
-| Regenerate   | At Dawn, heal all damage marked on this unit                                                  |
-| Hardened     | Damage dealt to this unit is reduced by 1                                                     |
+---
 
-**v6.9:** one new Unit keyword per Essence Type:
+## 2. Hold'em basics
 
-| Keyword (Essence Type) | Meaning                                                                     |
-| ---------------------- | --------------------------------------------------------------------------- |
-| Wildfire (Ember)       | When this unit dies, deal 2 damage to the enemy player                      |
-| Tidecaller (Tide)      | Whenever this unit deals clash damage, Deal a card                          |
-| Thriving (Root)        | At your Dawn, this unit gets +1/+1 permanently                              |
-| Nimble (Gale)          | Can only be guarded by units with strictly less Might                       |
-| Radiant (Light)        | At your Dawn, restore 1 Vitality                                            |
-| Withering (Shadow)     | Clash damage this deals to a unit permanently reduces that unit's Grit by 1 |
-| Entropic (Void)        | At your Dusk, the enemy erodes 1                                            |
+### 2.1 Hand ranks (best first)
 
-Wildfire fires when its unit leaves the field, including through banish, and
-an Item that grants Wildfire still grants it at that moment. Withering applies
-only when its unit deals clash damage to another unit. Its Grit loss is
-permanent: unlike marked damage, healing does not restore it, and a unit
-withered to 0 Grit is shattered by the state checks.
+A hand is the best **five** cards a seat can make from its two hole cards plus
+the five community cards (any five of the seven). Suits are never ranked.
 
-**v6.0:** every other card type has its own keyword pair:
+| #   | Hand            | Example          | Notes                                          |
+| --- | --------------- | ---------------- | ---------------------------------------------- |
+| 1   | Straight flush  | 9♥ 8♥ 7♥ 6♥ 5♥   | A-K-Q-J-10 suited is the royal flush           |
+| 2   | Four of a kind  | Q♠ Q♥ Q♦ Q♣ 4♠   |                                                |
+| 3   | Full house      | 7♠ 7♦ 7♣ K♥ K♠   | Higher trips first, then the pair              |
+| 4   | Flush           | A♦ J♦ 8♦ 6♦ 2♦   | Compare highest card down                      |
+| 5   | Straight        | 10♣ 9♦ 8♠ 7♥ 6♣  | Ace plays high (A-K-Q-J-10) or low (5-4-3-2-A) |
+| 6   | Three of a kind | 8♠ 8♥ 8♦ K♣ 3♠   | "Trips"                                        |
+| 7   | Two pair        | J♠ J♦ 4♣ 4♥ A♠   | Higher pair, lower pair, then the fifth card   |
+| 8   | Pair            | 10♥ 10♠ K♦ 6♣ 2♥ | Pair, then the three side cards ("kickers")    |
+| 9   | High card       | A♣ Q♦ 9♠ 5♥ 3♣   | Highest card down                              |
 
-| Keyword (type)       | Meaning                                                                        |
-| -------------------- | ------------------------------------------------------------------------------ |
-| Surge (Event)        | Costs 1 less if you already invoked another card this turn                     |
-| Resonant (Event)     | Its effect resolves twice                                                      |
-| Runic (Item)         | When it bonds to a unit from your hand, Deal a card                            |
-| Soulbound (Item)     | When the bonded unit leaves the field, return this Item to your hand           |
-| Bountiful (Location) | Exhausts for 2 essence instead of 1                                            |
-| Sacred (Location)    | At your Dawn, restore 1 Vitality                                               |
-| Commander (Leader)   | While your Leader is on the field, your units get +1 Might                     |
-| Resolute (Leader)    | At your Dawn, your invoked Leader recovers 1 Resolve (up to its printed value) |
-| Echoing (Event)      | When this Event resolves, Deal a card                                          |
-| Ritual (Event)       | Costs 1 less if you control 3 or more Sanctums                                 |
-| Empowering (Item)    | At your Dawn, the bonded unit gets +1/+0 permanently                           |
-| Tethered (Item)      | When this Item bonds to a unit from your hand, recover that unit               |
-| Bulwark (Location)   | Damage dealt to you is reduced by 1                                            |
-| Blighted (Location)  | At your Dusk, the enemy erodes 1                                               |
-| Archivist (Location) | At your Dawn, Deal a card if you control 3 or more Sanctums                    |
-| Warlord (Leader)     | While your Leader is on the field, your units get +0/+1                        |
+Equal hands split the pot. An odd chip goes to the first winner clockwise from
+the button.
 
-**v7.5:** six more, filling the colours each type still had nothing printable
-in — Events had no Shadow or Void text, Items none in Tide or Light,
-Locations none in Ember or Gale:
+### 2.2 The button and the blinds
 
-| Keyword (type — Essence Type)     | Meaning                                                                           |
-| --------------------------------- | --------------------------------------------------------------------------------- |
-| Fate (Event — Void)               | When this Event resolves, banish the top card of the opponent's deck              |
-| Exhume (Event — Shadow)           | When this Event resolves, return a random Unit from your ash-pile to your hand    |
-| Freeze-Dry (Item — Tide)          | When this Item bonds to a unit from your hand, exhaust a target enemy unit        |
-| Blessed (Item — Light)            | When this Item bonds to a unit from your hand, restore 3 Vitality                 |
-| Scorched-Earth (Location — Ember) | At your Dusk, if you control 3 or more Sanctums, deal 1 damage to each enemy unit |
-| Glaciate (Location — Gale)        | At every other Dawn, exhaust a target enemy unit                                  |
+- The **dealer button** moves to the next live seat every hand.
+- The two seats after the button post forced bets: the **small blind** (half)
+  and the **big blind** (one full blind). **Heads-up**, the button posts the
+  small blind and acts first before the flop.
+- Blinds rise on a **clock**, not a hand count (§3.2).
 
-**v23–v24:** implemented Leader and Event keywords:
+### 2.3 A hand, street by street
 
-| Keyword (type — Essence Type) | Meaning                                                                                                   |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Onslaught (Leader — Ember)    | While your Leader is invoked, your attacking units get +1 Might                                           |
-| Beacon (Leader — Light)       | At your Dawn, your invoked Leader restores 1 Vitality                                                     |
-| Dread (Leader — Void)         | While your Leader is invoked, enemy units get -1 Might                                                    |
-| Kindle (Event — Ember)        | When this Event resolves, deal 1 damage to the enemy player                                               |
-| Tailwind (Event — Gale)       | When this Event resolves, recover a random exhausted friendly unit, or a Location if no unit is exhausted |
-| Luminous (Event — Light)      | When this Event resolves, restore 1 Vitality                                                              |
+| Street   | Cards                           | Betting starts with              |
+| -------- | ------------------------------- | -------------------------------- |
+| Pre-flop | Two private **hole cards** each | The seat after the big blind     |
+| Flop     | Three community cards face-up   | First live seat after the button |
+| Turn     | A fourth community card         | First live seat after the button |
+| River    | The fifth community card        | First live seat after the button |
+| Showdown | Remaining hands are compared    | —                                |
 
-Fate and Erode are deliberately different sizes of the same idea: Erode puts
-the card in the ash-pile, where Exhume and the rest of Shadow can still reach
-it, and Fate puts it in The Void, where nothing can. Exhume returns Units
-only — it cannot return itself or any other Event.
+A card is burned before each street. If everyone but one seat folds, that
+seat wins the pot at once without showing.
 
-Scorched-Earth and Glaciate stack, but each is bounded. Scorched-Earth's sweep
-needs three Sanctums — the same threshold Ritual and Archivist use — and two
-copies then sweep for 2. Glaciate rests every second Dawn, and each Sanctum
-keeps its own counter — a Glaciate Sanctum always fires on the first Dawn
-after it arrives, then rests on the next. Two Glaciates therefore run on
-their own rhythms: arrivals an odd number of your turns apart alternate,
-freezing one unit per turn between them; arrivals on the same turn (or an
-even number apart) fire and rest in step, freezing two units every other
-turn.
+### 2.4 Betting actions
 
-### Zones
+- **Fold** — give up the hand and any chips already in.
+- **Check** — pass the action when there is no bet to you.
+- **Call** — match the current bet.
+- **Bet / Raise** — put in more; everyone else must match, re-raise or fold.
+- **All-in** — put in your whole stack. You can never be forced out for
+  lack of chips.
 
-Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
-(banished cards) · Leader zone.
+Keyboard: **F** fold, **C** check/call, **R** raise (with a slider).
 
-## 2. Card Types
+### 2.5 Pot-limit
 
-- **Unit** — has Might (power) and Grit (toughness); attacks and guards.
-- **Location** — exhausts to produce Essence.
-  - _Wellspring_ — essence only. **[digital]** Basic Wellsprings take no
-    deck slots: once per turn you may play one basic Wellspring of any
-    Essence Type in your Leader's identity (the rulebook's "unlimited basic
-    Wellspring copies" exception, digital form).
-  - _Sanctum_ — produces essence AND carries an ability; invoked from hand.
-- **Item** — bonds to a unit. **(v13: this type was called _Charm_ until this
-  release; `Charm` is now one of its three subtypes.)**
-  - _Charm_ — goes to the Ash-pile if its unit leaves the field. A Charm is
-    also the one Item that may be **cast on a player** instead of a unit: it
-    resolves as Vitality equal to its whole bond (Might + Grit, never above
-    your starting Vitality) and goes straight to the Ash-pile, granting
-    nothing else. Choosing a player is a choice, not a fallback — but with no
-    friendly unit on the field it is the only legal line, which makes a Charm
-    the only Item playable on an empty board.
-  - _Weapon_ — buffs a friendly unit, survives that unit, and may re-bond to
-    another unit later by paying its re-bond cost.
-  - _Tool_ — a Weapon that points both ways: as it bonds it also **weakens a
-    target enemy unit** (a permanent -N/-N). It carries a smaller bond than a
-    Weapon of the same cost, which is what pays for the debuff.
-- **Event** — resolves once, then Ash-pile.
-  - _Quick_ — invokable any time you have a priority window.
-  - _Slow_ — own main phases only.
-- **Leader** — one per deck, starts in the Leader zone, always available to
-  invoke in your own main phase with the stack empty once you can afford it.
-  Has **Resolve** instead of Might/Grit; one ability may be activated per turn,
-  in your own main phase with the stack empty. **[digital]** Leader invocation
-  and abilities resolve immediately instead of using the stack. At 0 Resolve
-  the Leader is shattered.
+- **Maximum raise:** call first, then raise by the size of the whole pot.
+  `max raise-to = current bet + (pot + your call)`.
+- **Minimum raise:** the size of the last bet or raise on this street, and at
+  least one big blind.
+- A street ends when every seat still able to bet has acted and matched the
+  current bet. If everyone left is all-in (or only one seat can still act and
+  owes nothing), the rest of the board is dealt with no more betting.
 
-## 3. Objective & Setup
+### 2.6 Side pots and showdown
 
-- Reduce your opponent's **Vitality from 20 to 0**, or force them to Deal
-  from an empty deck. Vitality can never rise above 20. If both players are at
-  0 or less Vitality at the same moment, the game is a **draw** (§8).
-- Decks are **at least 60 cards** with **no more than 4 copies of any
-  card** (rulebook §3). **[digital]** the editor caps decks at 100 cards,
-  and premium rarities carry stricter economy caps: Super-Rare / Ultra-Rare /
-  Full-Art up to 2, Alt-Art / Mythic 1.
-- Opening hand: **7 cards** for both players. **[digital]** the second player
-  instead offsets the first-mover advantage on their opening turn, when they
-  may play **two** basic Wellsprings. The second one is a **shallow spring**:
-  it enters **exhausted**, so it ramps them into turn 2 rather than handing
-  them a turn-1 swing, and it **runs dry at the start of their turn 6** — it
-  recedes, leaving them level on essence from then on.
-  (Sims located the first-mover edge as a _tempo_ lead that decays in long
-  games, so the previous 8th-card compensation was on the wrong axis and
-  measured worth under a point. A PERMANENT second Wellspring then
-  overcorrected just as badly in the other direction, for the same reason
-  read backwards: a permanent +1 essence/turn is a compounding ramp
-  advantage, not a tempo repayment. Draining it on turn 6 is what measures
-  even — see the v32 changelog entry for the sweep.)
-- **Mulligan** (rulebook §3): before the first turn you may shuffle your
-  hand back into your deck and draw **one card fewer** — repeatable
-  (7 → 6 → 5 → …). **[digital]** the CPU mulls once on a hand with no
-  cheap plays or no units.
+- Chips that an all-in seat could not match form a **side pot** it cannot
+  win. Each pot is awarded separately to the best eligible hand.
+- Money in the pot that belongs to no seat's bet — power costs, drains,
+  antes, a jackpot — joins the **main pot**.
+- **Who shows:** every pot winner, and the last seat that bet or raised (it
+  must show to claim — and may be caught bluffing). Everyone else mucks a
+  losing hand unless the Location is **Open Table**.
 
-## 4. Turn Structure
+---
 
-1. **Dawn Phase** — Recover all your exhausted permanents; Regenerate units
-   heal; Sacred Locations, Archivist Sanctums and Resolute Leaders tick;
-   Empowering Items grow their bonded unit; "at Dawn" triggers;
-   the second player's bonus Wellspring recedes on turn 6 (§3);
-   Deal one card (the first player skips this on turn 1).
-2. **Main Phase I** — Invoke Units, Items, Events, Sanctums, or your
-   Leader; play one basic Wellspring (once per turn — the second player gets
-   two on their opening turn, and loses the second one at their turn-6 Dawn,
-   see §3).
-3. **Clash Phase** — Declare attackers (they exhaust unless Alert) →
-   defender assigns guards → a priority round both players may act in (§6) →
-   clash damage, simultaneous unless Quickstrike/Doublestrike changes the
-   timing.
-4. **Main Phase II** — as Main Phase I.
-5. **Dusk Phase** — "at Dusk" triggers; Shed down to 7 cards; pass.
+## 3. Match format
 
-## 5. Essence & Invoking
+### 3.1 Modes
 
-- Exhaust a Location to produce one Essence of its type (two for
-  Bountiful Sanctums).
-- A cost's colored pips must be paid with matching Essence; the generic
-  part with any Essence. Unspent Essence empties at the end of each phase.
-- Surge Events cost 1 less once you have invoked another card this turn.
-- Ritual Events cost 1 less while you control three or more Sanctums. "Sanctum"
-  means a Location CARD — basic Wellsprings are not Sanctums and never count
-  toward Ritual or Archivist.
-- A card carrying both Surge and Ritual still discounts only once.
-- Slow Events, Items, Sanctums, and Leaders: own main phases only, and only
-  with the stack empty (see §6).
-- Quick Events and Ambush cards: any priority window — your main phases, the
-  guard-step reaction window of either player's Clash Phase, and any window
-  you hold while something waits on the stack.
+| Mode     | Stack (units) | Blinds rise      | Clock cap | Deck: Leader + Location + powers | Max copies | Tier-5 cards | Power hand: start / draw per hand / cap | Reward × | Min. length |
+| -------- | ------------- | ---------------- | --------- | -------------------------------- | ---------- | ------------ | --------------------------------------- | -------- | ----------- |
+| Quick    | 30            | ×1.5 every 2 min | 12 min    | 1 + 1 + 16                       | 2          | 1            | 3 / 1 / 5                               | ×0.5     | 6 min       |
+| Standard | 50            | ×1.5 every 3 min | 25 min    | 1 + 1 + 24                       | 2          | 2            | 4 / 1 / 6                               | ×1       | 12 min      |
+| Deep     | 80            | ×1.5 every 4 min | 40 min    | 1 + 1 + 36                       | 3          | 3            | 5 / 2 / 7                               | ×1.5     | 20 min      |
 
-## 6. The Stack & Priority
+One **chip unit** is the opening big blind. Every seat starts at the same
+stack; chips in play never change (powers move chips, never create them).
 
-Invoked Units, Events, Items and Sanctums, plus triggered abilities, go on
-**the stack** and wait there while both players get a chance to respond.
-**[digital]** Leader invocation and Leader abilities resolve immediately and
-do not use the stack.
+### 3.2 The clock
 
-- **Order of priority is APNAP** — Active Player, then Non-Active Player. The
-  player whose turn it is always speaks first in a round.
-- **Both players passing in succession** resolves the top item of the stack —
-  **last in, first out**, so a response resolves _before_ the thing it
-  answers. With an empty stack, passing simply closes the window.
-- **Only instant-speed cards can be played into an open stack**: Quick Events
-  and Ambush units, by the priority holder, in response to an opponent's top
-  item. Everything else waits for your own main phase with the stack empty.
-- **Targets are chosen and locked on invocation, then re-checked on
-  resolution.** If the target is gone or has
-  become illegal (a unit that died in response, or one that gained Warded),
-  the item **fizzles**: an Event does nothing and still goes to the Ash-pile,
-  a Unit still enters the field and loses only its rider, and an Item whose
-  host is gone goes to the unbonded row (Weapon/Tool) or the Ash-pile (Charm).
-  A Charm aimed at a **player** cannot fizzle: the target is chosen when it is
-  invoked and a player is never an illegal target.
-  A removal Event may be aimed at any unit that is a legal target even if the
-  effect would do nothing to it: shattering an Unbreakable unit with its save
-  up is legal (it spends the save), and so is Recover on a unit that is not
-  exhausted.
-- **Ending a phase or resolving the clash concedes your priority, not your
-  opponent's.** While something waits on the stack and your opponent holds
-  priority, you cannot end the phase or resolve the clash over it — they must
-  pass first.
-- **Steps with no response window**: combat damage, Dawn and Dusk. Anything
-  put on the stack inside them resolves before the step continues.
+- Every action advances the match clock by the time it took (human think time
+  is charged up to 30 s per action). The blind **level** is
+  `floor(clock / level length)`, and the big blind is 1 unit × 1.5^level,
+  rounded to half-unit steps from 2 units up. Standard: 1 · 1½ · 2½ · 3½ · 5 ·
+  7½ · 11½ · 17 · 25½ …
+- **At the cap** the hand in progress finishes, then every live seat is ranked
+  by stack.
+- **Busting:** a seat at 0 chips after a hand is out. Seats that bust in the
+  same hand are ranked by their stack at the start of that hand. A busted
+  player can watch at 4× speed or skip.
+- **Bots** take 5–7 s for raises, casts and big calls and 1–2 s for checks
+  and folds, at random and independent of hand strength, so timing is never a
+  tell. The human has a soft 30 s turn timer with a 60 s time bank.
 
-**[digital]** Two simplifications in this client. First, you answer your
-opponent's cards and triggers, not your own — there is no chaining a second
-card in response to your own. Second, a player holding nothing they could
-legally respond with is passed for automatically, so a board with no
-instant-speed cards plays exactly as it did before the stack existed.
+---
 
-You may exhaust Locations for Essence in any window where you hold priority,
-not only in your own main phase — an answer you cannot pay for is no answer.
+## 4. Decks
 
-## 7. Combat
+- A deck is **1 Leader + 1 Location + N power cards** (N by mode, §3.1), with
+  the mode's copy limit and tier-5 limit.
+- **Colours.** Every card keeps the colour it had in the old game. The
+  Leader's two colours decide which colours the deck may hold; colourless
+  cards fit any deck.
+- **Power hand.** Your powers form a private hand (others see only how many
+  you hold). You draw the mode's starting hand at match start and the draw
+  count at the start of every later hand, up to the cap. When your power deck
+  is empty, your discard is reshuffled into it.
+- **Old decks** from the 60-card game, and their share links, are invalid in
+  every mode. The collection itself is untouched.
+- **Card mechanics** are generated from a hash of each card's id, type and
+  rarity, so a rebalance ships as a code change. Rarity gently biases the tier
+  roll and otherwise affects novelty, not power.
 
-- Only recovered, non-Immobile units without summoning sickness (unless
-  Reckless) may attack. Attacking exhausts the unit unless it has Alert.
-- Unguarded attackers deal their Might to the defender's Vitality.
-- Swarmproof attackers must be guarded by 2+ units or not at all. Aerial
-  attackers can only be guarded by Aerial or Skywatch units. Nimble
-  attackers can only be guarded by a unit with strictly less Might.
-- **Blocked is blocked.** Once an attacker has been assigned at least one
-  guard, it deals no damage to the defending player even if every one of its
-  guards leaves the field before damage resolves — whether they died to
-  first-strike damage or were removed during the reaction window, by either
-  player. Only Overrun spills, and only the excess past whatever its guards
-  actually absorbed.
-- Venomous damage is lethal regardless of amount; Overrun sends excess
-  damage past shattered guards through to the defending player; Siphon
-  converts damage dealt into Vitality; Hardened shaves 1 off every damage
-  packet (a fully-absorbed hit applies no Venom and feeds no Siphon).
+---
 
-## 8. Death, Removal & State-Based Checks
+## 5. Power cards
 
-Before any player acts, the game automatically checks: 0-or-less Vitality
-loses (if both players are at 0 or less in the same check, the game is a
-**draw** — neither wins, whoever's turn it is); Dealing from an empty deck
-loses; lethal damage (or 0 Grit)
-shatters a unit (an Unbreakable unit with its once-per-game save still
-unspent survives instead — wounded, with 1 remaining Grit after marked
-damage); banish and a reduction to 0 Grit bypass Unbreakable;
-illegally bonded Items unbond.
-When a unit leaves the field, its Charms go to the Ash-pile, its Weapons and
-Tools stay on the field unbonded, and Soulbound Items return to their
-owner's hand.
+Every power has a **tier** from 1 to 5, printed as ★ stars (Units), ⚙ gears
+(Items) or ϟ bolts (Events). The tier sets the chip cost (§6.1) and the
+number **N** in its keywords (§6.6). A power is one **effect keyword** plus
+optional **modifier keywords** (§9).
 
-**Effect vocabulary.** Card and Leader abilities are written from a fixed
-set of actions: _deal damage_, _heal_, _Deal_ (draw), _buff_ (+X/+X),
-_shatter_, _banish_, _erode_ (mill), _recover_ (ready a friendly unit), and
-as of v6.9 _exhaust_ and _weaken_.
+| Type  | Mark | Lasts                                                                                                        | Cap per hand (per seat)                     |
+| ----- | ---- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| Unit  | ★    | Resolves, then stays on the table as a visible **token** until the hand ends; then to your discard           | 2 Units, 5 stars between them               |
+| Item  | ⚙    | Resolves once. **Charm:** then to discard. **Weapon:** returns to your hand. **Tool:** also Marks the target | 2 Items, 5 gears between them               |
+| Event | ϟ    | Resolves once, then to your discard. **Quick** or **Slow** (§6.2)                                            | 5 bolts a hand, at most 2 Events per street |
 
-- **Exhaust** taps a target enemy unit. It cannot attack on its controller's
-  turn or guard on yours until it recovers at their next Dawn. Exhausting an
-  already-exhausted unit does nothing.
-- **Weaken** gives a target enemy unit -X/-X permanently. Derived Might and
-  Grit never fall below 0, and a unit weakened to 0 Grit is shattered by the
-  state-based checks above. Like Withering, this is not damage: healing does
-  not undo it.
+- Legal Unit pairs: 5, 4+1, 3+2, 2+2 and lower. Two 3-star Units are illegal.
+- An **Item** bonds to one of your Units. With no Unit of yours out, it bonds
+  to a hole card instead and costs **one step more**.
+- A **Tool** always needs an opponent target, and also **Marks** one of that
+  seat's hole cards for you.
+- **Soulbound** cards (and Weapons) return to your hand after use instead of
+  the discard; a Soulbound Unit returns at the end of the hand.
 
-## 9. Essence Identity (the seven colors)
+---
 
-| Essence Type | Theme                                        |
-| ------------ | -------------------------------------------- |
-| Ember        | Aggression, direct damage, haste             |
-| Tide         | Card draw, bounce, tempo                     |
-| Root         | Big stats, essence ramp, growth              |
-| Gale         | Evasion (Aerial/Alert), small fast units     |
-| Light        | Protection, lifegain (Siphon), buffs         |
-| Shadow       | Removal, Forfeit synergy, ash-pile recursion |
-| Void         | Banish effects, denial, high-cost payoffs    |
+## 6. Casting
 
-A card's color identity is the colored pips in its Essence Cost. Deck
-legality: every colored pip must fall within your Leader's two-color
-identity; colorless cards fit any deck.
+### 6.1 Chip costs (the cost ladder)
 
-## 10. Triggered ability wording
+Costs are fixed chip units for the whole match, so powers get relatively
+cheaper as the blinds climb. A card's base **step** is its tier; modifiers move
+the step along the ladder.
 
-"**Whenever**" = repeatable trigger · "**When**" = one-time (enters/leaves
-the field) · "**At**" = phase trigger ("At Dawn", "At Dusk").
+| Step         | 0   | 1   | 2   | 3   | 4   | 5   | 6   |
+| ------------ | --- | --- | --- | --- | --- | --- | --- |
+| Cost (units) | ¼   | ½   | 1   | 2   | 3½  | 6   | 8   |
+| Printed tier | —   | 1   | 2   | 3   | 4   | 5   | —   |
 
-"Whenever this unit deals clash damage" (Tidecaller and card triggers) fires
-once for each damage step in which the unit deals at least one point of damage:
-a Doublestrike unit that connects in both the first-strike and the normal step
-fires it twice. Several packets from one unit inside a single step (an Overrun
-attacker hitting a guard and spilling through it) count as one damage event,
-and a hit fully absorbed by Hardened or Bulwark deals none. Damage-riding
-keywords are not triggers and still apply to every packet: Withering erodes
-Grit and Siphon gains Vitality on each hit.
+Step adjustments (they stack, clamped to steps 0–6):
+
+| Adjustment                                                              | Step |
+| ----------------------------------------------------------------------- | ---- |
+| Item with no Unit of yours out                                          | +1   |
+| **Surge**, and you have already cast this hand                          | −1   |
+| **Happy Hour** Location                                                 | −1   |
+| You are **tilted** (0 nerve)                                            | +1   |
+| Shortest-stack buff on Straddle Night / Reverse Order (first cast only) | −1   |
+
+**Gambit** cards cost no chips now; instead, if the caster does not win the
+pot, it pays **double** the chip cost to the winner at the end of the hand.
+
+Chips paid go **into the pot** (on Jackpot Pit, into the jackpot), never out
+of the game.
+
+### 6.2 When you may cast
+
+- **Your turn:** any power except Snuff, before you bet, check, call or fold.
+  Casting does **not** use up your turn.
+- **Slow Events:** only on your turn **before you have acted on that street**.
+- **Quick Events** and any card with **Ambush:** on your turn **and** in
+  response windows (§6.4).
+- **Snuff:** only as a response.
+- **Folded seats cannot cast.** A **Locked** seat cannot cast this street.
+- **All-in seats** can cast using non-chip costs (§6.3).
+- Some keywords have their own timing: **Straddle** only pre-flop before any
+  raise and before you act; **Redraw/Windfall** need at least 8 cards left in
+  the deck; **Exhume** needs something in the muck; **Mimic** needs a power to
+  copy.
+
+### 6.3 Second costs
+
+Tier 4 and 5 powers need **one non-chip cost** on top of chips, chosen by the
+caster:
+
+- **Shed** — discard another power card from your hand.
+- **Blind a hole card** — you cannot look at that hole card until the street
+  ends.
+- **Hand exclusion** — §7.
+
+**25% stack cap:** no single cast may cost more than 25% of your current
+stack. The chip cost is cut to that cap, and the cast needs **one more**
+non-chip cost. This is how a short or all-in stack can still cast.
+
+### 6.4 A cast, step by step
+
+1. **Announce.** The full card face, the caster and the target are shown to
+   everyone (a **Veil** hides the target until the street ends).
+2. **Pay** the chips and any second costs. The card leaves your hand.
+3. **Response window.** Every other seat still in the hand that holds a
+   castable Quick Event or Ambush card (and is not Locked) may cast **one**
+   response or pass. Seats with nothing castable are skipped automatically.
+   Responses resolve **immediately**; there are no responses to responses and
+   no stack. **Quickstrike** skips the window entirely.
+4. **Resolve** the original cast, unless it was Snuffed.
+
+A **raise** also opens a response window for the other seats.
+
+- **Fizzle:** if the target folds before the cast resolves, it fizzles. **No
+  refund.**
+- **Hostile powers** (Kindle, Bounty, Peek, Reveal, Mark, Needle, Venomous,
+  Lock, Entropic) target a seat. **Each seat can be the target of at most one
+  hostile power per street**, and each hostile hit that lands costs the target
+  1 nerve.
+
+### 6.5 Leader abilities
+
+- Every Leader has two abilities: one **spends** 2–3 nerve (strong, a tier-4
+  effect from its first colour) and one **builds** +1 nerve (weaker, a tier-2
+  effect from its second colour, and it pays ½ or 1 chip unit into the pot).
+- **One Leader ability per hand**, on your own turn, outside any window. Not
+  while Locked, and never while **tilted**.
+- A Leader ability is public like a cast and opens a response window (it can
+  be Snuffed), but it is not a card: it ignores the type caps and cannot be
+  Called Out.
+
+### 6.6 Tier numbers (N)
+
+N for numbered keywords, by tier. Chip amounts are in chip units.
+
+| Keyword   | ★1  | ★2  | ★3  | ★4  | ★5  |
+| --------- | --- | --- | --- | --- | --- |
+| Kindle    | ½   | 1   | 2   | 3   | 5   |
+| Tax       | ¼   | ½   | 1   | 1½  | 2   |
+| Bounty    | 2   | 3   | 5   | 8   | 12  |
+| Foresee   | 1   | 2   | 3   | 4   | 5   |
+| Bulwark   | 1   | 2   | 3   | 5   | 8   |
+| Fuse      | 1   | 1   | 1   | 2   | 2   |
+| Peek      | 1   | 1   | 1   | 2   | 2   |
+| Toll      | ½   | 1   | 1½  | 2   | 3   |
+| Insurance | 2   | 3   | 5   | 8   | 12  |
+| Siphon    | ½   | 1   | 2   | 3   | 5   |
+| Blessed   | ½   | 1   | 2   | 3   | 5   |
+| Needle    | 1   | 1   | 2   | 2   | 3   |
+| Venomous  | 1   | 2   | 3   | 5   | 8   |
+| Burn      | 1   | 1   | 1   | 2   | 2   |
+
+Fuse and Needle count streets and nerve; Foresee, Peek and Burn count cards.
+
+---
+
+## 7. Hand exclusions
+
+A hand exclusion is a second cost where you promise **not to win a pot with a
+named hand category**.
+
+- **Eligible:** pair, two pair, three of a kind, straight, flush.
+- **Attainable only:** you may name a category only if you can still end the
+  hand with it, given your hole cards and the board.
+- **Effect:** at showdown, if your best hand is in an excluded category you
+  cannot win that pot; it goes to the best eligible hand. If everyone else
+  folds, the exclusion does nothing.
+- **Limit:** at most **two** per hand, each a different category.
+- **Public:** announced to the table.
+- If **every** contender for a pot is excluded, all exclusions are ignored for
+  that pot. An exclusion only matters in pots you are eligible for.
+
+---
+
+## 8. Information, bluffing and nerve
+
+### 8.1 What each seat sees
+
+- Your own hole cards (unless you blinded one), the board and every public
+  play. Everything else is granted by a power.
+- Every hole card tracks which seats know it. The table renders from your
+  seat's view; **bots receive exactly the same redacted view** — difficulty
+  is decision quality, never extra information.
+- A cast is public; its **result is private**. Everyone sees that you peeked
+  at seat 4; only you see what you saw. Peek, Mark, Foresee, Redraw, Windfall,
+  Exhume and Pass results are private. **Reveal** turns a card face-up for
+  the whole table.
+- Other seats' power hands are hidden (only the count shows).
+- Each match logs its seed; the same seed and action list replays it exactly.
+
+### 8.2 Bluff levers
+
+| Lever             | Keywords                            | What the opponent cannot tell                             |
+| ----------------- | ----------------------------------- | --------------------------------------------------------- |
+| Secret aim        | Veil                                | Where the card points until the street ends               |
+| Secret fizzle     | Feint                               | Whether the effect actually happened                      |
+| Induced reaction  | Bait, Gambit                        | Whether you cast to provoke a raise                       |
+| Borrowed identity | Mimic                               | Whether you copied a power you could not otherwise afford |
+| Cost as a signal  | Chips into the pot, hand exclusions | What a large or odd payment means                         |
+
+- **Feint** appears on about 1 card in 12. Its caster may secretly choose to
+  let it fizzle; to everyone else it looks resolved.
+- **Call Out** (Light) tests a seat's last resolved cast. If it was a Feint,
+  the caught seat loses 2 nerve and the Call Out's chips are refunded. If it
+  was real, the Call Out's chips stay in the pot. Leader abilities and Warded
+  casts cannot be Called Out.
+
+### 8.3 Nerve
+
+Nerve is a **public** meter from 0 to 10; every seat starts at 5.
+
+| Event                                                             | Nerve      |
+| ----------------------------------------------------------------- | ---------- |
+| Win a showdown                                                    | +1         |
+| A bluff gets through (win uncontested without a made hand)        | +1         |
+| Fold a strong hand (strong pre-flop, or two pair+ after the flop) | +1         |
+| Caught bluffing (last aggressor loses the showdown with air)      | −2         |
+| A hostile power lands on you                                      | −1         |
+| A Call Out catches your Feint                                     | −2         |
+| Needle N                                                          | −N         |
+| Leader abilities                                                  | as printed |
+
+**Tilt:** at 0 nerve your Leader is locked and every power costs one step more
+until your nerve recovers. Elimination is chips-only; nerve never knocks you
+out. **Tilt Zone** doubles every nerve change.
+
+### 8.4 Bots
+
+The nine Leaders also drive the CPU seats, drawn by a seeded draw. A bot's
+persona (bluff rate, tightness, how often it casts) comes from its Leader's two
+colours: Ember and Shadow bluff more, Void plays tight, Light bluffs least. A
+bot casts when the expected gain, in big blinds, clears the cost plus a margin;
+it picks targets by threat and personality and respects the hostile cap.
+
+---
+
+## 9. Keywords by colour
+
+"N" is set by the card's tier (§6.6). **Gated** keywords appear only on cards
+of their colour: information about other seats (Peek, Reveal, Mark, Call Out)
+is Light's, denial (Burn, Lock, Snuff, Entropic) is Void's. Redraw and Surge
+are the **common set**, open to every colour. Every other keyword has a home
+colour the card generator prefers. ✔ marks a name carried over from the old
+game with a new poker meaning. _Modifiers_ change how or when the effect lands.
+
+### Common set (every colour)
+
+| Keyword | Type     | Meaning                                                         |
+| ------- | -------- | --------------------------------------------------------------- |
+| Redraw  | effect   | Replace one of your hole cards (your choice) with the next card |
+| Surge ✔ | modifier | Costs one step less if you have already cast this hand          |
+
+### Ember — pressure and chaos
+
+| Keyword  | Type     | Meaning                                                                                                        |
+| -------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| Straddle | effect   | Pre-flop, before any raise or your own action: raise your blind to double the big blind; you act last pre-flop |
+| Kindle ✔ | effect   | **Hostile.** Drain N from a target's stack into the pot                                                        |
+| Tax      | effect   | Every opponent still in the hand antes N more                                                                  |
+| Bounty   | effect   | **Hostile.** Mark a target; if it busts this hand, you collect N from the winner                               |
+| Roulette | modifier | The effect hits a random seat still in the hand — possibly you                                                 |
+| Gambit   | modifier | Cast for no chips; if you don't win the pot, pay double the chip cost to the winner                            |
+
+### Tide — receiving and flow
+
+| Keyword    | Type     | Meaning                                                                         |
+| ---------- | -------- | ------------------------------------------------------------------------------- |
+| Windfall   | effect   | Receive a third hole card, then discard down to your best two                   |
+| Foresee    | effect   | Privately look at the top N cards of the deck                                   |
+| Mimic      | effect   | Copy the effect of the last power cast this hand (not Mimic, Snuff or Call Out) |
+| Wild       | effect   | One of your hole cards (your choice) counts as any suit this hand               |
+| Resonant ✔ | modifier | The effect resolves twice                                                       |
+
+### Root — growth and endurance
+
+| Keyword     | Type     | Meaning                                                                                                                   |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Bulwark ✔   | effect   | If you don't win this hand (folding included), take back up to N of your own chips from the pot                           |
+| Rerun       | effect   | If the hand goes all-in before the river, the rest of the board is dealt twice and each pot splits between the two boards |
+| Thriving ✔  | modifier | On a Unit: the effect fires again at the start of every later street, N growing each time                                 |
+| Fuse        | modifier | The effect lands N streets later — everyone sees it coming; it fizzles if you have folded                                 |
+| Soulbound ✔ | modifier | Returns to your hand after use                                                                                            |
+
+### Gale — timing and movement
+
+| Keyword       | Type     | Meaning                                                                    |
+| ------------- | -------- | -------------------------------------------------------------------------- |
+| Cut           | effect   | Move the top card of the deck to the bottom                                |
+| Pass          | effect   | Every seat still in passes a random hole card to the next seat on its left |
+| Ambush ✔      | modifier | Castable in response windows during other seats' betting                   |
+| Quickstrike ✔ | modifier | Resolves at once, with no response window                                  |
+
+### Light — truth and protection
+
+| Keyword   | Type   | Meaning                                                                                           |
+| --------- | ------ | ------------------------------------------------------------------------------------------------- |
+| Peek      | effect | **Gated, hostile.** Privately see N of a target's hole cards                                      |
+| Reveal    | effect | **Gated, hostile.** One of a target's hole cards is turned face-up for everyone                   |
+| Mark      | effect | **Gated, hostile.** Learn one of a target's hole cards for the rest of the hand, wherever it goes |
+| Call Out  | effect | **Gated.** Test a seat's last resolved cast: a Feint costs its caster 2 nerve and refunds you     |
+| Toll      | effect | This hand, whenever a hostile power targets you, its caster pays you N                            |
+| Insurance | effect | If you lose a showdown while all-in this hand, recover up to N from the pot                       |
+| Siphon ✔  | effect | Take N from the pot                                                                               |
+| Blessed ✔ | effect | Take back up to N of the chips you paid for powers this hand                                      |
+
+### Shadow — deception and recursion
+
+| Keyword    | Type     | Meaning                                                                            |
+| ---------- | -------- | ---------------------------------------------------------------------------------- |
+| Decoy      | effect   | The first Peek or Mark aimed at you this hand only ever sees your lowest hole card |
+| Needle     | effect   | **Hostile.** Drain N nerve from a target                                           |
+| Exhume ✔   | effect   | Swap one of your hole cards for a random folded or mucked card                     |
+| Venomous ✔ | effect   | **Hostile.** If the target wins a pot this hand, it pays you N                     |
+| Feint      | modifier | Cast face-up with a secret choice to let it fizzle; only a Call Out can tell       |
+| Veil       | modifier | The target stays hidden until the street ends                                      |
+| Bait       | modifier | If another seat raises after this cast on the same street, its chips are refunded  |
+
+### Void — denial and removal
+
+| Keyword    | Type     | Meaning                                                                                                                   |
+| ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Burn ✔     | effect   | **Gated.** Discard the next N cards of the deck (never below 8 left)                                                      |
+| Lock       | effect   | **Gated, hostile.** The target cannot cast (or use its Leader) for the rest of this street                                |
+| Snuff      | effect   | **Gated.** Response only: cancel the cast being made (not your own, not a Warded one); a snuffed card goes to the discard |
+| Entropic ✔ | effect   | **Gated, hostile.** The target discards a random power card now and at the start of every later street                    |
+| Warded ✔   | modifier | Can't be Snuffed or Called Out; a Warded Unit also stops Peek, Mark and Reveal targeting you                              |
+
+**Retired** with the old game: Aerial, Overrun, Swarmproof, Skywatch,
+Doublestrike, Alert, Immobile, Hardened, Regenerate, Bountiful, Sacred,
+Archivist and the rest of the combat, stack, essence and Dawn/Dusk terms.
+
+---
+
+## 10. Locations
+
+### 10.1 The schedule
+
+- Each deck holds exactly one Location. Every live seat's Location goes into
+  a **shared bag**, together with one **Plain Table**. Each hand plays the next
+  one from the bag, in a shuffled order that ignores who is dealing — a
+  Location is the table's weather, not a seat's perk.
+- The bag refills (reshuffled) when empty, so your Location comes up about
+  once per orbit. **No Location repeats on consecutive hands**, across cycles
+  too.
+- A **forecast** shows the next two Locations.
+- At **2 or 3 seats**, house Locations from the catalog join the bag so the
+  table sees at least five different ones.
+- The owner's name and the card art are credited when their Location comes
+  up; the owner gets no gameplay bonus. The active Location's art is the table
+  felt.
+
+### 10.2 The rules
+
+Each Location card rolls one of these templates (the card hash picks the
+template and any parameter). Position-favouring rules give the **shortest
+stack** a small buff.
+
+| Rule            | Effect                                                                                                       | Tag               |
+| --------------- | ------------------------------------------------------------------------------------------------------------ | ----------------- |
+| Plain Table     | No rule change. Pure poker. (One per cycle; not on any card.)                                                | Pure poker        |
+| High Stakes     | Blinds ×1.5 (or ×2) this hand                                                                                | Neutral           |
+| Open Hand       | Each player's lowest hole card is dealt face-up                                                              | Neutral           |
+| Double Board    | Turn and river are dealt twice (the flop is shared); each pot splits between the two boards                  | Neutral           |
+| Night Game      | No Quick Events this hand (Ambush cards still respond)                                                       | Neutral           |
+| Dealer's Choice | The dealer gets one free Peek (one card) on any of its turns; the shortest stack gets one too                | Favors the dealer |
+| House Rake      | The dealer antes 1 and collects 1 from the pot at the end of the hand                                        | Favors the dealer |
+| Bomb Pot        | Everyone antes 1 (or 2); no blinds and no pre-flop betting — straight to the flop                            | Chaos             |
+| Pineapple       | Three hole cards each; discard one after the flop                                                            | Structural        |
+| Straddle Night  | Under the gun posts a live double blind (not heads-up); the shortest stack's first power is one step cheaper | Position          |
+| Reverse Order   | Betting goes counter-clockwise; the shortest stack's first power is one step cheaper                         | Position          |
+| Open Table      | Every hand that reaches showdown is shown; nothing is mucked                                                 | Information       |
+| Fog             | One flop card stays face-down until the turn                                                                 | Information       |
+| Happy Hour      | All power costs are one step cheaper                                                                         | Powers-heavy      |
+| Silent Table    | No Quick Events and no Ambush — no response windows this hand                                                | Powers-light      |
+| Jackpot Pit     | Chips paid for powers go into a jackpot added to the next hand's pot                                         | Economy           |
+| Short Board     | No river: the hand ends after the turn                                                                       | Shrinks revival   |
+| Tilt Zone       | Nerve gains and losses are doubled                                                                           | Leader-focused    |
+
+---
+
+## 11. End of a hand
+
+In order: House Rake; Bulwark / Insurance refunds for non-winners; pots
+awarded (both boards on Double Board / Rerun); hands shown (§2.6); nerve
+(§8.3); Venomous, Gambit and Bounty payments; Units leave the table
+(Soulbound ones return to hand, the rest to the discard); busted seats are
+out. If one seat is left, or the clock is past the cap, the match ends.
+
+---
+
+## 12. The seven colours
+
+| Colour | At the poker table                                                   |
+| ------ | -------------------------------------------------------------------- |
+| Ember  | Pressure and chaos: straddles, drains, taxes, gambles                |
+| Tide   | Receiving and flow: extra hole cards, redraws, foresight, wild suits |
+| Root   | Growth and endurance: loss caps, delayed effects, run-it-twice       |
+| Gale   | Timing and movement: out-of-turn casts, deck cuts, passing cards     |
+| Light  | Truth and protection: peeking, reveals, call-outs, insurance         |
+| Shadow | Deception and recursion: feints, veils, decoys, poison               |
+| Void   | Denial and removal: burns, locks, snuffs, entropy                    |
+
+---
+
+## 13. Rewards
+
+Rewards pay by **finishing place only** — never by chips — so the
+marketplace, shops, grading and battle pass stay calibrated to the old
+100-for-a-win / 40-for-a-loss payout.
+
+`reward = round((40 + 60 × place factor) × mode multiplier)` for credits;
+XP uses 25 + 35 × factor and battle-pass XP 20 + 30 × factor.
+
+| Seats | Place factors, 1st to last      | Standard credits        |
+| ----- | ------------------------------- | ----------------------- |
+| 2     | 1.00, 0                         | 100, 40                 |
+| 3     | 1.00, 0.40, 0                   | 100, 64, 40             |
+| 4     | 1.00, 0.55, 0.15, 0             | 100, 73, 49, 40         |
+| 5     | 1.00, 0.60, 0.30, 0.10, 0       | 100, 76, 58, 46, 40     |
+| 6     | 1.00, 0.60, 0.35, 0.15, 0.05, 0 | 100, 76, 61, 49, 43, 40 |
+
+Mode multipliers: **Quick ×0.5, Standard ×1, Deep ×1.5** (6 seats: Quick
+50 … 20, Deep 150 … 60). The match ticket records mode and seat count at the
+start; the server sets a minimum match length (Quick 6, Standard 12, Deep 20
+minutes) and the reward ceiling, and records the place via
+`record_match_placement`.
+
+---
 
 ## Quick reference
 
-| Phase   | What happens                                                                      |
-| ------- | --------------------------------------------------------------------------------- |
-| Dawn    | Recover, Regenerate/Sacred/Resolute/Archivist/Empowering, triggers, Deal one card |
-| Main I  | Invoke spells, play one Wellspring                                                |
-| Clash   | Attack, guard, priority round, deal damage                                        |
-| Main II | Invoke spells                                                                     |
-| Dusk    | Triggers, shed to 7, pass turn                                                    |
+| Step                | What happens                                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| Hand start          | Button moves, powers drawn, next Location from the bag, blinds/antes posted, 2 hole cards each |
+| Pre-flop            | Bet from the seat after the big blind; cast on your turn                                       |
+| Flop / Turn / River | Burn, deal 3 / 1 / 1; start-of-street effects (Entropic, Thriving, Fuse); bet                  |
+| Any cast or raise   | Response window for Quick Events and Ambush, then resolve                                      |
+| Showdown            | Best five of seven; exclusions apply; side pots awarded separately                             |
+| Hand end            | Refunds, payments, Units discard, busts                                                        |
+| Match end           | One seat left, or clock cap → rank by stack → placement rewards                                |

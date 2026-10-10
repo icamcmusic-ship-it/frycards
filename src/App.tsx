@@ -2,20 +2,19 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
   fetchCardTemplates,
-  recordMatchResult,
+  recordMatchPlacement,
   beginMatch,
   MatchResult,
   MatchResultStatus,
 } from './lib/supabase';
-import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
-import { DeckDef, mulberry32 } from './game/v3/engine';
-import { POOL_BY_ID, applyCardPool } from './game/v3/cardpool';
-import { newMatchSeed, withTimeout } from './lib/utils';
+import { legalModes } from './game/poker/deck';
+import { MODES, MODE_IDS, MAX_SEATS, MIN_SEATS, type ModeId } from './game/poker/constants';
+import { POOL_BY_ID, applyCardPool } from './game/poker/cardpool';
+import { cn, newMatchSeed, withTimeout } from './lib/utils';
 import { readCache, writeCache } from './lib/cache';
 import { DECK_LINK_PARAM, deckCodeFromSearch, stashPendingDeck } from './meta/deckcode';
 import { DeckLinkPreview } from './meta/DeckLinkPreview';
 import type { CardTemplate } from './types';
-import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
 import { MetaProvider, useMeta } from './meta/MetaContext';
 import { AuthScreen } from './meta/AuthScreen';
@@ -35,7 +34,14 @@ import { useMotionMode } from './meta/useMotionMode';
 import { SLAB_CSS } from './meta/slabCss';
 import { ConfirmHost } from './meta/confirm';
 const MotionRoot = React.lazy(() => import('./meta/MotionRoot'));
-import type { MotionMode } from './meta/matchPrefs';
+import {
+  CPU_DIFFICULTIES,
+  loadCpuDifficulty,
+  saveCpuDifficulty,
+  type CpuDifficultyId,
+  type MotionMode,
+} from './meta/matchPrefs';
+import { usePersistedState } from './meta/usePersistedState';
 
 const CATALOG_CACHE_KEY = 'catalog';
 /** How long a fetched card catalog is reused before the next visit re-fetches
@@ -66,7 +72,7 @@ const NO_REWARD_REASON: Record<MatchResultStatus, string> = {
  * Eager on purpose: MainMenu and AuthScreen (the first thing every session
  * renders), and the small shared UI in `./meta/ui`.
  */
-const GameV4 = React.lazy(() => import('./components/GameV4').then((m) => ({ default: m.GameV4 })));
+const PokerMatch = React.lazy(() => import('./components/PokerMatch'));
 const HowToPlayScreen = React.lazy(() =>
   import('./components/HowToPlay').then((m) => ({ default: m.HowToPlayScreen })),
 );
@@ -169,24 +175,33 @@ class ErrorBoundary extends React.Component {
 }
 
 // ---------------------------------------------------------------------------
-// Play setup — a freshly-rolled random deck, or one of the player's own
-// saved decks
+// Play setup — table format, table size, and a freshly-rolled random deck or
+// one of the player's own saved decks
 // ---------------------------------------------------------------------------
-type MatchSetup = { kind: 'custom'; deck: DeckRow } | { kind: 'random' };
+import type { PlaySetup } from './components/PokerMatch';
 
 function PlayScreen({
   onStart,
   onBack,
   practice = false,
 }: {
-  onStart: (setup: MatchSetup) => void;
+  onStart: (setup: PlaySetup) => void;
   onBack: () => void;
-  /** Arrived from a How to Play "Try it": point at the quick match, which opens
-   * with the first-match coach. */
+  /** Arrived from a How to Play "Try it": offer the guided first game. */
   practice?: boolean;
 }) {
   const { decks, guest, dataLoading } = useMeta();
-  const legalDecks = decks.filter((d) => d.is_valid);
+  const [mode, setMode] = usePersistedState<ModeId>('frycards:play-mode', 'standard');
+  const [seats, setSeats] = usePersistedState<number>('frycards:play-seats', MAX_SEATS);
+  const [difficulty, setDifficulty] = useState<CpuDifficultyId>(loadCpuDifficulty);
+  const m = MODES[MODE_IDS.includes(mode) ? mode : 'standard'];
+  const tableSeats = Math.max(MIN_SEATS, Math.min(MAX_SEATS, Number(seats) || MAX_SEATS));
+  const base = { mode: m.id, seats: tableSeats, difficulty };
+  const pick = (on: boolean) =>
+    cn(
+      'btn-pop heading-font text-xs px-3 py-1.5 ink-border-sm',
+      on ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]' : 'bg-[var(--c-paper)] text-[var(--c-ink)]',
+    );
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
@@ -194,108 +209,118 @@ function PlayScreen({
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>
-        {/* Guests can't choose anything — the random deck is their only
-            option, so "CHOOSE YOUR DECK" would be a lie. */}
-        <h1 className="heading-font text-xl text-[var(--c-yellow)]">
-          {guest ? 'QUICK MATCH' : 'CHOOSE YOUR DECK'}
-        </h1>
+        <h1 className="heading-font text-xl text-[var(--c-yellow)]">TAKE A SEAT</h1>
         <span className="fs-xs font-bold text-[var(--c-paper)]/60 hidden md:inline">
-          Fry Cards rules v6.0 · 60-card decks · start at {LEADER_HP} Vitality
+          FryCards Poker · pot-limit Hold&apos;em freezeout · 2–6 seats
         </span>
         <CurrencyBar className="ml-auto" />
       </div>
       <div className="p-6 max-w-6xl mx-auto">
         {practice && (
-          <p className="ink-border-sm bg-[var(--c-yellow)] text-[var(--c-ink)] fs-sm font-bold px-3 py-2 mb-4 max-w-xl">
-            Practice mode: start a match and the coach walks you through your first turn, step by
-            step. Skip it any time.
-          </p>
+          <div className="ink-border-sm bg-[var(--c-yellow)] text-[var(--c-ink)] fs-sm font-bold px-3 py-2 mb-4 max-w-xl flex flex-wrap items-center gap-3">
+            <span>
+              Guided first game: loose bots, the hand-strength helper switched on, and the coach
+              teaching one idea at a time — hand ranks, then betting, then a power.
+            </span>
+            <button
+              onClick={() =>
+                onStart({ ...base, kind: 'random', tutorial: true, difficulty: 'easy' })
+              }
+              className="btn-pop heading-font text-xs px-3 py-1.5 bg-[var(--c-ink)] text-[var(--c-yellow)] ink-border-sm"
+            >
+              START THE GUIDED GAME ▸
+            </button>
+          </div>
         )}
-        {/* Random-deck quick match — the only way to play as a guest, and a
-            no-setup fallback for account holders without a legal deck yet.
-            This path existed per the changelog ("playing without a saved deck
-            or as a guest rolls a freshly randomized legal deck") but the
-            screen had regressed into a dead end: guests got a "can't play"
-            message despite the enabled PLAY tile, and a new account with no
-            legal decks had no way to start a match at all. */}
+
+        <div className="flex flex-wrap gap-6 mb-6">
+          <div>
+            <h2 className="heading-font text-sm mb-1.5">FORMAT</h2>
+            <div className="flex gap-1.5">
+              {MODE_IDS.map((id) => (
+                <button key={id} onClick={() => setMode(id)} className={pick(m.id === id)}>
+                  {MODES[id].label.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <p className="fs-xs font-bold text-[var(--c-steel)] mt-1 max-w-xs">
+              {m.stackUnits} chip units each · blinds ×{m.blindGrowth} every {m.levelMs / 60000} min
+              · about {Math.round(m.capMs / 60000)} min at most · decks of {m.powers} powers
+            </p>
+          </div>
+          <div>
+            <h2 className="heading-font text-sm mb-1.5">SEATS</h2>
+            <div className="flex gap-1.5">
+              {[2, 3, 4, 5, 6].map((n) => (
+                <button key={n} onClick={() => setSeats(n)} className={pick(tableSeats === n)}>
+                  {n}
+                </button>
+              ))}
+            </div>
+            <p className="fs-xs font-bold text-[var(--c-steel)] mt-1">
+              You plus {tableSeats - 1} bot{tableSeats === 2 ? '' : 's'}.
+            </p>
+          </div>
+          <div>
+            <h2 className="heading-font text-sm mb-1.5">BOTS</h2>
+            <div className="flex gap-1.5">
+              {CPU_DIFFICULTIES.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => {
+                    setDifficulty(d.id);
+                    saveCpuDifficulty(d.id);
+                  }}
+                  className={pick(difficulty === d.id)}
+                  title={d.blurb}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+            <p className="fs-xs font-bold text-[var(--c-steel)] mt-1 max-w-xs">
+              {CPU_DIFFICULTIES.find((d) => d.id === difficulty)?.blurb}. Bots only ever see their
+              own cards.
+            </p>
+          </div>
+        </div>
+
         <h2 className="heading-font text-base mb-3 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
           QUICK MATCH
         </h2>
         <div className="mb-8">
           <button
-            onClick={() => onStart({ kind: 'random' })}
+            onClick={() => onStart({ ...base, kind: 'random' })}
             className="btn-pop px-5 py-3 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-sm ink-border-md shadow-hard-black hover:-translate-y-1 transition-all"
           >
             RANDOM DECK ▸
           </button>
           <p className="fs-xs font-bold text-[var(--c-steel)] mt-2">
-            Rolls a freshly randomized legal deck — no collection needed. The CPU does the same.
+            Rolls a random Leader and a legal {m.label} deck — no collection needed. Every bot does
+            the same.
           </p>
         </div>
         {guest ? (
           <p className="fs-xs font-bold text-[var(--c-steel)]">
-            Create an account to build and save your own decks in the Deck Builder (60+ cards, max 4
-            copies each).
+            Create an account to build and save your own decks in the Deck Builder: a Leader, one
+            Location and {MODES.quick.powers} / {MODES.standard.powers} / {MODES.deep.powers} power
+            cards.
           </p>
         ) : (
           <>
             <h2 className="heading-font text-base mb-3 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
-              YOUR DECKS
+              YOUR {m.label.toUpperCase()} DECKS
             </h2>
             {dataLoading ? (
               <p className="fs-xs font-bold text-[var(--c-steel)] mb-8 animate-pulse">
                 Loading your decks…
               </p>
-            ) : legalDecks.length === 0 ? (
-              <p className="fs-xs font-bold text-[var(--c-steel)] mb-8">
-                No legal decks yet — build one in the Deck Builder (60+ cards, max 4 copies each).
-              </p>
             ) : (
-              <div className="flex flex-wrap gap-4 mb-8">
-                {legalDecks.map((d) => {
-                  const leader = POOL_BY_ID[d.leader_id];
-                  // A deck naming a card this session's pool lacks (the catalog
-                  // fetch failed and the bundled pool is older) would throw in
-                  // createGame, so it is not offered until the pool loads.
-                  const missing = [d.leader_id, ...d.card_ids].filter((id) => !POOL_BY_ID[id]);
-                  return (
-                    <button
-                      key={d.id}
-                      onClick={() => onStart({ kind: 'custom', deck: d })}
-                      disabled={missing.length > 0}
-                      title={
-                        missing.length > 0
-                          ? `${missing.length} card(s) in this deck aren't loaded — reload the card database`
-                          : undefined
-                      }
-                      className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
-                    >
-                      <div className="px-2 py-1 bg-[var(--c-steel)] heading-font fs-xs text-[var(--c-paper)] truncate">
-                        {d.name}
-                      </div>
-                      <div className="ink-border-sm m-1.5 overflow-hidden aspect-[16/8]">
-                        <SafeImage
-                          src={leader?.image}
-                          boxWidth={224}
-                          className="w-full h-full object-cover"
-                          fallbackText={leader?.name}
-                        />
-                      </div>
-                      <div className="p-3 pt-1">
-                        <div className="heading-font text-sm leading-tight">{leader?.name}</div>
-                        <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
-                          {d.card_ids.length} cards
-                        </div>
-                        {missing.length > 0 && (
-                          <div className="fs-xs font-bold text-[var(--c-red)] mt-0.5">
-                            {missing.length} card(s) not loaded — reload the card database
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <DeckChoices
+                decks={decks}
+                mode={m.id}
+                onPick={(d) => onStart({ ...base, kind: 'custom', deck: d })}
+              />
             )}
           </>
         )}
@@ -304,17 +329,69 @@ function PlayScreen({
   );
 }
 
-function setupToDeck(setup: MatchSetup, matchSeed: number): { deck: DeckDef; label: string } {
-  if (setup.kind === 'random') {
-    // Rolled from the match seed, so the seed shown on the game-over screen and
-    // stored in match history reproduces the decks as well as the shuffles.
-    const arch = randomArchetype(mulberry32(matchSeed * 7919 + 1));
-    return { deck: buildDeck(arch), label: arch.label };
-  }
-  return {
-    deck: deckDefFromCustom(setup.deck.leader_id, setup.deck.card_ids, setup.deck.name),
-    label: setup.deck.name,
-  };
+function DeckChoices({
+  decks,
+  mode,
+  onPick,
+}: {
+  decks: DeckRow[];
+  mode: ModeId;
+  onPick: (d: DeckRow) => void;
+}) {
+  // Legality is the client's poker rules — the server's is_valid flag still
+  // grades the retired 60-card format.
+  const rows = decks.map((d) => ({ d, modes: legalModes(d.leader_id, d.card_ids) }));
+  const legal = rows.filter((r) => r.modes.includes(mode));
+  if (legal.length === 0)
+    return (
+      <p className="fs-xs font-bold text-[var(--c-steel)] mb-8">
+        No legal {MODES[mode].label} decks yet — build one in the Deck Builder: a Leader, exactly
+        one Location and {MODES[mode].powers} power cards (max {MODES[mode].maxCopies} copies of a
+        card, {MODES[mode].maxTier5} tier-5).
+        {rows.some((r) => r.modes.length > 0) &&
+          ' Some of your decks are legal in another format — switch FORMAT above.'}
+      </p>
+    );
+  return (
+    <div className="flex flex-wrap gap-4 mb-8">
+      {legal.map(({ d }) => {
+        const leader = POOL_BY_ID[d.leader_id];
+        const missing = [d.leader_id, ...d.card_ids].filter((id) => !POOL_BY_ID[id]);
+        return (
+          <button
+            key={d.id}
+            onClick={() => onPick(d)}
+            disabled={missing.length > 0}
+            title={
+              missing.length > 0
+                ? `${missing.length} card(s) in this deck aren't loaded — reload the card database`
+                : undefined
+            }
+            className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
+          >
+            <div className="px-2 py-1 bg-[var(--c-steel)] heading-font fs-xs text-[var(--c-paper)] truncate">
+              {d.name}
+            </div>
+            <div className="ink-border-sm m-1.5 overflow-hidden aspect-[16/8]">
+              <SafeImage
+                src={leader?.image}
+                boxWidth={224}
+                className="w-full h-full object-cover"
+                fallbackText={leader?.name}
+              />
+            </div>
+            <div className="p-3 pt-1">
+              <div className="heading-font text-sm leading-tight">{leader?.name}</div>
+              <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
+                {leader?.colors.join(' / ')} · {Math.max(0, d.card_ids.length - 1)} powers + a
+                Location
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -326,43 +403,27 @@ export function Game({
   onExit,
   onRematch,
 }: {
-  setup: MatchSetup;
+  setup: PlaySetup;
   onExit: () => void;
   onRematch: () => void;
 }) {
   const { session, profile, refreshProfile } = useMeta();
   const { toast } = useToast();
-  // useState initializer, not a plain call: for a random setup, calling
-  // setupToDeck on every render would silently re-roll the human's deck
-  // whenever this component re-renders (e.g. the reward state updating at
-  // game end). One roll per mount — the gameKey remount rolls a fresh one.
+  // One roll per mount — the gameKey remount (REMATCH) rolls a fresh table.
   const [matchSeed] = useState(newMatchSeed);
-  const [human] = useState(() => setupToDeck(setup, matchSeed));
-  // CPU plays a freshly randomized deck every match rather than one of the
-  // fixed archetype presets — keeps every match legal even when the human's
-  // own custom deck is still a work in progress.
-  const [cpuArch] = useState(() => randomArchetype(mulberry32(matchSeed * 104729 + 2)));
-  // Same initializer rule as the human deck above: buildDeck is random, so
-  // calling it inline in the JSX re-rolled the CPU's deck on every render.
-  const [cpuDeck] = useState(() => buildDeck(cpuArch));
   const [reward, setReward] = useState<MatchResult | null>(null);
   const [rewardError, setRewardError] = useState<string | null>(null);
-  // While recordMatchResult() is in flight (including its retries), both
-  // reward and rewardError stay null — indistinguishable from the guest
-  // case (session-less players never get a reward at all), so the game-over
-  // screen showed nothing at all during a real fetch. This flag lets it
-  // show a "calculating…" placeholder instead of a blank gap.
+  // While the result call is in flight both of the above stay null — this
+  // flag lets the game-over screen show a "saving…" line instead of a gap.
   const [rewardPending, setRewardPending] = useState(false);
 
   // One SERVER-MINTED ticket per mounted match, requested as the match starts.
   // Retries reuse it, so the server still tells "same match, reply got lost"
-  // from a genuinely new match — but it is now the server that decides a match
-  // happened at all, rather than the client naming one. See `beginMatch`.
+  // from a genuinely new match.
   const matchIdRef = useRef<string | null>(null);
-  // Keyed on the user id, not the session object: supabase-js emits SIGNED_IN
-  // on every tab refocus and TOKEN_REFRESHED hourly, each with a fresh session
-  // object, and re-minting mid-match replaced the ticket (or, on a failed
-  // mint, overwrote it with null).
+  // Keyed on the user id, not the session object: supabase-js re-emits the
+  // session on refocus and token refresh, and re-minting mid-match replaced
+  // the ticket.
   const ticketUserId = session?.user?.id;
   useEffect(() => {
     if (!ticketUserId) return; // guests never earn a reward, so never mint a ticket
@@ -388,21 +449,18 @@ export function Game({
     };
   }, [ticketUserId]);
 
-  // recordMatchResult used to return bare `null` on both "no reward data"
-  // and an outright RPC failure, so a transient network/server error meant
-  // the player's win/loss, credits and XP were silently dropped with zero
-  // feedback and no retry. Retry a couple of times before giving up and
-  // telling the player their reward didn't sync, instead of staying silent.
-  const onResult = async (won: boolean) => {
+  // The reward is paid by finishing place — never by chips. Retry a couple of
+  // times before telling the player their reward didn't sync.
+  const onResult = async (r: { place: number; seats: number; mode: ModeId }) => {
     if (!session) return;
     setRewardPending(true);
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+        if (attempt > 0) await new Promise((res) => setTimeout(res, 1500));
         // Bounded: a request that stalls instead of failing would otherwise
         // hold rewardPending (and with it REMATCH / BACK TO MENU) forever.
         const { data, error, status } = await withTimeout(
-          recordMatchResult(won, matchIdRef.current ?? undefined),
+          recordMatchPlacement(r.place, r.seats, r.mode, matchIdRef.current ?? undefined),
           RECORD_ATTEMPT_MS,
           { data: null, error: 'timed out', status: null },
         );
@@ -412,15 +470,11 @@ export function Game({
         }
         if (data) {
           setReward(data);
-          // Fire-and-forget with an explicit catch: a rejected refresh here
-          // must not surface as an unhandled rejection — the realtime profile
-          // subscription catches the wallet up anyway.
+          // The realtime profile subscription catches the wallet up anyway.
           refreshProfile().catch(() => {});
           return;
         }
         if (!error) {
-          // An older server answers a bare null for every unpayable ticket.
-          // After a retry it usually means the first attempt landed.
           setRewardError(
             attempt > 0
               ? 'This match may already have been recorded — check your credits.'
@@ -433,9 +487,6 @@ export function Game({
         "Couldn't record this match's result — check your connection and try again from the menu.",
       );
     } catch {
-      // A thrown rejection here used to escape as an unhandled promise
-      // rejection: rewardPending cleared, rewardError never set, and the
-      // game-over screen showed neither a reward nor an error.
       setRewardError(
         "Couldn't record this match's result — check your connection and try again from the menu.",
       );
@@ -444,10 +495,9 @@ export function Game({
     }
   };
 
-  // M8: leaving while the result is still being recorded is not allowed. A
-  // REMATCH mints a new ticket, and begin_match deletes the player's unredeemed
-  // one — which is exactly the ticket this retry loop is still trying to cash.
-  // Leaving to the menu and starting a match from there would do the same.
+  // Leaving while the result is still being recorded is not allowed: a
+  // REMATCH mints a new ticket, and begin_match deletes the unredeemed one
+  // this retry loop is still trying to cash.
   const whenSaved = (action: () => void) => () => {
     if (rewardPending) {
       toast('Saving your reward… one moment.');
@@ -466,13 +516,10 @@ export function Game({
           Saving your reward…
         </div>
       )}
-      <GameV4
-        seed={matchSeed}
-        humanDeck={human.deck}
-        cpuDeck={cpuDeck}
-        humanLabel={human.label}
-        cpuLabel={cpuArch.label}
-        playerName={profile?.username || 'Player 1'}
+      <PokerMatch
+        play={setup}
+        matchSeed={matchSeed}
+        playerName={profile?.username || 'You'}
         onExit={whenSaved(onExit)}
         onRematch={whenSaved(onRematch)}
         onResult={onResult}
@@ -563,8 +610,8 @@ function AppInner({
     useMeta();
   const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
   const { toast } = useToast();
-  const [match, setMatchState] = useState<MatchSetup | null>(null);
-  const setMatch = (m: MatchSetup | null) => {
+  const [match, setMatchState] = useState<PlaySetup | null>(null);
+  const setMatch = (m: PlaySetup | null) => {
     setMatchState(m);
     onMatchChange(m !== null);
   };

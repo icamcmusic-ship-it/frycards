@@ -7,16 +7,16 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { CardFace, CardSize, CARD_SIZES } from './components/CardFaceV4';
-import { POOL_V4 } from './game/v3/cardpool';
+import { POOL } from './game/poker/cardpool';
 import { RARITY_ORDER } from './meta/rarity';
-import type { CardDef, CardType } from './game/v3/cards';
+import type { CardDef, CardType } from './game/poker/cards';
 import { GradedSlab, SLAB_CSS } from './meta/GradedSlab';
 import type { GradedCard } from './meta/grading';
 
 const TYPES: CardType[] = ['Unit', 'Location', 'Item', 'Event', 'Leader'];
 
 function pickBy(pred: (c: CardDef) => boolean): CardDef | undefined {
-  return POOL_V4.find(pred);
+  return POOL.find(pred);
 }
 
 /** One card of each type at the given rarity (whatever the pool actually has). */
@@ -74,7 +74,7 @@ function Band({
  * layout audit in `scripts/audit-cardface.ts`.
  */
 function AllOfRarity({ rarity, size }: { rarity: string; size: CardSize }) {
-  const cards = POOL_V4.filter((c) => c.rarity === rarity);
+  const cards = POOL.filter((c) => c.rarity === rarity);
   return (
     <div style={{ background: '#20242c', padding: 16 }}>
       <Band title={`${rarity} — all ${cards.length}`} cards={cards} size={size} />
@@ -134,7 +134,7 @@ function Gallery() {
 
 /** ?slabs=1 — one slab per grade band: damage at 5–7.5, premium cases at 9+. */
 function Slabs() {
-  const def = POOL_V4.find((c) => c.rarity === 'Rare' && c.type === 'Unit') ?? POOL_V4[0];
+  const def = POOL.find((c) => c.rarity === 'Rare' && c.type === 'Unit') ?? POOL[0];
   const grades = [5, 6, 7, 8, 9, 9.5, 10];
   return (
     <div style={{ background: '#222', padding: 16, display: 'flex', flexWrap: 'wrap', gap: 18 }}>

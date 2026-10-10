@@ -1,32 +1,35 @@
 /**
- * Shared v5.0 card-face rendering — the ONE card template used everywhere
- * (match UI, deck builder, collection, store/pack reveals) so a card looks
- * and reads identically no matter where it's shown. Real trading-card
+ * Shared card-face rendering — the ONE card template used everywhere (poker
+ * table, deck builder, collection, store/pack reveals) so a card looks and
+ * reads identically no matter where it's shown. Real trading-card
  * proportions: 2.5" × 3.5" (5:7).
  *
- * Essence-engine conversion: the dice-era Cast Slot cost UI (threshold die,
- * exact/sum kinds, combo-pattern gates) is replaced by an ESSENCE COST row
- * of colored pips + a generic numeral; ATK/HP gems are now Might/Grit;
- * the type line prints "Type — Subtype"; Leaders show Resolve and their
- * two Resolve abilities; keyword chips come from the new binary keyword
- * set (KEYWORD_TEXT). Card dimensions, the regular-art frame, the
- * Full-Art treatment, and the rarity/foil/serialized systems are unchanged.
+ * The FryCards Poker face (2026-10), top to bottom:
+ *  - MASTHEAD: name on the left; the right slot carries the card's colour
+ *    dots and its TIER MARK (★ stars on Units, ⚙ gears on Items, ϟ bolts on
+ *    Events). Tapping the mark explains the tier and its chip cost.
+ *  - ART: regular 4:3 box, or full-bleed on the Full-Art templates.
+ *  - TYPE LINE: "Event — Quick · 3ϟ", with the rarity marker in the right
+ *    slot (set-symbol position).
+ *  - TEXT BOX: the poker keywords as chips, one plain rules line, then the
+ *    flavor. Flavor text is ALWAYS shown, at every size — the rules line gives
+ *    up space first, and the micro board token carries a one-line flavor
+ *    strip of its own. A Location prints its table rule.
+ *  - BOTTOM-RIGHT PLATE: a power's chip cost in units ("+" when its tier also
+ *    needs a second cost), or a Leader's starting nerve. Locations have no
+ *    plate.
  *
- * v6.0 MTG-format layout pass: information lives where a Magic card puts it —
- * name + cost on the top line, art, a type line whose right slot carries the
- * rarity marker (set-symbol position), a text box (keywords → rules →
- * flavor), and a Might/Grit stat plate anchored to the BOTTOM-RIGHT corner
- * (Resolve there for Leaders, like planeswalker loyalty). The old footer
- * color-dot band is gone — color identity is already printed in the cost
- * pips — which reclaims vertical space for the text box so rules stop
- * running off the card. Art ratios are untouched (regular 4:3 box,
- * Full-Art full-bleed).
+ * Lineage: the frame, slots and art ratios come from the retired MTG-style
+ * game's v6.0 layout pass; card dimensions and the rarity / foil / serialized
+ * systems carried over unchanged.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { VisibleVideo } from './VisibleVideo';
 import { createPortal } from 'react-dom';
-import { Swords, Shield, Crown, MapPin, Wand2, Zap } from 'lucide-react';
-import { CardDef, CardType, Effect, EssenceCost, totalCost } from '../game/v3/cards';
+import { Swords, Crown, MapPin, Wand2, Zap, Coins, Flame } from 'lucide-react';
+import { CardDef, CardType, KwRef, PowerType, TIER_MARK, isPower } from '../game/poker/cards';
+import { COST_LADDER_UNITS, NERVE, SECOND_COST_TIER } from '../game/poker/constants';
+import { LOCATION_TEMPLATES, ruleName, ruleText } from '../game/poker/locations';
 import { cn } from '../lib/utils';
 import { isVideoSrc, mediaUrl, originalMediaUrl } from '../lib/media';
 import {
@@ -42,10 +45,17 @@ import {
   isAltArt,
   RARITY_HEX,
 } from '../meta/rarity';
-import { cardColors, COLORS, Color } from '../game/v3/colors';
-import { KEYWORD_TEXT } from '../game/v3/keywords';
+import { cardColors, Color } from '../game/poker/colors';
+import {
+  KEYWORD_SPECS,
+  KEYWORD_TEXT,
+  fmtUnits,
+  isKeyword,
+  keywordLabel,
+  keywordText,
+} from '../game/poker/keywords';
 import { useFocusTrap } from './useFocusTrap';
-import { COLOR_PIP, GENERIC_PIP, COLOR_LETTER, colorBg } from '../meta/colors';
+import { COLOR_PIP, colorBg } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 
 export function kwList(def: CardDef): string[] {
@@ -386,18 +396,12 @@ ensurePremiumStyles();
  * ornaments at the side midpoints. Non-uniform viewBox scaling is fine —
  * everything drawn is decorative line-work meant to hug the card edges. */
 /**
- * v31 (finding 2.2): the board holds the GameState object in useState, mutates
- * it in place and forces renders with a version counter, so EVERY essence tap
- * and hover re-renders the whole tree — including this SVG/gradient work.
- *
- * The pure, prop-stable leaves below are memoised on that basis. The larger
- * memoisation the finding asks for (BoardUnit / LocationTile / CardFace /
- * LeaderLane) cannot be done safely first: those take the mutated GameState
- * object, whose identity never changes, and fresh `onClick` closures per
- * render — so a default comparator would render stale cards and a custom one
- * would need a hand-written field hash per component. That is the same work
- * the reducer refactor (PVP_DESIGN) does properly, and it is why finding 2.8
- * calls the GameV4 extraction a prerequisite for both.
+ * v31 (finding 2.2): the retired MTG-style board mutated its game state in
+ * place and re-rendered the whole tree on every tap and hover — including
+ * this SVG/gradient work — so the pure, prop-stable leaves below were
+ * memoised. The poker table re-renders far less (its engine is a pure
+ * reducer), but the memoisation is still correct and still cheap, so it
+ * stays.
  */
 function UltraFiligreeBase({ size }: { size: CardSize }) {
   // v4.22: was a plain `absolute inset-0` — flush with the card's padding
@@ -522,152 +526,64 @@ const TYPE_ICON: Record<CardType, React.ComponentType<{ className?: string }>> =
   Event: Zap,
 };
 
-/** v5.0 glossary backing every clickable term on a card face: the full
- * Fry Cards keyword set (KEYWORD_TEXT) plus the subtype/frame terms a card
- * can print (Quick, Slow, Charm, Weapon, Tool, Sanctum, Re-bond, Resolve, …). */
+/** Glossary backing every clickable term on a card face: the poker keyword
+ * set (KEYWORD_TEXT) plus the frame terms a card can print. */
 export const KEYWORD_GLOSSARY: Record<string, string> = {
   ...KEYWORD_TEXT,
-  Quick:
-    'Quick Event — may be invoked in any priority window, including during the opponent’s turn or a Clash.',
-  Slow: 'Slow Event — may only be invoked during your own main phase.',
-  Charm:
-    'Charm Item — bonds to a unit and is shattered along with it. It may also be cast on a player instead, restoring Vitality equal to its bond and going straight to the Ash-pile.',
-  Weapon:
-    'Weapon Item — buffs a friendly unit and survives it; pay its Re-bond cost to bond it to another unit.',
-  Tool: 'Tool Item — a Weapon that also weakens a target enemy unit as it bonds.',
-  Sanctum: 'Sanctum Location — exhaust it for 1 essence of its type; it also carries an ability.',
-  Wellspring:
-    'Basic Location — exhausts for 1 essence of its type. Supplied automatically; takes no deck slots.',
-  Resolve:
-    'A Leader’s loyalty. Leader abilities spend or build Resolve; at 0 Resolve the Leader is shattered.',
-  Essence:
-    'Mana — produced by exhausting Locations. Colored pips must be paid with matching essence; generic with anything.',
-  Shatter: 'Destroy — the card goes to the Ash-pile.',
-  Banish: 'Remove from the game — the card goes to The Void.',
-  Erode: 'Mill — cards from the top of a deck go to the Ash-pile.',
-  Vitality: 'Your life total. Start at 20; at 0 you lose.',
+  Quick: 'Quick Event — castable on your turn and in the short windows after a cast or a raise.',
+  Slow: 'Slow Event — castable only on your own turn, before you act on that street.',
+  Charm: 'Charm Item — its effect lasts this hand, then it goes to your discard.',
+  Weapon: 'Weapon Item — returns to your hand after use.',
+  Tool: 'Tool Item — also marks one opponent hole card: you learn it for the hand.',
+  Nerve:
+    'Your public tilt meter (0–10, start 5). Leader abilities spend or build it. At 0 you are tilted: your Leader is locked and powers cost one step more.',
+  Stars: "A Unit's tier (1–5). Up to two Units a hand, five stars between them.",
+  Gears: "An Item's tier (1–5). Up to two Items a hand, five gears between them.",
+  Bolts: "An Event's tier (1–5). Up to five bolts a hand, two Events a street.",
+  Shed: 'A second cost: discard another power card from your hand.',
+  Exclusion:
+    'A second cost: name a hand category you cannot win a showdown with this hand (pair, two pair, trips, straight or flush).',
+  Location:
+    'A table rule. Each deck brings one; the table plays them from a shared bag, one per hand.',
 };
 
-/** Plain-English phrase for who/what an effect hits. */
-function targetPhrase(target: Effect['target']): string {
-  switch (target) {
-    case 'enemyUnit':
-      return 'a target enemy unit';
-    case 'friendlyUnit':
-      return 'a target friendly unit';
-    case 'anyTarget':
-      return 'any target';
-    case 'enemyPlayer':
-      return 'the enemy player';
-    case 'friendlyPlayer':
-      return 'you';
-    case 'friendlyAny':
-      return 'you or a friendly unit';
-    case 'allEnemyUnits':
-      return 'ALL enemy units';
-    case 'allFriendlyUnits':
-      return 'ALL friendly units';
-    case 'self':
-      return 'this card';
-    case 'none':
-      return '';
-  }
+/** "Peek 1 — See 1 of a target\'s hole cards." */
+export function describeKw(ref: KwRef): string {
+  return `${keywordLabel(ref.kw, ref.n)} — ${keywordText(ref.kw, ref.n)}`;
 }
 
-/** One-line rules sentence for an Effect, in Fry Cards terms. */
-export function describeEffect(eff: Effect): string {
-  const v = eff.value ?? '';
-  // Only fall back to 1 when no value was printed at all — `value: 0` is a
-  // legitimate (if unusual) effect value and must render as 0, not 1.
-  const vOr1 = eff.value === undefined ? 1 : eff.value;
-  switch (eff.action) {
-    case 'damage':
-      return `Deal ${v} damage to ${targetPhrase(eff.target)}`;
-    case 'heal':
-      return eff.target === 'friendlyPlayer' || eff.target === 'none'
-        ? `Gain ${v} Vitality`
-        : `Heal ${v} from ${targetPhrase(eff.target)}`;
-    case 'draw':
-      return `Deal ${vOr1} card${vOr1 === 1 ? '' : 's'} (draw)`;
-    case 'buff': {
-      const isAll = eff.target === 'allFriendlyUnits';
-      const subject =
-        eff.target === 'self'
-          ? 'This card'
-          : isAll
-            ? 'ALL friendly units'
-            : 'a target friendly unit';
-      return `${subject} ${isAll ? 'get' : 'gets'} +${v}/+${v}`;
-    }
-    case 'shatter':
-      return `Shatter ${targetPhrase(eff.target)}`;
-    case 'banish':
-      return `Banish ${targetPhrase(eff.target)}`;
-    case 'erode':
-      return `Erode ${vOr1} (mill the enemy deck)`;
-    case 'recover':
-      return `Recover ${targetPhrase(eff.target) || 'a friendly permanent'}`;
-    // v7.5: `exhaust` and `weaken` shipped with the v6.9 keyword generation
-    // and were never added here. The switch has no default and this function
-    // is typed to return a string, so every card printing one of them fell
-    // off the end and rendered the literal text "Undefined." in its rules box
-    // — including Full-Art pulls, and every Leader kit that reads its text
-    // through this path.
-    case 'exhaust':
-      return eff.target === 'allEnemyUnits'
-        ? 'Exhaust each enemy unit'
-        : `Exhaust ${targetPhrase(eff.target)}`;
-    case 'weaken':
-      return eff.target === 'allEnemyUnits'
-        ? `ALL enemy units get -${v}/-${v}`
-        : `${cap1(targetPhrase(eff.target))} gets -${v}/-${v}`;
-    default: {
-      // Exhaustiveness guard: a new EffectAction now fails the build here
-      // rather than printing "Undefined." on a card.
-      const never: never = eff.action;
-      return never;
-    }
-  }
+/** Chip cost of a power in units at its printed tier (before Surge, Happy
+ * Hour and other table adjustments). */
+export function printedCostUnits(def: CardDef): number {
+  return COST_LADDER_UNITS[Math.max(0, Math.min(COST_LADDER_UNITS.length - 1, def.tier ?? 1))];
 }
 
-const TRIGGER_PHRASE: Record<NonNullable<CardDef['triggers']>[number]['when'], string> = {
-  enters: 'When this enters the field',
-  dies: 'When this dies',
-  dealsClashDamage: 'Whenever this deals clash damage',
-  atDawn: 'At Dawn',
-  atDusk: 'At Dusk',
-};
-
-/** Every rules line this card prints — trigger phrase + what it does. */
+/** Every rules line this card prints. */
 export function cardRuleLines(def: CardDef): string[] {
   const bits: string[] = [];
-  if (def.onInvoke) {
+  if (def.type === 'Location' && def.rule) {
+    bits.push(`${ruleName(def.rule)}: ${ruleText(def.rule)}`);
+    return bits;
+  }
+  if (def.type === 'Leader') {
+    for (const ab of def.abilities ?? []) bits.push(ab.text);
+    bits.push('One Leader ability per hand. Locked while tilted (0 nerve).');
+    return bits;
+  }
+  if (def.effect) bits.push(describeKw(def.effect));
+  for (const m of def.mods ?? []) bits.push(describeKw(m));
+  if (def.type === 'Unit') bits.push('Stays out as a token until showdown.');
+  if (def.type === 'Item') {
+    bits.push('Bonds to your Unit; with no Unit out, to a hole card at one cost step more.');
+    if (def.subtype === 'Weapon') bits.push('Returns to your hand after use.');
+    if (def.subtype === 'Tool') bits.push('Also marks one opponent hole card.');
+  }
+  if (def.type === 'Event')
     bits.push(
-      def.type === 'Unit'
-        ? `When this enters the field: ${describeEffect(def.onInvoke)}`
-        : `On invoke: ${describeEffect(def.onInvoke)}`,
+      def.subtype === 'Quick'
+        ? 'Quick: castable in response windows.'
+        : 'Slow: your turn, before you act.',
     );
-  }
-  for (const t of def.triggers ?? []) {
-    bits.push(`${TRIGGER_PHRASE[t.when]}: ${describeEffect(t.effect)}`);
-  }
-  if (def.produces) bits.push(`Exhaust: add one ${def.produces} essence`);
-  if (def.locPassive)
-    bits.push(
-      def.locPassive === 'MIGHT_ALL' ? 'Your units get +1 Might' : 'Your units get +1 Grit',
-    );
-  if (def.bond) {
-    const stats = `+${def.bond.might ?? 0}/+${def.bond.grit ?? 0}`;
-    const grants = def.bond.grants?.length ? ` and ${def.bond.grants.join(', ')}` : '';
-    bits.push(`Bonded unit gets ${stats}${grants}`);
-  }
-  if (def.rebondCost !== undefined) bits.push(`Re-bond ${def.rebondCost}`);
-  for (const ab of def.leaderAbilities ?? []) {
-    bits.push(
-      ab.text ??
-        `${ab.resolveDelta > 0 ? '+' : ''}${ab.resolveDelta}: ${describeEffect(ab.effect)}`,
-    );
-  }
   return bits;
 }
 
@@ -676,16 +592,15 @@ export function cardRules(def: CardDef): string {
   return cardRuleLines(def).join(' · ');
 }
 
-/** Plain-English summary of an Essence Cost, for the cost row's popover. */
+/** Plain-English cost summary for the tier mark's popover. */
 export function costSummary(def: CardDef): string | null {
-  if (!def.cost) return null;
-  const parts: string[] = [];
-  for (const c of COLORS) {
-    const n = def.cost.pips[c] ?? 0;
-    if (n > 0) parts.push(`${n} ${c}`);
-  }
-  if (def.cost.generic > 0 || parts.length === 0) parts.push(`${def.cost.generic} generic`);
-  return `Essence Cost: ${parts.join(' + ')} (total ${totalCost(def.cost)})`;
+  if (!isPower(def) || !def.tier) return null;
+  const mark = TIER_MARK[def.type as PowerType];
+  const second =
+    def.tier >= SECOND_COST_TIER
+      ? ' plus a second cost (shed, blind a hole card, or a hand exclusion)'
+      : '';
+  return `${def.tier} ${def.tier === 1 ? mark.name : mark.plural}: costs ${fmtUnits(printedCostUnits(def))} chip unit(s) into the pot${second}`;
 }
 
 /** A Serialized print's total run (`serial.cap`) is NaN when the supply
@@ -704,110 +619,75 @@ function fitFontSize(text: string, base: number, min: number, softLimit: number)
   return Math.max(min, Math.round(scaled * 10) / 10);
 }
 
-/** Per-tier pip diameter/font for the essence-cost row. */
+/** Per-tier size of the masthead's colour dots and tier mark. */
 const PIP_SIZE: Record<CardSize, { d: number; f: number }> = {
-  micro: { d: 10, f: 6 },
-  compact: { d: 13, f: 7.5 },
-  standard: { d: 16, f: 9 },
-  full: { d: 20, f: 11 },
+  micro: { d: 8, f: 7 },
+  compact: { d: 10, f: 8.5 },
+  standard: { d: 12, f: 10 },
+  full: { d: 15, f: 12.5 },
 };
 
+const TIER_TINT: Record<PowerType, string> = { Unit: '#F5C542', Item: '#7DD3FC', Event: '#FB923C' };
+
 /**
- * v5.0 ESSENCE COST row — one colored pip circle per colored pip in the
- * cost (COLOR_PIP swatch + COLOR_LETTER glyph), plus a neutral numeral pip
- * for the generic portion when generic > 0. A card whose cost is entirely
- * empty (colorless, generic 0) still prints a "0" generic pip for
- * non-Leader cards so "free" reads as a printed cost, not a missing one.
- * Lives where the dice-era Cast Slot badge used to sit (header, right of
- * the name).
+ * The masthead's right slot: the card's colour dots, then its tier mark
+ * (★★★ for a 3-star Unit).
  */
-export function EssenceCostRow({
-  cost,
-  type,
-  size,
-  onArt,
-}: {
-  cost?: EssenceCost;
-  type: CardType;
-  size: CardSize;
-  /** Sitting directly over artwork (Full-Art header, micro board token) —
-   * adds a drop shadow + white ring so pips read over any art. */
-  onArt?: boolean;
-}) {
+export function TierMark({ def, size, onArt }: { def: CardDef; size: CardSize; onArt?: boolean }) {
   const { d, f } = PIP_SIZE[size];
-  const pips: {
-    key: string;
-    bg: string;
-    fg: string;
-    glyph: string;
-    title: string;
-    color?: Color;
-  }[] = [];
-  for (const c of COLORS) {
-    const n = cost?.pips[c] ?? 0;
-    for (let i = 0; i < n; i++) {
-      pips.push({
-        key: `${c}${i}`,
-        bg: COLOR_PIP[c].bg,
-        fg: COLOR_PIP[c].fg,
-        glyph: COLOR_LETTER[c],
-        title: `${c} essence`,
-        color: c,
-      });
-    }
-  }
-  const generic = cost?.generic ?? 0;
-  if (generic > 0 || (pips.length === 0 && type !== 'Leader')) {
-    pips.push({
-      key: 'generic',
-      bg: GENERIC_PIP.bg,
-      fg: GENERIC_PIP.fg,
-      glyph: String(generic),
-      title: `${generic} generic essence`,
-    });
-  }
-  if (pips.length === 0) return null;
+  const colors = cardColors(def);
+  const power = isPower(def) && def.tier;
+  const mark = power ? TIER_MARK[def.type as PowerType] : null;
+  const label = [
+    colors.length ? colors.join('/') : 'Colourless',
+    power ? `${def.tier} ${def.tier === 1 ? mark!.name : mark!.plural}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
   return (
-    // NOTE: no percentage max-width here — this row often sits inside a
-    // shrink-to-fit <button> (CostInfoButton), where `max-w-[55%]` resolves
-    // against the button's own content width and collapses the row into a
-    // one-pip-per-line vertical stack.
     <span
-      className="flex items-center gap-[2px] shrink-0 flex-wrap justify-end max-w-full"
-      aria-label={`Essence cost: ${pips.map((p) => p.title).join(', ')}`}
+      className="flex items-center gap-[2px] shrink-0 justify-end max-w-full"
+      aria-label={label}
     >
-      {pips.map((p) => (
+      {colors.map((c) => (
         <span
-          key={p.key}
-          title={p.title}
+          key={c}
+          title={c}
           className={cn(
-            'flex items-center justify-center rounded-full font-mono font-black leading-none shrink-0',
-            onArt ? 'border border-white/80' : 'border border-[var(--c-ink)]',
+            'flex items-center justify-center rounded-full shrink-0',
+            onArt ? 'border border-white/80' : 'border border-[var(--c-paper)]/70',
           )}
           style={{
             width: d,
             height: d,
-            fontSize: f,
-            backgroundColor: p.bg,
-            color: p.fg,
-            boxShadow: onArt
-              ? '0 1px 3px rgba(0,0,0,0.8)'
-              : 'inset 0 1px 1px rgba(255,255,255,0.55)',
+            backgroundColor: COLOR_PIP[c].bg,
+            boxShadow: onArt ? '0 1px 3px rgba(0,0,0,0.8)' : undefined,
           }}
         >
-          {p.color ? (
-            <EssenceIcon type={p.color} color={p.fg} size={Math.round(d * 0.62)} />
-          ) : (
-            p.glyph
-          )}
+          <EssenceIcon type={c} color={COLOR_PIP[c].fg} size={Math.round(d * 0.66)} />
         </span>
       ))}
+      {power && (
+        <span
+          data-fc="tier"
+          className="font-black leading-none tracking-[-0.06em] shrink-0 ml-0.5"
+          style={{
+            fontSize: f,
+            color: TIER_TINT[def.type as PowerType],
+            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+          }}
+          title={`${def.tier} ${mark!.plural}`}
+        >
+          {size === 'micro' ? `${def.tier}${mark!.glyph}` : mark!.glyph.repeat(def.tier as number)}
+        </span>
+      )}
     </span>
   );
 }
 
-/** A small tinted, icon-led stat gem (Might/Grit/Resolve) — a proper badge
- * so the stat line reads as UI, not a caption. */
+/** A small tinted, icon-led gem for the bottom-right plate (a power's chip
+ * cost, a Leader's starting nerve) — a proper badge so it reads as UI, not a
+ * caption. */
 function StatChip({
   icon: Icon,
   label,
@@ -820,9 +700,9 @@ function StatChip({
   onArt,
 }: {
   icon: React.ComponentType<{ className?: string }>;
-  /** Accessible/hover name of the stat ("Might" / "Grit" / "Resolve"). */
+  /** Accessible/hover name of the value ("Chip cost" / "Starting nerve"). */
   label: string;
-  value?: number;
+  value?: number | string;
   maxValue?: number;
   /** Live-match stats: the printed value this live value has drifted from
    * (buff/nerf), rendered struck through inside the chip itself. */
@@ -1332,8 +1212,8 @@ function KeywordText({
   );
 }
 
-/** Click-to-open popover explaining a card's Essence Cost — same portal
- * popover the keyword chips use. Wraps whatever badge content is passed as
+/** Click-to-open popover explaining a card's tier and chip cost (or its
+ * colours, when it has no tier) — same portal popover the keyword chips use. Wraps whatever badge content is passed as
  * children in a real <button>; `title` kept as a desktop hover fallback. */
 function CostInfoButton({
   text,
@@ -1388,7 +1268,7 @@ function CostInfoButton({
       </button>
       {pos && (
         <KeywordPopover
-          kw="ESSENCE COST"
+          kw="TIER & COST"
           text={text}
           pos={pos}
           close={() => setPos(null)}
@@ -1401,7 +1281,7 @@ function CostInfoButton({
 
 /**
  * Whether a card face at `size` gives its keyword chips, in-sentence keyword
- * mentions and cost pips their own tap targets.
+ * mentions and tier mark their own tap targets.
  *
  * Exported so the ladder can be pinned by a test rather than re-derived: the
  * rule is a SIZE rule, and the thing that must not drift is that no tier whose
@@ -1587,14 +1467,14 @@ const TIER: Record<
     keywordMax: number;
     keywordSmall: boolean;
     /**
-     * Whether this tier's keyword chips, in-sentence keyword mentions and cost
-     * pips are their own tap targets.
+     * Whether this tier's keyword chips, in-sentence keyword mentions and tier
+     * mark are their own tap targets.
      *
      * v28: they always were, at every tier, and below `full` that was a bug
      * rather than a feature — twice over.
      *
      * **They are too small.** A chip on a battlefield unit measures 23x14, a
-     * keyword mention as little as 22x9, a cost pip 28x13; WCAG 2.5.8 (AA)
+     * keyword mention as little as 22x9, a cost badge 28x13; WCAG 2.5.8 (AA)
      * asks for 24x24. Only at `full` do they clear it without help, and the
      * help does not fit: the chip row and the rules paragraph both clip their
      * overflow to hold a height budget, and a clipping ancestor clips
@@ -1603,7 +1483,7 @@ const TIER: Record<
      * wreck the layouts these font sizes exist to serve.
      *
      * **They steal the card's own tap.** They sit ON TOP of the card whose tap
-     * IS the game action — select this attacker, add this card to the deck —
+     * IS the action — pick this card, add it to the deck —
      * and on a phone the small target wins the ties. The cheapest thing a
      * player did constantly, reaching for a card, opened a glossary popover.
      *
@@ -1645,7 +1525,7 @@ const TIER: Record<
     showRules: false,
     rulesFont: 6,
     rulesLines: 0,
-    showFlavor: false,
+    showFlavor: true,
   },
   compact: {
     outerBorder: 'border-2',
@@ -1669,8 +1549,8 @@ const TIER: Record<
     chipsInteractive: false,
     showRules: true,
     rulesFont: 6.5,
-    rulesLines: 4,
-    showFlavor: false,
+    rulesLines: 2,
+    showFlavor: true,
   },
   standard: {
     outerBorder: 'border-[3px]',
@@ -1694,8 +1574,8 @@ const TIER: Record<
     chipsInteractive: false,
     showRules: true,
     rulesFont: 7.5,
-    rulesLines: 6,
-    showFlavor: false,
+    rulesLines: 3,
+    showFlavor: true,
   },
   full: {
     outerBorder: 'border-4',
@@ -1731,14 +1611,15 @@ const TIER: Record<
 const MASTHEAD_H: Record<CardSize, number> = { micro: 14, compact: 18, standard: 21, full: 26 };
 
 /**
- * Bottom padding the text box reserves for the corner stat plate, so flavor
- * text can never render underneath it. Cards with no stat plate (Locations,
- * Items, Events) don't need the clearance, but reserving it unconditionally
- * keeps every card's text box the same height within a tier.
+ * Bottom padding the text box reserves for the corner plate (a power's chip
+ * cost, a Leader's starting nerve), so flavor text can never render
+ * underneath it. Locations have no plate and don't need the clearance, but
+ * reserving it unconditionally keeps every card's text box the same height
+ * within a tier.
  *
  * v7.5: these were 8/11/14/18, hand-estimated from StatChip's `textClass` /
  * `iconClass` picks, and they were all too small — flavor text rendered UNDER
- * the Might/Grit (or Resolve) plate on 35 of the 131 card renders that have
+ * the corner plate (then the old game's Might/Grit or Resolve plate) on 35 of the 131 card renders that have
  * both, worst on the two full-bleed templates where it overlapped by a full
  * 8px and the plate sits directly on the art. Measured in a real browser
  * instead (the geometry is: plate height + its `bottom-1` offset, minus the
@@ -1768,48 +1649,30 @@ export interface FaceChip {
   accent?: string;
 }
 
-/** All chips a card prints: one per keyword (KEYWORD_TEXT popover), plus
- * structured chips for Item bond stats/grants, Worn Re-bond, and Sanctum
- * passives. */
+/** All chips a card prints: its effect keyword with its number, then its
+ * modifiers; a Location prints its rule; a Leader its two ability keywords. */
 export function faceChips(def: CardDef): FaceChip[] {
   const chips: FaceChip[] = [];
-  for (const kw of def.keywords ?? []) {
-    chips.push({ kw, label: kw, text: KEYWORD_TEXT[kw as keyof typeof KEYWORD_TEXT] });
-  }
-  if (def.bond) {
+  const kwChip = (ref: KwRef, accent?: string) =>
     chips.push({
-      kw: 'Bond',
-      label: `Bond +${def.bond.might ?? 0}/+${def.bond.grit ?? 0}`,
-      text: 'While this Item is bonded to a unit, the unit gets these bonus stats (Might/Grit).',
-      accent: '#0E7490',
+      kw: ref.kw,
+      label: keywordLabel(ref.kw, ref.n),
+      text: keywordText(ref.kw, ref.n),
+      accent,
     });
-    for (const g of def.bond.grants ?? []) {
-      chips.push({
-        kw: g,
-        label: `Grants ${g}`,
-        text: `Bonded unit gains ${g}: ${KEYWORD_TEXT[g as keyof typeof KEYWORD_TEXT] ?? ''}`,
-        accent: '#0E7490',
-      });
-    }
-  }
-  if (def.rebondCost !== undefined) {
+  if (def.effect) kwChip(def.effect);
+  for (const m of def.mods ?? []) kwChip(m, '#6D28D9');
+  if (def.type === 'Location' && def.rule) {
+    const t = LOCATION_TEMPLATES[def.rule.id];
     chips.push({
-      kw: def.subtype === 'Tool' ? 'Tool' : 'Weapon',
-      label: `Re-bond ${def.rebondCost}`,
-      text: `${def.subtype ?? 'Weapon'} — survives its bonded unit. Pay ${def.rebondCost} essence to bond it to another unit.`,
-      accent: '#B45309',
-    });
-  }
-  if (def.locPassive) {
-    chips.push({
-      kw: 'Sanctum',
-      label: def.locPassive === 'MIGHT_ALL' ? '+1 Might to your units' : '+1 Grit to your units',
-      text:
-        def.locPassive === 'MIGHT_ALL'
-          ? 'Static passive while this Location is in play: all your units get +1 Might.'
-          : 'Static passive while this Location is in play: all your units get +1 Grit.',
+      kw: 'Location',
+      label: t.name,
+      text: `${t.name} (${t.tag}): ${ruleText(def.rule)}`,
       accent: '#16A34A',
     });
+  }
+  if (def.type === 'Leader') {
+    for (const ab of def.abilities ?? []) kwChip(ab.effect, ab.nerve < 0 ? '#B91C1C' : '#15803D');
   }
   return chips;
 }
@@ -1969,12 +1832,9 @@ function FittedRules({
   useLayoutEffect(() => {
     const el = ref.current;
     const box = el?.parentElement;
-    if (
-      el &&
-      box &&
-      !box.querySelector('[data-fc="flavor"]') &&
-      box.scrollHeight > box.clientHeight + 1
-    ) {
+    // Flavor text is always shown, so when the box overflows it is the rules
+    // paragraph that gives up lines (down to one).
+    if (el && box && box.scrollHeight > box.clientHeight + 1) {
       setLines((l) => (l > 1 ? l - 1 : l));
     }
   }, [lines, resetKey, className, small, onArt, fonts]);
@@ -1998,10 +1858,10 @@ function FittedRules({
   );
 }
 
-/** v4.26 lowest-priority element on the card: flavor text renders at up to
- * `maxLines` clamped lines, then MEASURES its wrapper — whenever the clamped
- * paragraph still doesn't fit the leftover space it sheds one line at a time
- * and finally unmounts entirely at zero. */
+/** Flavor text, ALWAYS shown (poker pass): renders at up to `MAX_LINES`
+ * clamped lines and MEASURES its wrapper — while the clamped paragraph doesn't
+ * fit the leftover space it sheds one line at a time, but never below one
+ * line. The rules paragraph above it gives up space first. */
 function FittedFlavor({
   text,
   fontPx,
@@ -2031,20 +1891,19 @@ function FittedFlavor({
       (el.scrollHeight > el.clientHeight + 1 ||
         (el.parentElement && el.parentElement.scrollHeight > el.parentElement.clientHeight + 1))
     ) {
-      setLines((l) => (l > 0 ? l - 1 : l));
+      setLines((l) => (l > 1 ? l - 1 : l));
     }
   }, [lines, resetKey, setClassName, onArt, fonts]);
-  if (lines === 0) return null;
   return (
     <div
       ref={ref}
       // Layout-audit hook (scripts/audit-cardface.ts) — the flavor block and
-      // the stat plate are the two boxes that must never intersect.
+      // the corner plate are the two boxes that must never intersect.
       data-fc="flavor"
       className={cn(
         // Pinned to the bottom of the text box under a dashed rule, per the
         // template's flavor divider.
-        'mt-auto pt-1 border-t border-dashed min-h-0 overflow-hidden',
+        'mt-auto pt-1 border-t border-dashed shrink-0 overflow-hidden',
         onArt ? 'border-white/30' : 'border-[var(--c-ink)]/40',
       )}
     >
@@ -2065,41 +1924,28 @@ function FittedFlavor({
   );
 }
 
-/** Type line text: "Type — Subtype" (e.g. "Event — Quick"). */
+/** Type line text: "Event — Quick · 3ϟ", "Leader — Ember/Light". */
 function typeLineText(def: CardDef): string {
-  return def.subtype ? `${def.type} — ${def.subtype}` : def.type;
+  if (def.type === 'Leader') return `Leader — ${cardColors(def).join('/') || 'Colourless'}`;
+  if (def.type === 'Location') return def.rule ? `Location — ${ruleName(def.rule)}` : 'Location';
+  const base = def.subtype ? `${def.type} — ${def.subtype}` : def.type;
+  return isPower(def) && def.tier
+    ? `${base} · ${def.tier}${TIER_MARK[def.type as PowerType].glyph}`
+    : base;
 }
 
-/** The card's full printed rules text: `card.text` if authored, otherwise
- * the generated lines from its structured mechanics. */
+/** The card's printed rules line: the plain-English meaning of its effect
+ * (chips already carry the keyword names), or a Location's rule. */
 function rulesText(def: CardDef): string {
-  // v5.1: the text box prints ONLY information no chip already carries —
-  // on-invoke effects and triggered abilities. Keywords, Bond stats,
-  // Re-bond cost, Sanctum passives and produced essence all render as chips
-  // (or the type-line pip), so repeating their reminder text here was what
-  // pushed the real ability lines past the line clamp and cut them off.
-  const bits: string[] = [];
-  if (def.onInvoke) {
-    bits.push(
-      def.type === 'Unit'
-        ? `When this enters the field: ${describeEffect(def.onInvoke)}.`
-        : `${describeEffect(def.onInvoke)}.`,
-    );
+  if (def.type === 'Location' && def.rule) return ruleText(def.rule);
+  if (def.type === 'Leader') return '';
+  if (def.effect) {
+    const main = cap1(keywordText(def.effect.kw, def.effect.n));
+    if (def.type === 'Item' && def.subtype === 'Tool') return `${main} Also marks a hole card.`;
+    if (def.type === 'Item' && def.subtype === 'Weapon') return `${main} Returns to hand.`;
+    return main;
   }
-  for (const t of def.triggers ?? []) {
-    bits.push(`${TRIGGER_PHRASE[t.when]}: ${describeEffect(t.effect)}.`);
-  }
-  if (bits.length > 0) return bits.map(cap1).join(' ');
-  // No structured mechanics at all (authored/dev cards): fall back to the
-  // printed text — but only when no chip/pip already tells the story.
-  const chipCovered =
-    def.keywords?.length ||
-    def.bond ||
-    def.rebondCost !== undefined ||
-    def.locPassive ||
-    def.produces;
-  if (!chipCovered && def.text) return def.text;
-  return '';
+  return def.text ?? '';
 }
 
 function cap1(s: string): string {
@@ -2108,9 +1954,10 @@ function cap1(s: string): string {
 
 /** v4.26: the `micro` tier is a purpose-built board token, not a shrunken
  * full card. The art fills the whole footprint with top/bottom scrims; the
- * top strip carries the type glyph + auto-shrinking name and the essence
- * cost pips; the bottom strip carries up to two keyword chips (with a "+N"
- * spillover) and solid-backed Might/Grit gems (Resolve for Leaders). */
+ * top strip carries the type glyph + auto-shrinking name and the tier mark;
+ * the bottom strip carries up to two keyword chips (with a "+N" spillover),
+ * a one-line flavor strip (flavor is always shown) and the solid-backed
+ * chip-cost gem (starting nerve for Leaders). */
 function MicroCard({
   def,
   dimmed,
@@ -2122,7 +1969,6 @@ function MicroCard({
   badge,
   count,
   foilCount,
-  live,
   introduceKeywords,
   serial,
 }: Omit<CardFaceProps, 'size' | 'key'>) {
@@ -2134,11 +1980,10 @@ function MicroCard({
   const hiddenChips = totalChips - shownKw.length;
   const isFoil = foil && !serial;
   const mythic = isMythic(def.rarity) && !serial;
-  const stats = def.type === 'Unit' ? `, ${def.might} might, ${def.grit} grit` : '';
+  const stats = isPower(def) && def.tier ? `, tier ${def.tier}` : '';
   const label = `${def.name}, ${def.type}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${capText(serial.cap)}` : ''}`;
   const TypeIcon = TYPE_ICON[def.type];
   const nameFontPx = fitFontSize(def.name, 7.5, 5.5, 12);
-  const cardColorsForFace = cardColors(def);
   return (
     <div
       role="button"
@@ -2180,7 +2025,7 @@ function MicroCard({
             'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.3) 22%, rgba(0,0,0,0) 36%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.55) 72%, rgba(0,0,0,0.92) 100%)',
         }}
       />
-      {/* Name + essence-cost strip */}
+      {/* Name + tier-mark strip */}
       <div className="relative z-10 flex items-start justify-between gap-0.5 px-1 pt-0.5 shrink-0">
         <span
           className="flex items-center gap-0.5 min-w-0 heading-font leading-tight text-white"
@@ -2192,7 +2037,7 @@ function MicroCard({
             {def.name}
           </span>
         </span>
-        <EssenceCostRow cost={def.cost} type={def.type} size="micro" onArt />
+        <TierMark def={def} size="micro" onArt />
       </div>
       {/* Corner status badges (count / foil / serial / caller badge) */}
       {(badge ||
@@ -2248,7 +2093,7 @@ function MicroCard({
                 // MicroCard is its own component with its own chip row, so the
                 // tier table's `chipsInteractive` never reached it — and micro
                 // is the tier where an interactive chip does the most damage:
-                // this is the board token whose tap declares an attacker.
+                // this is the board token whose tap is the card's own action.
                 inert={!chipsAreInteractive('micro')}
               />
             ))}
@@ -2262,82 +2107,29 @@ function MicroCard({
             )}
           </div>
         )}
-        <div className="flex items-end justify-between gap-0.5">
-          <span className="flex items-center gap-0.5 min-w-0">
-            {cardColorsForFace.map((c) => (
-              <span
-                key={c}
-                aria-hidden
-                className="w-2 h-2 rounded-full border border-white/80 shrink-0 flex items-center justify-center"
-                style={{
-                  backgroundColor: COLOR_PIP[c].bg,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.8)',
-                }}
-                title={`Color: ${c}`}
-              >
-                <EssenceIcon type={c} color={COLOR_PIP[c].fg} size={5} />
-              </span>
-            ))}
+        {/* Flavor strip — flavor text is always shown, even on the board token. */}
+        {def.flavor && (
+          <p
+            data-fc="flavor"
+            className="italic leading-tight text-white/85 line-clamp-2 break-words"
+            style={{ fontSize: 5.5, textShadow: '0 1px 2px rgba(0,0,0,0.95)' }}
+            title={def.flavor}
+          >
+            {def.flavor}
+          </p>
+        )}
+        {statValue(def) && (
+          <span className="flex justify-end">
+            <StatChip
+              icon={def.type === 'Leader' ? Flame : Coins}
+              label={def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'}
+              value={statValue(def)!}
+              tier="micro"
+              tint={def.type === 'Leader' ? '#F97316' : '#FACC15'}
+              onArt
+            />
           </span>
-          {def.type === 'Unit' &&
-            (live ? (
-              <span
-                className="flex items-center gap-0.5 shrink-0"
-                title={`Printed ${def.might}/${def.grit}`}
-              >
-                <StatChip
-                  icon={Swords}
-                  label="Might"
-                  value={live.atk}
-                  printed={def.might}
-                  tier="micro"
-                  tint={live.atk > (def.might ?? 0) ? '#4ADE80' : '#F87171'}
-                  onArt
-                />
-                <StatChip
-                  icon={Shield}
-                  label="Grit"
-                  value={live.hp}
-                  maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
-                  printed={live.maxHp !== (def.grit ?? 0) ? (def.grit ?? 0) : undefined}
-                  tier="micro"
-                  tint={live.hp < live.maxHp ? '#F87171' : '#4ADE80'}
-                  onArt
-                />
-              </span>
-            ) : (
-              <span className="flex items-center gap-0.5 shrink-0">
-                <StatChip
-                  icon={Swords}
-                  label="Might"
-                  value={def.might}
-                  tier="micro"
-                  tint="#F87171"
-                  onArt
-                />
-                <StatChip
-                  icon={Shield}
-                  label="Grit"
-                  value={def.grit}
-                  tier="micro"
-                  tint="#4ADE80"
-                  onArt
-                />
-              </span>
-            ))}
-          {def.type === 'Leader' && (
-            <span className="shrink-0">
-              <StatChip
-                icon={Shield}
-                label="Resolve"
-                value={def.resolve}
-                tier="micro"
-                tint="#A78BFA"
-                onArt
-              />
-            </span>
-          )}
-        </div>
+        )}
       </div>
       {footer}
       {serial && !dimmed && (
@@ -2363,9 +2155,18 @@ interface CardFaceProps {
   badge?: string;
   count?: number;
   foilCount?: number;
-  live?: { atk: number; hp: number; maxHp: number };
   introduceKeywords?: boolean;
   serial?: { number: number; cap: number };
+}
+
+/** What the bottom-right plate shows: a power's chip cost in units (a "+"
+ * marks tiers that also need a second cost), a Leader's starting nerve. */
+function statValue(def: CardDef): string | null {
+  if (def.type === 'Leader') return String(NERVE.start);
+  if (isPower(def) && def.tier) {
+    return `${fmtUnits(printedCostUnits(def))}${def.tier >= SECOND_COST_TIER ? '+' : ''}`;
+  }
+  return null;
 }
 
 function CardFaceBase({
@@ -2380,7 +2181,6 @@ function CardFaceBase({
   badge,
   count,
   foilCount,
-  live,
   introduceKeywords,
   serial,
 }: {
@@ -2402,11 +2202,6 @@ function CardFaceBase({
   badge?: string;
   count?: number;
   foilCount?: number;
-  /** Live-match only (Units on the battlefield): effective Might / current
-   * Grit / effective max Grit. Rendered in the normal StatChip position —
-   * green when above the printed value, red when below/damaged, with the
-   * printed value struck through inside the chip. */
-  live?: { atk: number; hp: number; maxHp: number };
   /** Live-match only: auto-opens each of this card's keyword glossary
    * popovers once per device, the first time that keyword is ever seen. */
   introduceKeywords?: boolean;
@@ -2431,7 +2226,6 @@ function CardFaceBase({
         badge={badge}
         count={count}
         foilCount={foilCount}
-        live={live}
         introduceKeywords={introduceKeywords}
         serial={serial}
       />
@@ -2441,11 +2235,10 @@ function CardFaceBase({
   const cfg = TIER[size];
   const chips = faceChips(def);
   const set = setStyle(def.set);
-  // v5.0: a card's color identity is printed on the card — the colored pips
-  // in its Essence Cost (plus a Location's produced type). Leaders have a
-  // printed cost too, so they tint like everything else.
+  // A card's colour identity (frozen from the MTG-style game) tints its fill
+  // and prints as dots in the masthead.
   const cardColorsForFace = cardColors(def);
-  const stats = def.type === 'Unit' ? `, ${def.might} might, ${def.grit} grit` : '';
+  const stats = isPower(def) && def.tier ? `, tier ${def.tier}` : '';
   // Serialized prints can never be foil (see quicksell_cards/grant_pack_contents).
   const isFoil = foil && !serial;
   const label = `${def.name}, ${typeLineText(def)}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${capText(serial.cap)}` : ''}`;
@@ -2454,7 +2247,12 @@ function CardFaceBase({
   // printed by the rule bar, abbreviation plate and premium frame layers.
   const nameFontPx = fitFontSize(def.name, cfg.nameFont.base, cfg.nameFont.min, cfg.nameFont.soft);
   const rules = rulesText(def);
-  const flavorFontPx = fitFontSize(def.flavor || '', 9, 6.5, 110);
+  const flavorFontPx =
+    size === 'full'
+      ? fitFontSize(def.flavor || '', 9, 6.5, 110)
+      : size === 'standard'
+        ? fitFontSize(def.flavor || '', 7, 6, 70)
+        : fitFontSize(def.flavor || '', 6, 5.5, 50);
   const mythic = isMythic(def.rarity) && !serial;
   const altArt = isAltArt(def.rarity) && !serial;
   const animatedFx = (rarityAnimated(def.rarity) || mythic) && !serial;
@@ -2474,75 +2272,19 @@ function CardFaceBase({
   const artFx = raritySuperPlus(def.rarity) && !bleed && !isFoil && !serial && !dimmed;
   const ribbon = rarityUltraPlus(def.rarity) && !bleed;
 
-  // MTG-format stat plate content — Might/Grit (Resolve for Leaders) shown
-  // in the bottom-right corner like a P/T box. Live-match values render
-  // green (buffed) / red (damaged/nerfed) with the printed value struck
-  // through inside the chip.
-  const statChips =
-    def.type === 'Unit' ? (
-      live ? (
-        <>
-          <StatChip
-            icon={Swords}
-            label="Might"
-            value={live.atk}
-            printed={def.might}
-            tier={size}
-            tint={live.atk > (def.might ?? 0) ? '#16A34A' : 'var(--c-red)'}
-            emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
-            onArt
-          />
-          <StatChip
-            icon={Shield}
-            label="Grit"
-            value={live.hp}
-            maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
-            printed={live.maxHp !== (def.grit ?? 0) ? (def.grit ?? 0) : undefined}
-            tier={size}
-            tint={
-              live.hp < live.maxHp
-                ? 'var(--c-red)'
-                : live.maxHp > (def.grit ?? 0)
-                  ? '#16A34A'
-                  : '#22C55E'
-            }
-            emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
-            onArt
-          />
-        </>
-      ) : (
-        <>
-          <StatChip
-            icon={Swords}
-            label="Might"
-            value={def.might}
-            tier={size}
-            tint="var(--c-red)"
-            emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
-            onArt
-          />
-          <StatChip
-            icon={Shield}
-            label="Grit"
-            value={def.grit}
-            tier={size}
-            tint="#22C55E"
-            emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
-            onArt
-          />
-        </>
-      )
-    ) : def.type === 'Leader' ? (
-      <StatChip
-        icon={Shield}
-        label="Resolve"
-        value={def.resolve}
-        tier={size}
-        tint="#7C3AED"
-        emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
-        onArt
-      />
-    ) : null;
+  // Bottom-right plate: a power's chip cost, a Leader's starting nerve.
+  const plateValue = statValue(def);
+  const statChips = plateValue ? (
+    <StatChip
+      icon={def.type === 'Leader' ? Flame : Coins}
+      label={def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'}
+      value={plateValue}
+      tier={size}
+      tint={def.type === 'Leader' ? '#F97316' : '#CA8A04'}
+      emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
+      onArt
+    />
+  ) : null;
 
   // Text that sits over artwork (full-bleed template) needs a shadow to stay
   // legible on any image.
@@ -2600,9 +2342,9 @@ function CardFaceBase({
           inert={!cfg.chipsInteractive}
         />
       )}
-      {cfg.showRules && def.type === 'Leader' && (def.leaderAbilities?.length ?? 0) > 0 && (
+      {cfg.showRules && def.type === 'Leader' && (def.abilities?.length ?? 0) > 0 && (
         <div className="flex flex-col gap-0.5 mt-1">
-          {def.leaderAbilities!.map((ab, i) => (
+          {def.abilities!.map((ab, i) => (
             <div
               key={i}
               className="flex items-start gap-1 leading-snug break-words"
@@ -2612,17 +2354,17 @@ function CardFaceBase({
                 className="shrink-0 font-mono font-black rounded-full px-1 border"
                 style={{
                   fontSize: Math.max(6, cfg.rulesFont - 1),
-                  color: bleed ? '#C4B5FD' : '#7C3AED',
-                  borderColor: 'color-mix(in srgb, #7C3AED 45%, transparent)',
-                  backgroundColor: 'color-mix(in srgb, #7C3AED 12%, transparent)',
+                  color: bleed ? '#FDBA74' : '#C2410C',
+                  borderColor: 'color-mix(in srgb, #EA580C 45%, transparent)',
+                  backgroundColor: 'color-mix(in srgb, #EA580C 12%, transparent)',
                 }}
-                title="Resolve cost"
+                title={ab.nerve < 0 ? 'Spends nerve' : 'Builds nerve'}
               >
-                {ab.resolveDelta > 0 ? `+${ab.resolveDelta}` : ab.resolveDelta}
+                {ab.nerve > 0 ? `+${ab.nerve}` : ab.nerve}
               </span>
               <span className="font-semibold min-w-0">
                 {renderKeywordText(
-                  ab.text ?? describeEffect(ab.effect),
+                  `${ab.chipCost ? `Pay ${fmtUnits(ab.chipCost)}: ` : ''}${keywordLabel(ab.effect.kw, ab.effect.n)}`,
                   size !== 'full',
                   !cfg.chipsInteractive,
                 )}
@@ -2642,8 +2384,9 @@ function CardFaceBase({
     </>
   );
 
-  /** Might/Grit (Resolve) plate — anchored to the card's bottom-right corner
-   * in both templates, on an ink plate the design carries at every rarity. */
+  /** Chip-cost plate (a Leader's starting nerve) — anchored to the card's
+   * bottom-right corner in both templates, on an ink plate the design carries
+   * at every rarity. */
   const statPlate = statChips && (
     <div
       data-fc="stats"
@@ -2652,11 +2395,9 @@ function CardFaceBase({
         'bottom-1 right-1',
       )}
       title={
-        def.type === 'Unit'
-          ? live
-            ? `Might/Grit — printed ${def.might}/${def.grit}`
-            : `Might ${def.might} / Grit ${def.grit}`
-          : `Resolve ${def.resolve}`
+        def.type === 'Leader'
+          ? `Starts the match with ${NERVE.start} nerve`
+          : (costSummary(def) ?? undefined)
       }
     >
       {statChips}
@@ -2791,7 +2532,7 @@ function CardFaceBase({
         </div>
       )}
 
-      {/* ---- Masthead: name + essence cost ----
+      {/* ---- Masthead: name + colour dots and tier mark ----
           A solid ink banner on the framed template, the same banner at 90%
           opacity over the art on the bleed one, and a static prismatic band
           (black title, no motion) on a foil print. */}
@@ -2815,16 +2556,19 @@ function CardFaceBase({
             {def.name}
           </span>
         </span>
-        {(def.cost || def.type !== 'Leader') && (
-          <CostInfoButton
-            text={`${costSummary(def) ?? 'Essence Cost: 0'}. Colored pips must be paid with matching essence (exhaust your Locations); generic pips with essence of any type.`}
-            className="shrink-0"
-            title={costSummary(def) || undefined}
-            inert={!cfg.chipsInteractive}
-          >
-            <EssenceCostRow cost={def.cost} type={def.type} size={size} onArt={!isFoil} />
-          </CostInfoButton>
-        )}
+        <CostInfoButton
+          text={
+            costSummary(def) ??
+            (cardColorsForFace.length
+              ? `Colour: ${cardColorsForFace.join(' / ')}. A deck may only hold cards inside its Leader's two colours.`
+              : 'Colourless — fits any deck.')
+          }
+          className="shrink-0"
+          title={costSummary(def) || undefined}
+          inert={!cfg.chipsInteractive}
+        >
+          <TierMark def={def} size={size} onArt={!isFoil} />
+        </CostInfoButton>
       </div>
 
       {/* ---- Framed template: art window, rarity rule, type line, text box ---- */}
@@ -2891,7 +2635,7 @@ function CardFaceBase({
               'relative z-10 flex flex-col flex-1 min-h-0 overflow-hidden mx-1.5 mt-0.5 mb-0.5 border-t border-[var(--c-ink)]',
               cfg.textBoxPad,
             )}
-            // Reserve the bottom-right corner for the stat plate.
+            // Reserve the bottom-right corner for the chip-cost / nerve plate.
             style={{ paddingBottom: PLATE_CLEARANCE[size] }}
           >
             {textContent}
@@ -3023,6 +2767,7 @@ function CardFaceBase({
 /** Unclipped mechanics for touch, keyboard and long cards in either inspector. */
 export function CardReadingPanel({ def }: { def: CardDef }) {
   const lines = cardRuleLines(def);
+  const kws = (def.keywords ?? []).filter(isKeyword);
   return (
     <section
       aria-label="Complete card rules"
@@ -3032,24 +2777,20 @@ export function CardReadingPanel({ def }: { def: CardDef }) {
       <p className="text-xs font-bold mb-2">
         {typeLineText(def)} · {def.rarity ?? 'Unspecified rarity'}
       </p>
-      {costSummary(def) && <p>{costSummary(def)}</p>}
-      {def.type === 'Unit' && (
-        <p>
-          Printed Might {def.might} / Grit {def.grit}
-        </p>
-      )}
-      {def.type === 'Leader' && <p>Starting Resolve {def.resolve}</p>}
+      {costSummary(def) && <p>{cap1(costSummary(def)!)}.</p>}
+      {def.type === 'Leader' && <p>Starts the match with {NERVE.start} nerve.</p>}
       {lines.map((line, i) => (
         <p className="mt-2" key={i}>
           {line}
         </p>
       ))}
-      {lines.length === 0 && def.text && <p className="mt-2">{def.text}</p>}
-      {kwList(def).map((kw) => (
-        <p className="mt-2" key={kw}>
-          <strong>{kw}:</strong> {KEYWORD_TEXT[kw]}
-        </p>
-      ))}
+      {kws
+        .filter((kw, i) => kws.indexOf(kw) === i && KEYWORD_SPECS[kw].kind === 'modifier')
+        .map((kw) => (
+          <p className="mt-2" key={kw}>
+            <strong>{kw}:</strong> {KEYWORD_TEXT[kw]}
+          </p>
+        ))}
       {def.flavor && <p className="mt-3 border-t pt-2 italic">{def.flavor}</p>}
     </section>
   );
@@ -3113,9 +2854,8 @@ export function CardInspectorModal({
 }
 
 /**
- * Props for CardFace compare by identity except `live` and `serial`, which
- * callers build inline every render (`live={{ atk, hp, maxHp }}`): those compare
- * by value, so a board or grid that re-renders does not repaint every card.
+ * Props for CardFace compare by identity except `serial`, which callers build
+ * inline every render: it compares by value, so a board or grid that re-renders does not repaint every card.
  * `onClick` and `footer` stay identity-compared, so a caller passing a fresh
  * closure still re-renders exactly as before; a stale handler is never kept.
  */
@@ -3124,7 +2864,7 @@ function cardFacePropsEqual(a: MemoCardFaceProps, b: MemoCardFaceProps): boolean
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof MemoCardFaceProps>;
   for (const k of keys) {
     if (a[k] === b[k]) continue;
-    if (k === 'live' || k === 'serial') {
+    if (k === 'serial') {
       const x = a[k] as Record<string, unknown> | undefined;
       const y = b[k] as Record<string, unknown> | undefined;
       if (

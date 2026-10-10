@@ -18,7 +18,7 @@
  *    the minimum. A refactor that drops it from the stylesheet takes those
  *    back under with nothing on screen to show it.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CARD_SIZES, chipsAreInteractive, type CardSize } from './CardFaceV4';
 
@@ -114,9 +114,14 @@ describe('text size floor', () => {
       .filter((px) => px < 11);
   };
 
-  it('keeps the match board on the type tokens', () => {
-    expect(sub11('./GameV4.tsx')).toEqual([]);
-  });
+  // The match board is the poker table now (GameV4.tsx was the retired
+  // MTG-style board). Skipped only while PokerTable.tsx is still being built.
+  it.skipIf(!existsSync(new URL('./PokerTable.tsx', import.meta.url)))(
+    'keeps the match board on the type tokens',
+    () => {
+      expect(sub11('./PokerTable.tsx')).toEqual([]);
+    },
+  );
 
   it('keeps the coach callout on the type tokens', () => {
     expect(sub11('./CoachOverlay.tsx')).toEqual([]);

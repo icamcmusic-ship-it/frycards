@@ -15,11 +15,19 @@
  * `POOL_BY_ID`, which is the pool AFTER `mapCard` has layered them on — so a
  * Creator-overridden card syncs as the card the game actually prints.
  *
+ * FryCards Poker: the mechanics column NAMES are the MTG-era schema and are
+ * kept (renaming them is a migration). Their poker values come from
+ * `mechanicsFromDef` (src/meta/submissions.ts), the same mapping the Creator
+ * tools write: essence_types = the card's colours (unchanged), keywords =
+ * def.keywords, might = a power's tier (1–5; null for Leaders/Locations),
+ * card_subtype, rules_text = def.text; essence_cost, grit and resolve are
+ * written null (retired).
+ *
  * Usage: npx tsx scripts/sync-cards-db.ts > cards-sync.sql
  */
 import { GENERATED_CARDS } from '../src/game/generated-cards';
-import { POOL_BY_ID } from '../src/game/v3/cardpool';
-import { cardColors } from '../src/game/v3/colors';
+import { POOL_BY_ID } from '../src/game/poker/cardpool';
+import { mechanicsFromDef } from '../src/meta/submissions';
 
 const q = (s: string | null | undefined) =>
   s == null ? 'null' : `'${String(s).replace(/'/g, "''")}'`;
@@ -28,15 +36,16 @@ const j = (v: unknown) => `'${JSON.stringify(v).replace(/'/g, "''")}'::jsonb`;
 
 for (const t of GENERATED_CARDS) {
   const c = POOL_BY_ID[t.id];
-  const colors = cardColors(c);
+  const mech = mechanicsFromDef(c);
+  const colors = mech.essence_types;
   console.log(
     `insert into public.cards (id, name, card_type, rarity, set_name, flavor_text, image_url, ` +
       `keywords, template, essence_cost, essence_types, might, grit, card_subtype, resolve, rules_text) values (` +
       `${q(t.id)}, ${q(t.name)}, ${q(t.type)}, ${q(t.rarity)}, ${q(t.set)}, ${q(t.flavor)}, ${q(t.image)}, ` +
-      `${q((c.keywords ?? []).join(', ') || null)}, ${j(t)}, ` +
-      `${c.cost ? j(c.cost) : 'null'}, ` +
+      `${q(mech.keywords)}, ${j(t)}, ` +
+      `${mech.essence_cost == null ? 'null' : j(mech.essence_cost)}, ` +
       `${colors.length ? `array[${colors.map((x) => `'${x}'`).join(',')}]::text[]` : `'{}'::text[]`}, ` +
-      `${n(c.might)}, ${n(c.grit)}, ${q(c.subtype)}, ${n(c.resolve)}, ${q(c.text)}) ` +
+      `${n(mech.might)}, ${n(mech.grit)}, ${q(mech.card_subtype)}, ${n(mech.resolve)}, ${q(mech.rules_text)}) ` +
       `on conflict (id) do update set name=excluded.name, card_type=excluded.card_type, ` +
       `rarity=excluded.rarity, set_name=excluded.set_name, flavor_text=excluded.flavor_text, ` +
       `image_url=excluded.image_url, keywords=excluded.keywords, template=excluded.template, ` +
