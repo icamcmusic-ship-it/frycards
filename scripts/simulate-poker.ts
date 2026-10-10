@@ -196,7 +196,7 @@ function play(setup: MatchSetup, botSeed: number, hooks: Hooks = {}): Match {
     }
   }
   if (m.phase !== 'over') unfinishedMatches++;
-  if (chipsInPlay(m) !== setup.seats.length * MODES[setup.mode].stackUnits * UNIT) chipBreaks++;
+  if (chipsInPlay(m) !== setup.seats.length * MODES[setup.mode].stackChips) chipBreaks++;
   return m;
 }
 

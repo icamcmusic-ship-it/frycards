@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UNIT, MODES } from './constants';
+import { UNIT, MODES, COST_LADDER_UNITS, TIER_N, bigBlindAt } from './constants';
 import {
   applyAction,
   betOptions,
@@ -36,7 +36,7 @@ describe('blinds and action order', () => {
     const h = m.hand!;
     expect([h.sbSeat, h.bbSeat]).toEqual([1, 2]);
     expect(h.toAct).toBe(0);
-    expect(h.committed).toEqual([0, 50, 100]);
+    expect(h.committed).toEqual([0, 8, 16]);
   });
 
   it('folding around gives the big blind the pot and conserves chips', () => {
@@ -44,7 +44,7 @@ describe('blinds and action order', () => {
     const before = total(m);
     act(m, { type: 'fold', seat: 0 }, { type: 'fold', seat: 1 });
     expect(m.hand!.done).toBe(true);
-    expect(m.seats[2].stack).toBe(50 * UNIT + 50);
+    expect(m.seats[2].stack).toBe(MODES.standard.stackChips + 8);
     expect(total(m)).toBe(before);
   });
 
@@ -61,12 +61,12 @@ describe('pot-limit betting', () => {
   it('caps a raise at the pot after calling', () => {
     const m = rigHand(table(3), { button: 0 });
     const o = betOptions(m, 0)!;
-    // Pot 150 + call 100 = 250 on top of the 100 bet.
-    expect(o.maxRaiseTo).toBe(350);
-    expect(o.minRaiseTo).toBe(200);
-    expect(() => act(m, { type: 'raise', seat: 0, to: 400 })).toThrow(IllegalAction);
-    act(m, { type: 'raise', seat: 0, to: 350 });
-    expect(m.hand!.currentBet).toBe(350);
+    // Pot 24 + call 16 = 40 on top of the 16 bet.
+    expect(o.maxRaiseTo).toBe(56);
+    expect(o.minRaiseTo).toBe(32);
+    expect(() => act(m, { type: 'raise', seat: 0, to: 64 })).toThrow(IllegalAction);
+    act(m, { type: 'raise', seat: 0, to: 56 });
+    expect(m.hand!.currentBet).toBe(56);
   });
 
   it('applyAction is pure: an illegal action leaves the input untouched', () => {
@@ -86,7 +86,7 @@ describe('showdown and side pots', () => {
     for (let i = 0; i < 3; i++) act(m, { type: 'check', seat: 1 }, { type: 'check', seat: 0 });
     expect(m.hand!.done).toBe(true);
     expect(m.hand!.result!.winners.sort()).toEqual([0, 1]);
-    expect(m.seats[0].stack).toBe(50 * UNIT);
+    expect(m.seats[0].stack).toBe(MODES.standard.stackChips);
   });
 
   it('builds side pots for short all-ins', () => {
@@ -356,7 +356,7 @@ describe('Locations', () => {
 
   it('High Stakes raises the blinds', () => {
     const m = rigHand(table(2), { button: 0, rule: 'highStakes', param: 2 });
-    expect(m.hand!.bb).toBe(200);
+    expect(m.hand!.bb).toBe(32);
   });
 
   it('Open Hand turns every lowest hole card face-up', () => {
@@ -372,7 +372,7 @@ describe('match flow', () => {
     act(m, { type: 'fold', seat: m.hand!.toAct!, dt: MODES.standard.levelMs + 1 });
     act(m, { type: 'start' });
     expect(m.level).toBe(1);
-    expect(m.hand!.bb).toBe(150);
+    expect(m.hand!.bb).toBe(24);
   });
 
   it('replays the same match from its seed and action log', () => {
@@ -396,5 +396,24 @@ describe('match flow', () => {
 
   it('createMatch refuses fewer than two seats', () => {
     expect(() => createMatch({ seed: 1, mode: 'quick', seats: [] })).toThrow();
+  });
+});
+
+describe('whole chips', () => {
+  it('starts each mode at 400 / 750 / 1,250 chips', () => {
+    expect([MODES.quick, MODES.standard, MODES.deep].map((m) => m.stackChips)).toEqual([
+      400, 750, 1250,
+    ]);
+  });
+
+  it('keeps every blind, cost and tier number a whole chip', () => {
+    for (const mode of Object.values(MODES))
+      for (let level = 0; level < 20; level++) {
+        const bb = bigBlindAt(mode, level);
+        expect(Number.isInteger(bb / 2)).toBe(true);
+      }
+    for (const u of COST_LADDER_UNITS) expect(Number.isInteger(u * UNIT)).toBe(true);
+    for (const row of Object.values(TIER_N))
+      for (const n of row) expect(Number.isInteger(n * UNIT)).toBe(true);
   });
 });

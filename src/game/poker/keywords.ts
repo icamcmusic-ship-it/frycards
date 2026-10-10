@@ -393,22 +393,10 @@ export function isKeyword(s: string): s is Keyword {
   return s in KEYWORD_SPECS;
 }
 
-/** Display form of a keyword's number: chip amounts in units ("½", "1½"). */
+/** Display form of an amount written in chip units (a keyword's number, a
+ * cost on the ladder): the whole number of chips it is worth. */
 export function fmtUnits(units: number): string {
-  const whole = Math.floor(units);
-  const frac = units - whole;
-  const f =
-    frac === 0.5
-      ? '½'
-      : frac === 0.25
-        ? '¼'
-        : frac === 0.75
-          ? '¾'
-          : frac
-            ? `.${Math.round(frac * 100)}`
-            : '';
-  if (whole === 0 && f) return f;
-  return `${whole}${f}`;
+  return `${Math.round(units * UNIT)}`;
 }
 
 /** Keywords whose number is a chip amount (others count cards / nerve /
@@ -447,8 +435,7 @@ export function keywordLabel(kw: Keyword, n?: number): string {
 /** Reminder text with the number filled in. */
 export function keywordText(kw: Keyword, n?: number): string {
   const spec = KEYWORD_SPECS[kw];
-  const shown =
-    n === undefined ? 'N' : CHIP_KEYWORDS.has(kw) ? `${fmtUnits(n)} chip unit(s)` : `${n}`;
+  const shown = n === undefined ? 'N' : CHIP_KEYWORDS.has(kw) ? `${fmtUnits(n)} chips` : `${n}`;
   return spec.text(shown);
 }
 

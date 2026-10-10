@@ -16,7 +16,7 @@
 import type { CardDef } from '../game/poker/cards';
 import { isPower } from '../game/poker/cards';
 import { cardColors, isColorLegal, type Color } from '../game/poker/colors';
-import { CAPS, COST_LADDER_UNITS, MODES, type ModeId } from '../game/poker/constants';
+import { CAPS, COST_LADDER_UNITS, MODES, UNIT, type ModeId } from '../game/poker/constants';
 import type { EffectKeyword } from '../game/poker/keywords';
 
 /** One entry per distinct card, with its copy count. */
@@ -143,7 +143,7 @@ export interface DeckAdvice {
   tier5: number;
   /** Mean tier of the powers (0 for none). */
   averageTier: number;
-  /** Mean printed chip cost per power, in chip units. */
+  /** Mean printed chip cost per power, in chip units (UNIT chips each). */
   averageCostUnits: number;
   colors: ColorSpread;
   themes: ThemeCount[];
@@ -268,7 +268,7 @@ export function deriveDeckAdvice(
   const topShare = TIER_TARGETS[3] + TIER_TARGETS[4];
   if (judging && powers > 0 && topHeavy / powers > topShare + TIER_TOLERANCE)
     suggestions.push(
-      `Top-heavy: ${topHeavy} powers at tier 4–5 (${pct(topHeavy / powers)}; the pyramid has ${pct(topShare)}). Each needs a second cost on top of ${COST_LADDER_UNITS[4]}+ chip units.`,
+      `Top-heavy: ${topHeavy} powers at tier 4–5 (${pct(topHeavy / powers)}; the pyramid has ${pct(topShare)}). Each needs a second cost on top of ${COST_LADDER_UNITS[4] * UNIT}+ chips.`,
     );
   // Not an else-if: a deck can be top-heavy AND thin in the middle.
   if (curve[2].status === 'low')

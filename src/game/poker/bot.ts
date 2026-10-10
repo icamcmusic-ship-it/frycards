@@ -471,7 +471,7 @@ function betDecision(v: Match, seat: number, r: Read, rng: Rng): Action {
     (h.street !== 'preflop' && r.opponents === 1 ? p.skill * 0.05 : 0);
   const raiseTo = (frac: number) => {
     const size = h.currentBet + (pot + o.callAmount) * frac;
-    const rounded = Math.round(size / 10) * 10;
+    const rounded = Math.round(size / 2) * 2;
     return Math.max(o.minRaiseTo, Math.min(o.maxRaiseTo, rounded));
   };
   // Short stack: shove-or-fold territory.

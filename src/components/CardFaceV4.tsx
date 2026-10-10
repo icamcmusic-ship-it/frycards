@@ -600,7 +600,7 @@ export function costSummary(def: CardDef): string | null {
     def.tier >= SECOND_COST_TIER
       ? ' plus a second cost (shed, blind a hole card, or a hand exclusion)'
       : '';
-  return `${def.tier} ${def.tier === 1 ? mark.name : mark.plural}: costs ${fmtUnits(printedCostUnits(def))} chip unit(s) into the pot${second}`;
+  return `${def.tier} ${def.tier === 1 ? mark.name : mark.plural}: costs ${fmtUnits(printedCostUnits(def))} chips into the pot${second}`;
 }
 
 /** A Serialized print's total run (`serial.cap`) is NaN when the supply

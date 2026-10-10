@@ -10,8 +10,8 @@ decks, open packs and grow a collection.
 ## The Game (FryCards Poker, one paragraph)
 
 A match is a **pot-limit Texas Hold'em freezeout** for 2–6 seats in one of
-three modes — **Quick** (30-unit stacks, 16 powers, ~12 min), **Standard** (50,
-24, ~25 min) and **Deep** (80, 36, ~40 min) — with blinds that rise ×1.5 on a
+three modes — **Quick** (400-chip stacks, 16 powers, ~12 min), **Standard** (750,
+24, ~25 min) and **Deep** (1,250, 36, ~40 min) — with blinds that rise ×1.5 on a
 clock and a hard time cap after which stacks are ranked. Every seat brings a
 deck of **1 Leader + 1 Location + power cards**. Powers are **Units** (★ stars,
 a token that stays out until showdown), **Items** (⚙ gears; Charm, Weapon or
@@ -19,8 +19,8 @@ Tool) and **Events** (ϟ bolts; Quick or Slow), each tier 1–5, built from ~45
 poker keywords grouped by the seven colours (Ember, Tide, Root, Gale, Light,
 Shadow, Void) — Peek, Reveal, Mark, Redraw, Windfall, Kindle, Siphon, Burn,
 Lock, Snuff, Feint, Call Out and so on. A cast is **public** (full card face,
-caster and target), costs fixed chip units **into the pot** on a ½ · 1 · 2 · 3½
-· 6 ladder (tiers 4–5 add a second cost: shed a power, blind a hole card, or a
+caster and target), costs a fixed whole number of chips **into the pot** on an 8 · 16 · 32
+· 56 · 96 ladder (the opening big blind is 16) (tiers 4–5 add a second cost: shed a power, blind a hole card, or a
 **hand exclusion**), and opens a short **response window** for Quick Events and
 Ambush cards — so casting is a bluff as much as a play. Each seat's
 **Location** joins a shared bag of 17 table rules (plus a Plain Table each

@@ -458,10 +458,6 @@ export function poolHasKeyword(kw: string): CardDef[] {
 export function kwRefText(ref: KwRef): string {
   const spec = KEYWORD_SPECS[ref.kw];
   const n =
-    ref.n === undefined
-      ? 'N'
-      : CHIP_KEYWORDS.has(ref.kw)
-        ? `${fmtUnits(ref.n)} chip unit(s)`
-        : `${ref.n}`;
+    ref.n === undefined ? 'N' : CHIP_KEYWORDS.has(ref.kw) ? `${fmtUnits(ref.n)} chips` : `${ref.n}`;
   return spec.text(n);
 }

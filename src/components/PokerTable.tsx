@@ -25,7 +25,6 @@ import {
   MODES,
   TIME_BANK_MS,
   TURN_TIMER_MS,
-  UNIT,
   bigBlindAt,
 } from '../game/poker/constants';
 import {
@@ -126,7 +125,7 @@ function Chips({ chips, className }: { chips: number; className?: string }) {
   return (
     <span
       className={cn('font-mono font-black tabular-nums', className)}
-      title={`${fmtChips(chips)} chip units`}
+      title={`${fmtChips(chips)} chips`}
     >
       ◎{fmtChips(chips)}
     </span>
@@ -523,7 +522,7 @@ export function PokerTable({
         humanLabel: setup.seats[HUMAN].deck.name,
         cpuLabel: others.join(', '),
         humanDeck: humanDeckCode,
-        finalStack: m.seats[HUMAN].stack / UNIT,
+        finalStack: m.seats[HUMAN].stack,
       });
       onResult?.({ place, seats: m.seats.length, mode: m.mode, hands: m.handNo });
     },
@@ -1156,7 +1155,7 @@ function HumanPanel({
     opts
       ? Math.max(
           opts.minRaiseTo,
-          Math.min(opts.maxRaiseTo, Math.round((h!.currentBet + (pot + owe) * frac) / 10) * 10),
+          Math.min(opts.maxRaiseTo, Math.round((h!.currentBet + (pot + owe) * frac) / 2) * 2),
         )
       : 0;
   const choiceLabel: Record<string, string> = {
@@ -1393,7 +1392,7 @@ function HumanPanel({
                   type="range"
                   min={opts.minRaiseTo}
                   max={opts.maxRaiseTo}
-                  step={10}
+                  step={2}
                   value={raiseTo}
                   onChange={(e) => setRaiseTo(Number(e.target.value))}
                   className="flex-1 accent-[var(--c-yellow)]"

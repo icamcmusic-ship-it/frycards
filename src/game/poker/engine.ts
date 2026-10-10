@@ -34,6 +34,7 @@ import {
   TILT_STEP,
   UNIT,
   bigBlindAt,
+  roundBlind,
   type ModeConfig,
   type ModeId,
 } from './constants';
@@ -350,9 +351,9 @@ function say(m: Match, text: string, to?: number): void {
   if (m.log.length > 400) m.log.splice(0, m.log.length - 400);
 }
 
+/** Display form of a chip amount: always a whole number. */
 export function fmtChips(chips: number): string {
-  const u = chips / UNIT;
-  return Number.isInteger(u) ? `${u}` : u.toFixed(2).replace(/0$/, '');
+  return `${Math.round(chips)}`;
 }
 
 const R = (m: Match): Rng => rngOn(m);
@@ -512,14 +513,14 @@ export function createMatch(setup: MatchSetup): Match {
       drawPile: shuffle(powers, rng),
       discard: [],
       hand: [],
-      stack: mode.stackUnits * UNIT,
+      stack: mode.stackChips,
       nerve: NERVE.start,
       busted: false,
     });
   });
   for (const s of m.seats) drawPowers(m, s.idx, mode.handStart);
   m.button = rng.int(m.seats.length);
-  say(m, `${mode.label} freezeout · ${m.seats.length} seats · ${mode.stackUnits} chip units each.`);
+  say(m, `${mode.label} freezeout · ${m.seats.length} seats · ${mode.stackChips} chips each.`);
   return m;
 }
 
@@ -564,7 +565,7 @@ function startHand(m: Match): void {
   const rule = location.card.rule ?? { id: 'plain' as const };
   const n = m.seats.length;
   let bb = bigBlindAt(mode, m.level);
-  if (rule.id === 'highStakes') bb = Math.round((bb * (rule.param ?? 1.5)) / 10) * 10;
+  if (rule.id === 'highStakes') bb = roundBlind(bb * (rule.param ?? 1.5));
   const deck: PCard[] = shuffle(
     fullDeck().map((c, i) => ({ ...c, id: i, knownTo: [] as number[] })),
     R(m),

@@ -5,20 +5,21 @@
  * reward factors all live here. A rebalance is a code change; nothing here
  * needs a database migration.
  *
- * Money is held in integer CHIPS internally. One "chip unit" (the spec's unit
- * of account: a Standard stack is 50 units, the opening big blind is 1 unit)
- * is UNIT chips, so half-unit costs and ×1.5 blinds stay whole numbers.
+ * Money is held — and shown — in whole CHIPS. The tuning tables below are
+ * still written in "chip units" (the spec's unit of account: the opening big
+ * blind is 1 unit); one unit is UNIT chips. UNIT is a multiple of 4 so every
+ * ¼- and ½-unit number on the ladder and the tier tables lands on a whole chip.
  */
 
-export const UNIT = 100;
+export const UNIT = 16;
 
 export type ModeId = 'quick' | 'standard' | 'deep';
 
 export interface ModeConfig {
   id: ModeId;
   label: string;
-  /** Starting stack in chip units. */
-  stackUnits: number;
+  /** Starting stack in chips. */
+  stackChips: number;
   /** Big blind at level 0, in chip units (the small blind is half). */
   bigBlindUnits: number;
   /** Blinds multiply by `blindGrowth` every `levelMs` of match clock. */
@@ -45,7 +46,7 @@ export const MODES: Record<ModeId, ModeConfig> = {
   quick: {
     id: 'quick',
     label: 'Quick',
-    stackUnits: 30,
+    stackChips: 400,
     bigBlindUnits: 1,
     blindGrowth: 1.5,
     levelMs: 2 * MIN,
@@ -62,7 +63,7 @@ export const MODES: Record<ModeId, ModeConfig> = {
   standard: {
     id: 'standard',
     label: 'Standard',
-    stackUnits: 50,
+    stackChips: 750,
     bigBlindUnits: 1,
     blindGrowth: 1.5,
     levelMs: 3 * MIN,
@@ -79,7 +80,7 @@ export const MODES: Record<ModeId, ModeConfig> = {
   deep: {
     id: 'deep',
     label: 'Deep',
-    stackUnits: 80,
+    stackChips: 1250,
     bigBlindUnits: 1,
     blindGrowth: 1.5,
     levelMs: 4 * MIN,
@@ -99,12 +100,17 @@ export const MODE_IDS: ModeId[] = ['quick', 'standard', 'deep'];
 export const MIN_SEATS = 2;
 export const MAX_SEATS = 6;
 
-/** Big blind (in chips) at a blind level. Rounded to a whole half-unit step
- * once it passes 2 units so the numbers on the table stay readable. */
+/** Rounds a raw big blind to a readable, even chip count (so the small blind,
+ * half of it, is a whole chip too): steps of 2 below 50, 10 below 200, 50
+ * below 1,000 and 100 above. */
+export function roundBlind(raw: number): number {
+  const step = raw < 50 ? 2 : raw < 200 ? 10 : raw < 1000 ? 50 : 100;
+  return Math.max(2, Math.round(raw / step) * step);
+}
+
+/** Big blind (in chips) at a blind level: 16 → 24 → 36 → 50 → 80 → 120 … */
 export function bigBlindAt(mode: ModeConfig, level: number): number {
-  const raw = mode.bigBlindUnits * UNIT * Math.pow(mode.blindGrowth, level);
-  if (raw < 2 * UNIT) return Math.round(raw / 10) * 10;
-  return Math.round(raw / (UNIT / 2)) * (UNIT / 2);
+  return roundBlind(mode.bigBlindUnits * UNIT * Math.pow(mode.blindGrowth, level));
 }
 
 // ---------------------------------------------------------------------------

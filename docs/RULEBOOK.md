@@ -110,22 +110,26 @@ Keyboard: **F** fold, **C** check/call, **R** raise (with a slider).
 
 ### 3.1 Modes
 
-| Mode     | Stack (units) | Blinds rise      | Clock cap | Deck: Leader + Location + powers | Max copies | Tier-5 cards | Power hand: start / draw per hand / cap | Reward × | Min. length |
+| Mode     | Stack (chips) | Blinds rise      | Clock cap | Deck: Leader + Location + powers | Max copies | Tier-5 cards | Power hand: start / draw per hand / cap | Reward × | Min. length |
 | -------- | ------------- | ---------------- | --------- | -------------------------------- | ---------- | ------------ | --------------------------------------- | -------- | ----------- |
-| Quick    | 30            | ×1.5 every 2 min | 12 min    | 1 + 1 + 16                       | 2          | 1            | 3 / 1 / 5                               | ×0.5     | 6 min       |
-| Standard | 50            | ×1.5 every 3 min | 25 min    | 1 + 1 + 24                       | 2          | 2            | 4 / 1 / 6                               | ×1       | 12 min      |
-| Deep     | 80            | ×1.5 every 4 min | 40 min    | 1 + 1 + 36                       | 3          | 3            | 5 / 2 / 7                               | ×1.5     | 20 min      |
+| Quick    | 400           | ×1.5 every 2 min | 12 min    | 1 + 1 + 16                       | 2          | 1            | 3 / 1 / 5                               | ×0.5     | 6 min       |
+| Standard | 750           | ×1.5 every 3 min | 25 min    | 1 + 1 + 24                       | 2          | 2            | 4 / 1 / 6                               | ×1       | 12 min      |
+| Deep     | 1,250         | ×1.5 every 4 min | 40 min    | 1 + 1 + 36                       | 3          | 3            | 5 / 2 / 7                               | ×1.5     | 20 min      |
 
-One **chip unit** is the opening big blind. Every seat starts at the same
-stack; chips in play never change (powers move chips, never create them).
+Every amount on the table is a **whole number of chips**, never a fraction.
+The opening big blind is 16 chips (small blind 8). The tables below give costs
+and keyword numbers in chips; the code keeps them as **chip units** of 16
+chips each (`UNIT` in `src/game/poker/constants.ts`). Every seat starts at the
+same stack; chips in play never change (powers move chips, never create them).
 
 ### 3.2 The clock
 
 - Every action advances the match clock by the time it took (human think time
   is charged up to 30 s per action). The blind **level** is
-  `floor(clock / level length)`, and the big blind is 1 unit × 1.5^level,
-  rounded to half-unit steps from 2 units up. Standard: 1 · 1½ · 2½ · 3½ · 5 ·
-  7½ · 11½ · 17 · 25½ …
+  `floor(clock / level length)`, and the big blind is 16 × 1.5^level chips,
+  rounded to an even number (steps of 2 under 50, 10 under 200, 50 under
+  1,000, then 100) so the small blind is whole too: 16 · 24 · 36 · 50 · 80 ·
+  120 · 180 · 250 · 400 · 600 · 900 · 1,400 …
 - **At the cap** the hand in progress finishes, then every live seat is ranked
   by stack.
 - **Busting:** a seat at 0 chips after a hand is out. Seats that bust in the
@@ -183,13 +187,13 @@ optional **modifier keywords** (§9).
 
 ### 6.1 Chip costs (the cost ladder)
 
-Costs are fixed chip units for the whole match, so powers get relatively
+Costs are fixed chip amounts for the whole match, so powers get relatively
 cheaper as the blinds climb. A card's base **step** is its tier; modifiers move
 the step along the ladder.
 
 | Step         | 0   | 1   | 2   | 3   | 4   | 5   | 6   |
 | ------------ | --- | --- | --- | --- | --- | --- | --- |
-| Cost (units) | ¼   | ½   | 1   | 2   | 3½  | 6   | 8   |
+| Cost (chips) | 4   | 8   | 16  | 32  | 56  | 96  | 128 |
 | Printed tier | —   | 1   | 2   | 3   | 4   | 5   | —   |
 
 Step adjustments (they stack, clamped to steps 0–6):
@@ -263,7 +267,7 @@ A **raise** also opens a response window for the other seats.
 - Every Leader has two abilities: one **spends** nerve (strong, a tier-4
   effect from its first colour; 3 nerve if it rebuilds your hand — Windfall,
   Wild, Bloom, Redraw, Exhume or Pass — otherwise 2) and one **builds** +1 nerve (weaker, a tier-2
-  effect from its second colour, and it pays ½ or 1 chip unit into the pot).
+  effect from its second colour, and it pays 8 or 16 chips into the pot).
 - A Leader ability is never one of the situational effects — Straddle, Rerun,
   Burn, Cut, Toll, Bounty or Lock. Those barely move chips or cards on their
   own, or only pay when someone else acts, so they stay on power cards.
@@ -275,24 +279,24 @@ A **raise** also opens a response window for the other seats.
 
 ### 6.6 Tier numbers (N)
 
-N for numbered keywords, by tier. Chip amounts are in chip units.
+N for numbered keywords, by tier. Chip amounts are in chips.
 
 | Keyword   | ★1  | ★2  | ★3  | ★4  | ★5  |
 | --------- | --- | --- | --- | --- | --- |
-| Kindle    | ½   | 1   | 2   | 3   | 5   |
-| Tax       | ½   | 1   | 1½  | 3   | 4   |
-| Bounty    | 2   | 3   | 5   | 8   | 12  |
+| Kindle    | 8   | 16  | 32  | 48  | 80  |
+| Tax       | 8   | 16  | 24  | 48  | 64  |
+| Bounty    | 32  | 48  | 80  | 128 | 192 |
 | Foresee   | 1   | 2   | 3   | 4   | 5   |
-| Bulwark   | 1   | 2   | 3   | 4   | 6   |
+| Bulwark   | 16  | 32  | 48  | 64  | 96  |
 | Fuse      | 1   | 1   | 1   | 2   | 2   |
 | Peek      | 1   | 1   | 1   | 2   | 2   |
-| Toll      | ½   | 1   | 1½  | 2   | 3   |
-| Insurance | 2   | 3   | 5   | 8   | 12  |
-| Siphon    | ½   | 1   | 2   | 3   | 5   |
-| Blessed   | ½   | 1   | 2   | 3   | 5   |
+| Toll      | 8   | 16  | 24  | 32  | 48  |
+| Insurance | 32  | 48  | 80  | 128 | 192 |
+| Siphon    | 8   | 16  | 32  | 48  | 80  |
+| Blessed   | 8   | 16  | 32  | 48  | 80  |
 | Needle    | 1   | 1   | 2   | 2   | 3   |
-| Venomous  | 1   | 1½  | 2½  | 4   | 6   |
-| Erode     | ½   | ½   | 1   | 1½  | 2   |
+| Venomous  | 16  | 24  | 40  | 64  | 96  |
+| Erode     | 8   | 8   | 16  | 24  | 32  |
 | Burn      | 1   | 1   | 1   | 2   | 2   |
 
 Fuse and Needle count streets and nerve; Foresee, Peek and Burn count cards.

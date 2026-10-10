@@ -9,7 +9,12 @@ export type ThemeName =
   | 'lilac'
   | 'desert'
   | 'aurora'
-  | 'garnet';
+  | 'garnet'
+  | 'graphite'
+  | 'amethyst'
+  | 'punch'
+  | 'scarlet'
+  | 'celadon';
 
 /**
  * The five color roles the whole UI is built from (see src/index.css):
@@ -166,6 +171,76 @@ export const THEMES: Record<ThemeName, Theme> = {
       yellow: '#f0cf82',
       red: '#a3320b',
       steel: '#6b0504',
+    },
+  },
+  // The five below came from player-supplied palettes. Where a source swatch
+  // sat in the wrong band for its role (a light accent asked to carry paper
+  // text, or no light colour to use as paper) it was darkened/lightened the
+  // same way as the themes above; every pair clears WCAG AA 4.5:1.
+  graphite: {
+    name: 'graphite',
+    label: 'GRAPHITE SPRING',
+    colors: {
+      ink: '#2d2d2a',
+      // no light swatch in the source: a pale wash of the spring green.
+      paper: '#ecfdf3',
+      yellow: '#20fc8f',
+      // spring green #20fc8f darkened to carry paper text (5.1:1).
+      red: '#0b7a47',
+      steel: '#3f5e5a',
+    },
+  },
+  amethyst: {
+    name: 'amethyst',
+    label: 'NEON AMETHYST',
+    colors: {
+      ink: '#4c1a57',
+      // a pale wash of the neon ice #00e5e8.
+      paper: '#e3fcfc',
+      yellow: '#f0f600',
+      // fuchsia pop #ff3cc7 darkened to carry paper text (5.6:1).
+      red: '#b8128a',
+      steel: '#007c77',
+    },
+  },
+  punch: {
+    name: 'punch',
+    label: 'PUNCH EMBER',
+    colors: {
+      ink: '#19180a',
+      paper: '#f9efe6',
+      // a light tint of rusty spice #af4319.
+      yellow: '#f6c9a8',
+      // punch red #e71d36 darkened a step (4.2 → 4.8:1 under paper text).
+      red: '#d01a30',
+      steel: '#3f220f',
+    },
+  },
+  scarlet: {
+    name: 'scarlet',
+    label: 'SCARLET STEEL',
+    colors: {
+      ink: '#0f1a20',
+      // khaki beige #ada296 lightened to a paper.
+      paper: '#f1eeea',
+      yellow: '#e2856e',
+      // scarlet fire #f42c04 darkened to carry paper text (5.1:1).
+      red: '#c42303',
+      // cool steel #88a2aa darkened to clear AA as secondary text (5.3:1).
+      steel: '#4b666e',
+    },
+  },
+  celadon: {
+    name: 'celadon',
+    label: 'CELADON BRONZE',
+    colors: {
+      ink: '#110b11',
+      paper: '#f2f4cb',
+      yellow: '#a5d0a8',
+      // golden bronze #b7990d darkened to carry paper text (4.8:1).
+      red: '#7d6808',
+      // muted teal #8cada7 darkened to clear AA as secondary text (5.3:1).
+      steel: '#4a6964',
     },
   },
 };

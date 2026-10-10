@@ -45,7 +45,7 @@ export interface MatchRecord {
   cpuLabel: string;
   /** The human's deck as a deck code, when it was a saved deck. */
   humanDeck?: string;
-  /** The human's final stack in chip units. */
+  /** The human's final stack in chips (older entries were saved in chip units). */
   finalStack?: number;
   // -- Retired-game fields, still read from old records --
   turns?: number;
@@ -164,7 +164,7 @@ export function formatMatchReport(r: MatchRecord): string {
     `Seed: ${r.seed}`,
     `Finished: ${new Date(r.finishedAt).toISOString()}`,
   ];
-  if (r.finalStack !== undefined) lines.push(`Final stack: ${r.finalStack} chip units`);
+  if (r.finalStack !== undefined) lines.push(`Final stack: ${r.finalStack} chips`);
   lines.push(`Your deck: ${r.humanLabel}`);
   if (r.humanDeck) lines.push(r.humanDeck);
   lines.push(`Table: ${r.cpuLabel}`);

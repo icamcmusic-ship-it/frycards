@@ -244,8 +244,8 @@ function PlayScreen({
               ))}
             </div>
             <p className="fs-xs font-bold text-[var(--c-steel)] mt-1 max-w-xs">
-              {m.stackUnits} chip units each · blinds ×{m.blindGrowth} every {m.levelMs / 60000} min
-              · about {Math.round(m.capMs / 60000)} min at most · decks of {m.powers} powers
+              {m.stackChips} chips each · blinds ×{m.blindGrowth} every {m.levelMs / 60000} min ·
+              about {Math.round(m.capMs / 60000)} min at most · decks of {m.powers} powers
             </p>
           </div>
           <div>

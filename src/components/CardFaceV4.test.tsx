@@ -228,7 +228,7 @@ describe('cost summary', () => {
   test('describes the tier and its chip cost', () => {
     const summary = costSummary(UNIT);
     expect(summary).toBeTruthy();
-    expect(summary!).toMatch(/^3 stars: costs 2 chip unit/);
+    expect(summary!).toMatch(/^3 stars: costs 32 chips/);
     expect(costSummary(EVENT)!).toMatch(/second cost/);
     expect(costSummary(LEADER)).toBeNull();
     expect(costSummary(LOCATION)).toBeNull();

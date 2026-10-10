@@ -162,7 +162,7 @@ const SECTIONS: Section[] = [
     body: [
       [
         'Freezeout',
-        `FryCards Poker is Texas Hold'em for 2 to 6 seats. Everyone starts with the same stack (${STANDARD.stackUnits} chip units in Standard). Lose all your chips and you are out; the last seat with chips wins.`,
+        `FryCards Poker is Texas Hold'em for 2 to 6 seats. Everyone starts with the same stack (${STANDARD.stackChips} chips in Standard). Lose all your chips and you are out; the last seat with chips wins.`,
       ],
       [
         'The clock',
@@ -254,7 +254,7 @@ const SECTIONS: Section[] = [
         const m = MODES[id];
         return [
           m.label,
-          `${m.stackUnits}-unit stacks · blinds ×${m.blindGrowth} every ${m.levelMs / 60000} min · ~${m.capMs / 60000} min · ${m.powers} powers · up to ${m.maxCopies} copies, ${m.maxTier5} tier-5 card${m.maxTier5 === 1 ? '' : 's'} · power hand ${m.handStart} to start, draw ${m.handDraw} a hand, hold ${m.handCap} max.`,
+          `${m.stackChips}-chip stacks · blinds ×${m.blindGrowth} every ${m.levelMs / 60000} min · ~${m.capMs / 60000} min · ${m.powers} powers · up to ${m.maxCopies} copies, ${m.maxTier5} tier-5 card${m.maxTier5 === 1 ? '' : 's'} · power hand ${m.handStart} to start, draw ${m.handDraw} a hand, hold ${m.handCap} max.`,
         ] as Row;
       }),
       [
@@ -308,7 +308,7 @@ const SECTIONS: Section[] = [
       ],
       [
         'Cost ladder',
-        `Tier 1: ${tierCost(1)} · tier 2: ${tierCost(2)} · tier 3: ${tierCost(3)} · tier 4: ${tierCost(4)} · tier 5: ${tierCost(5)} chip units. Costs are fixed for the whole match, so powers get relatively cheaper as the blinds climb.`,
+        `Tier 1: ${tierCost(1)} · tier 2: ${tierCost(2)} · tier 3: ${tierCost(3)} · tier 4: ${tierCost(4)} · tier 5: ${tierCost(5)} chips. Costs are fixed for the whole match, so powers get relatively cheaper as the blinds climb.`,
       ],
       [
         'Into the pot',
@@ -430,7 +430,7 @@ const SECTIONS: Section[] = [
     body: [
       [
         'Reading a card',
-        'A power is one effect keyword plus modifiers. N is set by the tier; chip amounts are in chip units. Light owns reading other seats, Void owns denial: those keywords only appear on cards of that colour.',
+        'A power is one effect keyword plus modifiers. N is set by the tier; chip amounts are in chips. Light owns reading other seats, Void owns denial: those keywords only appear on cards of that colour.',
       ],
       ...keywordRows(),
     ],
@@ -768,7 +768,7 @@ const STEPS: StepCard[] = [
   },
   {
     title: 'Cast a power',
-    body: `Units ★, Items ⚙ and Events ϟ bend what players see and receive. A cast costs ${tierCost(1)}–${tierCost(5)} chip units into the pot, and everyone sees the card. Casting is a bluff too.`,
+    body: `Units ★, Items ⚙ and Events ϟ bend what players see and receive. A cast costs ${tierCost(1)}–${tierCost(5)} chips into the pot, and everyone sees the card. Casting is a bluff too.`,
     icon: Zap,
     art: <TierMarks />,
     action: { kind: 'practice' },
