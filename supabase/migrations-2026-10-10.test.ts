@@ -19,6 +19,11 @@ const MIGRATION = readFileSync(
   join(__dirname, 'migrations', '20261010000000_poker_deck_rules.sql'),
   'utf8',
 );
+/** 20261011000000: drops the MTG-era helpers, nulls the retired columns. */
+const RETIRE = readFileSync(
+  join(__dirname, 'migrations', '20261011000000_retire_old_rule_helpers.sql'),
+  'utf8',
+);
 
 let db: PGlite;
 const q = async (s: string, params: unknown[] = []) => (await db.query(s, params)).rows as any[];
@@ -74,7 +79,13 @@ beforeAll(async () => {
       ],
     );
   }
+  // The MTG-era helpers, as live had them, so the retirement drop is tested.
+  await db.exec(`
+    create function deck_card_cost(p jsonb) returns int language sql immutable as $$ select 0 $$;
+    create function rarity_copy_cap(p_rarity text) returns int language sql immutable as $$ select 4 $$;
+  `);
   await db.exec(MIGRATION);
+  await db.exec(RETIRE);
   await db.exec(`set test.uid = '${A}'`);
 }, 120_000);
 
@@ -230,6 +241,25 @@ describe('apply_card_upsert', () => {
     expect(row.might).toBeGreaterThanOrEqual(1);
     expect(row.essence_cost).toBeNull();
     expect(row.grit).toBeNull();
+  });
+
+  test('retired columns are stored null whatever the payload carries', async () => {
+    const body = {
+      ...payload({ essence_cost: { generic: 3 }, grit: 4, resolve: 2 }),
+      id: 'test_old_stats',
+    };
+    await q(`select apply_card_upsert($1::jsonb, true)`, [JSON.stringify(body)]);
+    const [row] = await q(
+      `select essence_cost, grit, resolve from cards where id = 'test_old_stats'`,
+    );
+    expect(row).toEqual({ essence_cost: null, grit: null, resolve: null });
+  });
+
+  test('the MTG-era helpers are gone', async () => {
+    const [r] = await q(
+      `select count(*)::int n from pg_proc where proname in ('deck_card_cost', 'rarity_copy_cap')`,
+    );
+    expect(r.n).toBe(0);
   });
 
   test('a power without a tier is refused', async () => {
