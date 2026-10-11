@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouteTab } from './useHashRouter';
 import { askConfirm } from './confirm';
-import { Users, UserPlus, ArrowLeftRight, Search, Coins, X, Trophy } from 'lucide-react';
+import { ActionMenu } from './ActionMenu';
+import { Users, UserPlus, ArrowLeftRight, Search, Coins, X, Trophy, Ellipsis } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   fetchFriendships,
@@ -316,33 +317,52 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
     friendshipId: string,
     other: PublicProfile | undefined,
     labelled = false,
-  ) => (
-    <>
-      <PopButton
-        color="yellow"
-        disabled={busy || !other}
-        onClick={() => other && setTradePartner(other)}
-      >
-        <span className="flex items-center gap-1">
-          <ArrowLeftRight className="w-3 h-3" /> TRADE
-        </span>
-      </PopButton>
-      <PopButton
-        color="red"
-        disabled={busy}
-        ariaLabel={`Remove ${other?.username || 'this player'} from friends`}
-        onClick={async () => {
-          if (await askConfirm(`Remove ${other?.username || 'this player'} from your friends?`))
-            run(() => removeFriend(friendshipId), 'Friend removed.');
-        }}
-      >
-        <span className="flex items-center gap-1">
-          <X className="w-3.5 h-3.5" />
-          {labelled && 'REMOVE FRIEND'}
-        </span>
-      </PopButton>
-    </>
-  );
+  ) => {
+    const removeAsk = async () => {
+      if (await askConfirm(`Remove ${other?.username || 'this player'} from your friends?`))
+        run(() => removeFriend(friendshipId), 'Friend removed.');
+    };
+    return (
+      <>
+        <PopButton
+          color="yellow"
+          disabled={busy || !other}
+          onClick={() => other && setTradePartner(other)}
+        >
+          <span className="flex items-center gap-1">
+            <ArrowLeftRight className="w-3 h-3" /> TRADE
+          </span>
+        </PopButton>
+        {labelled ? (
+          <PopButton
+            color="red"
+            disabled={busy}
+            ariaLabel={`Remove ${other?.username || 'this player'} from friends`}
+            onClick={() => void removeAsk()}
+          >
+            <span className="flex items-center gap-1">
+              <X className="w-3.5 h-3.5" />
+              REMOVE FRIEND
+            </span>
+          </PopButton>
+        ) : (
+          // U53: the destructive action sits behind ⋯, not beside TRADE.
+          <ActionMenu
+            ariaLabel={`More actions for ${other?.username || 'this player'}`}
+            label={<Ellipsis className="w-4 h-4" aria-hidden />}
+            items={[
+              {
+                id: 'remove',
+                label: 'Remove friend',
+                disabled: busy,
+                onSelect: () => void removeAsk(),
+              },
+            ]}
+          />
+        )}
+      </>
+    );
+  };
 
   const tradeCard = (t: Trade) => {
     const isIncoming = t.recipient === userId;
