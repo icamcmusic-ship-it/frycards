@@ -9,6 +9,50 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v35.3 — The 2026-10-11 audit round (PR #171)
+
+- **Match bugs fixed** (audit §1 A1–A25): no inspector on hover, no
+  double-click acting twice, response windows that cannot stall, a raise
+  slider that reaches all-in, bots that never freeze the table, Veil that
+  really hides its target, the seed hidden until the match ends, and the
+  rules edge cases settled in the engine.
+- **Following the CPU** (§2 section 0): speech bursts with each seat's last
+  action, one loud ON THE CLOCK seat with a draining think arc, a persistent
+  ticker, a cast spotlight that docks by the caster and says what happened,
+  pause/step, and a tap-a-seat popover with what that seat did this hand.
+- **Table settings** (§3.1): table timers (STANDARD / RELAXED / OFF) and
+  auto-deal; pause when a power targets you; amounts in big blinds; don't
+  fold when check is free; confirm big bets; pre-action buttons (CHECK /
+  FOLD, CHECK, CALL ANY); bet presets by street (2× / 2.5× / 3× BB pre-flop,
+  ⅓ / ½ / ¾ / POT after); pot odds in the helper line; a SHARK difficulty.
+- **Rewards** (F-5): places pay 15 + 85 × share, then a mode and a table-size
+  multiplier (heads-up ×0.55 … six seats ×1); a finish below 1st pays only
+  after max(3 × seats, 8) hands. The result is sent once, held for the
+  server's minimum time when it asks, and kept on the device so a reload
+  still pays it. Each match now reports your hands won, showdowns, made
+  hands, big pots, knockouts and casts for the poker missions.
+- **Game over**: your match in numbers, place against last match, and
+  SHARE RESULT with the seed and deck code.
+- **More ways to play** (§4, §6): deck rules (Singleton, Pauper, Monochrome,
+  Low Stakes) picked on TAKE A SEAT and badged in the deck builder; a weekly
+  rule twist; RANDOM FROM MY CARDS; the DAILY TABLE (same deal for everyone,
+  with a share line); a PRACTICE TABLE for any deck code, friends' decks as
+  opponents and a chosen Location; REPLAY SEED from Match History;
+  "beat this deck" challenge links; REMATCH LAST SETUP on the menu. Replays,
+  practice tables and the Daily Table pay nothing by design.
+- **Deck builder**: per-deck record and notes, archetype auto-names, a
+  Location fit line, copy as text, the last five saved versions, and three
+  sample decks per Leader.
+- **Match History**: top-2 streaks, results per mode, per Leader played and
+  per Leader faced.
+- **Meta screens** (§2): PLAY hero and grouped menu, Battle Pass season
+  strip and locked tiers without buttons, mission locks that say why, one
+  MISSIONS name, and many smaller fixes across the collection, store,
+  marketplace, grading and profile.
+- **Backend** (§5, §7): match tickets that record mode and seats, rotating
+  missions and a new catalogue, the broadcast feed and batched quicksell
+  (see `docs/BACKEND_PENDING.md` for what still needs applying).
+
 ### v35.2 — Bloom, Erode and fairer Leaders
 
 - **Two new keywords** fill the thinnest colours, both gated to their colour:
