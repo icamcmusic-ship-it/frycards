@@ -1570,8 +1570,12 @@ html[data-scheme='dark'] .cl-tag-new {
   position: relative;
   display: block;
   width: 100%;
-  content-visibility: auto;
-  contain-intrinsic-size: auto var(--cih, 240px);
+}
+.po-cell-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  width: 100%;
   cursor: zoom-in;
 }
 .po-cell-card {
@@ -1580,6 +1584,9 @@ html[data-scheme='dark'] .cl-tag-new {
   left: 0;
   display: block;
   transform-origin: top left;
+  /* Off-screen cards in a 49-card box skip layout and paint. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 196px;
 }
 .po-cell .po-badges {
   top: 0;
