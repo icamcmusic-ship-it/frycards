@@ -56,7 +56,12 @@ import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL, POOL_BY_ID } from '../game/poker/cardpool';
 import { CardDef } from '../game/poker/cards';
 import { RARITIES } from '../types';
-import { quicksellCards, setShowcaseCards } from '../lib/supabase';
+import {
+  quicksellCards,
+  quicksellMany,
+  setShowcaseCards,
+  type QuicksellManyItem,
+} from '../lib/supabase';
 import { GradedCard, fetchGradedCards, gradedQuicksellPrice } from './grading';
 import { GradedSlab } from './GradedSlab';
 import { SlabDetailModal } from './SlabDetailModal';
@@ -92,8 +97,8 @@ async function runBulkQuicksell(
   serializedByCard: Map<string, unknown[]>,
   onProgress: (cardsSoFar: number) => void,
 ): Promise<{ credits: number; cards: number; error: string | null }> {
-  let totalCredits = 0;
-  let totalCards = 0;
+  // Every lot goes in ONE quicksell_many call (audit §7 S3), all or nothing.
+  const items: QuicksellManyItem[] = [];
   for (const c of POOL) {
     if (c.type === 'Leader' || (c.rarity || 'Common') !== targetRarity) continue;
     const o = owned.get(c.id);
@@ -102,26 +107,15 @@ async function runBulkQuicksell(
     const reserved = serializedByCard.get(c.id)?.length || 0;
     // Normal copies first, then whatever foil the deck locks still allow.
     const s = sellableSplit(o, locked, reserved);
-    const spareNormal = s.normal;
-    const spareFoil = s.total - s.normal;
     if (s.total <= 0) continue;
-    for (const [foil, qty] of [
-      [false, spareNormal],
-      [true, spareFoil],
-    ] as const) {
-      if (qty <= 0) continue;
-      const { data, error } = await quicksellCards(c.id, qty, foil);
-      if (error) {
-        return { credits: totalCredits, cards: totalCards, error };
-      }
-      if (data) {
-        totalCredits += data.total;
-        totalCards += data.sold;
-        onProgress(totalCards);
-      }
-    }
+    if (s.normal > 0) items.push({ card_id: c.id, qty: s.normal, foil: false });
+    if (s.total - s.normal > 0) items.push({ card_id: c.id, qty: s.total - s.normal, foil: true });
   }
-  return { credits: totalCredits, cards: totalCards, error: null };
+  if (items.length === 0) return { credits: 0, cards: 0, error: null };
+  const { data, error } = await quicksellMany(items);
+  if (error || !data) return { credits: 0, cards: 0, error: error ?? 'Sale failed' };
+  onProgress(data.sold);
+  return { credits: data.total, cards: data.sold, error: null };
 }
 
 /**

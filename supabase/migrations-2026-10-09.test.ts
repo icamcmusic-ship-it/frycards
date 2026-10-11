@@ -7,7 +7,16 @@ import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { placementReward } from '../src/game/poker/rewards';
+import { PLACE_FACTORS } from '../src/game/poker/constants';
+
+/** The 2026-10-09 reward formula (superseded by 20261011000002, whose test
+ * checks the current client mirror). */
+const MODE_MULT = { quick: 0.5, standard: 1, deep: 1.5 } as const;
+function placementReward(place: number, seats: number, mode: keyof typeof MODE_MULT) {
+  const f = PLACE_FACTORS[seats][place - 1];
+  const calc = (lo: number, span: number) => Math.round((lo + span * f) * MODE_MULT[mode]);
+  return { credits: calc(40, 60), xp: calc(25, 35), bpXp: calc(20, 30) };
+}
 
 const A = '11111111-1111-1111-1111-111111111111';
 const MIGRATION = readFileSync(
@@ -53,7 +62,7 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('record_match_placement', () => {
-  test('pays by place exactly as the client preview does', async () => {
+  test('pays by place with the 2026-10-09 formula', async () => {
     for (const [place, seats, mode] of [
       [1, 6, 'standard'],
       [2, 6, 'standard'],

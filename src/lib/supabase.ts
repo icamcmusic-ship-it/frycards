@@ -1,6 +1,7 @@
 import { createClient, Session } from '@supabase/supabase-js';
 import { CardTemplate } from '../types';
 import { isMeteredStorageUrl, METERED_ART_MESSAGE } from './media';
+import { cachedFetch } from './cache';
 import { SHOWCASE_SET } from '../meta/submissions';
 
 // Public (publishable) credentials for the backend. Safe to ship in the
@@ -61,6 +62,38 @@ export function subscribeTable(
     .subscribe();
 
   let removed = false;
+  return () => {
+    if (removed) return;
+    removed = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * The signed-in user's private change feed (audit §7 S1). The database sends
+ * one `changed` broadcast per statement to topic `user:<uid>` whenever that
+ * user's profiles / player_cards / player_inventory rows change; RLS on
+ * realtime.messages lets only that user listen. `onChange` gets the table
+ * name. Returns an unsubscribe function.
+ */
+export function subscribeUserChannel(
+  userId: string,
+  onChange: (table: string) => void,
+): () => void {
+  const channel = supabase
+    .channel(`user:${userId}`, { config: { private: true } })
+    .on('broadcast', { event: 'changed' }, (msg: { payload?: { table?: string } }) => {
+      const table = msg?.payload?.table;
+      if (typeof table === 'string') onChange(table);
+    });
+  let removed = false;
+  // Private channels authorise with the session's JWT.
+  Promise.resolve(supabase.realtime.setAuth())
+    .catch(() => {})
+    .finally(() => {
+      if (!removed) channel.subscribe();
+    });
+
   return () => {
     if (removed) return;
     removed = true;
@@ -839,6 +872,8 @@ export interface Achievement {
   reward_vouchers: number;
   reward_pack_id: string | null;
   sort: number;
+  /** Retired rows kept for their claim records; never shown. */
+  hidden?: boolean;
 }
 
 export interface PlayerAchievement {
@@ -847,27 +882,35 @@ export interface PlayerAchievement {
   claimed: boolean;
 }
 
+const ACHIEVEMENT_CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
+
 export async function fetchAchievements(
   userId: string,
 ): Promise<{ all: Achievement[]; mine: PlayerAchievement[] }> {
-  const [{ data: all, error: allError }, { data: mine, error: mineError }] = await Promise.all([
-    supabase.from('achievements').select('*').order('sort'),
+  // The catalog is static between deploys of new rows, so it is cached (S5);
+  // only the player's own progress is fetched every time.
+  const catalog = cachedFetch('achievements', ACHIEVEMENT_CATALOG_TTL_MS, async () => {
+    const { data, error } = await supabase.from('achievements').select('*').order('sort');
+    if (error) {
+      console.error('fetchAchievements (all) failed:', error.message);
+      // Thrown (not []) — swallowing made an outage render as the misleading
+      // "No achievements" empty state instead of the screen's RETRY path.
+      throw error;
+    }
+    return ((data as Achievement[]) || []).filter((a) => !a.hidden);
+  });
+  const [all, { data: mine, error: mineError }] = await Promise.all([
+    catalog,
     supabase
       .from('player_achievements')
       .select('achievement_id, progress, claimed')
       .eq('user_id', userId),
   ]);
-  if (allError) {
-    console.error('fetchAchievements (all) failed:', allError.message);
-    // Thrown (not []) — swallowing made an outage render as the misleading
-    // "No achievements" empty state instead of the screen's RETRY path.
-    throw allError;
-  }
   if (mineError) {
     console.error('fetchAchievements (mine) failed:', mineError.message);
     throw mineError;
   }
-  return { all: (all as Achievement[]) || [], mine: (mine as PlayerAchievement[]) || [] };
+  return { all, mine: (mine as PlayerAchievement[]) || [] };
 }
 
 export async function claimAchievement(id: string): Promise<string | null> {
@@ -882,6 +925,8 @@ export interface Mission {
   stat_key: string;
   target: number;
   cadence: 'daily' | 'weekly';
+  /** 'core' missions are dealt every period; 'rotating' ones only when picked. */
+  pool?: 'core' | 'rotating';
   reward_credits: number;
   reward_vouchers: number;
   reward_bp_xp: number;
@@ -1488,6 +1533,36 @@ export async function quicksellCards(
   return { data: (data as QuicksellResult) || null, error: rpcError(error) };
 }
 
+export interface QuicksellManyItem {
+  card_id: string;
+  qty: number;
+  foil: boolean;
+}
+
+export interface QuicksellManyResult {
+  ok: boolean;
+  /** Wallet after the sale. */
+  credits: number;
+  /** Cards sold in total. */
+  sold: number;
+  /** Credits paid in total. */
+  total: number;
+  per_item: { card_id: string; foil: boolean; sold: number; unit_price: number; total: number }[];
+}
+
+/**
+ * Sell many (card, foil) lots in ONE transaction (S3): the same checks as
+ * `quicksellCards` per lot (deck locks, Serialized copies), all or nothing.
+ * At most 200 lots per call.
+ */
+export async function quicksellMany(
+  items: QuicksellManyItem[],
+): Promise<{ data: QuicksellManyResult | null; error: string | null }> {
+  if (items.length === 0) return { data: null, error: 'Nothing to sell' };
+  const { data, error } = await supabase.rpc('quicksell_many', { p_items: items });
+  return { data: (data as QuicksellManyResult) || null, error: rpcError(error) };
+}
+
 // ---------------------------------------------------------------------------
 // Creator (admin) tools — every RPC is guarded server-side by assert_creator().
 // ---------------------------------------------------------------------------
@@ -1539,14 +1614,29 @@ export interface CardMarketValue {
 /** Blended (quicksell + player-market-average) reference price shown as the
  * "market value" popup on the expanded card viewer — null avg_price until
  * the card has at least 5 completed player-market sales. */
-export async function fetchCardMarketValue(cardId: string, foil = false): Promise<CardMarketValue> {
-  const { data, error } = await supabase.rpc('get_card_market_value', {
-    p_card_id: cardId,
-    p_foil: foil,
-  });
-  if (error) console.error('fetchCardMarketValue failed:', error.message);
-  if (error || !data) return { sales: 0, avg_price: null };
-  return data as CardMarketValue;
+/** Per-session memo (S8): opening the same card again within 10 minutes
+ * reuses the answer instead of another RPC. Failures are not memoized. */
+const marketValueMemo = new Map<string, { at: number; value: Promise<CardMarketValue> }>();
+const MARKET_VALUE_TTL_MS = 10 * 60 * 1000;
+
+export function fetchCardMarketValue(cardId: string, foil = false): Promise<CardMarketValue> {
+  const key = `${cardId}|${foil ? 1 : 0}`;
+  const hit = marketValueMemo.get(key);
+  if (hit && Date.now() - hit.at < MARKET_VALUE_TTL_MS) return hit.value;
+  const value = (async () => {
+    const { data, error } = await supabase.rpc('get_card_market_value', {
+      p_card_id: cardId,
+      p_foil: foil,
+    });
+    if (error) {
+      console.error('fetchCardMarketValue failed:', error.message);
+      marketValueMemo.delete(key);
+    }
+    if (error || !data) return { sales: 0, avg_price: null } as CardMarketValue;
+    return data as CardMarketValue;
+  })();
+  marketValueMemo.set(key, { at: Date.now(), value });
+  return value;
 }
 
 /** Blended reference price used for shop soft-cap bands (quicksell + market avg). */
@@ -2202,13 +2292,30 @@ export interface OwnedSerializedCard {
   acquired_at: string;
 }
 
+/** The three print-run caps; static, so cached for a day (S2c). */
+async function fetchSerializedSupply(): Promise<{
+  data: { rarity: string; cap: number }[] | null;
+  error: { message: string } | null;
+}> {
+  try {
+    const data = await cachedFetch('serialSupply', 24 * 60 * 60 * 1000, async () => {
+      const { data, error } = await supabase.from('serialized_supply').select('rarity, cap');
+      if (error) throw error;
+      return (data as { rarity: string; cap: number }[]) || [];
+    });
+    return { data, error: null };
+  } catch (e) {
+    return { data: null, error: { message: (e as Error)?.message ?? String(e) } };
+  }
+}
+
 export async function fetchMySerializedCards(userId: string): Promise<OwnedSerializedCard[]> {
   const [{ data, error }, { data: supply, error: supplyError }] = await Promise.all([
     supabase
       .from('player_serialized_cards')
       .select('card_id, rarity, serial_number, acquired_at')
       .eq('user_id', userId),
-    supabase.from('serialized_supply').select('rarity, cap'),
+    fetchSerializedSupply(),
   ]);
   // The cards query failing throws (same contract as fetchCollection); the
   // supply query alone failing degrades to the NaN/"?" cap below instead.

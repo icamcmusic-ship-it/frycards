@@ -4,7 +4,7 @@ import { askConfirm } from './confirm';
 import { loadWishlist } from './wishlist';
 import { useReducedMotion } from './useMotionMode';
 import { Coins, Sparkles, SkipForward, Zap } from 'lucide-react';
-import { PackPull, quicksellCards } from '../lib/supabase';
+import { PackPull, quicksellMany } from '../lib/supabase';
 import { CardDef } from '../game/poker/cards';
 import { POOL_BY_ID } from '../game/poker/cardpool';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
@@ -972,26 +972,21 @@ function SummaryStage({
     let shortfall = false;
     const newlySold = new Set<number>();
     try {
-      for (const g of sellGroups.values()) {
-        const { data, error } = await quicksellCards(g.cardId, g.qty, g.foil);
-        if (error) {
-          if (mountedRef.current) setSellError(error);
-          break;
-        }
-        if (data) {
-          totalCredits += data.total;
-          totalCards += data.sold;
-          // The server can sell fewer than requested (e.g. another tab already
-          // sold/locked some copies) — only mark that many pulls as sold, not
-          // the whole group, or the UI shows cards as gone that the player
-          // still owns.
-          if (data.sold < g.qty) shortfall = true;
-          g.indices.slice(0, data.sold).forEach((i) => newlySold.add(i));
-        }
-        // Count what this call sold first, then stop: if the modal closed
-        // mid-loop, the remaining groups are left unsold but the refresh
-        // below still has to run for the ones that were.
-        if (!mountedRef.current) break;
+      // One quicksell_many call for every group (audit §7 S3), all or nothing.
+      const groups = [...sellGroups.values()];
+      const { data, error } = await quicksellMany(
+        groups.map((g) => ({ card_id: g.cardId, qty: g.qty, foil: g.foil })),
+      );
+      if (error) {
+        if (mountedRef.current) setSellError(error);
+      } else if (data) {
+        totalCredits += data.total;
+        totalCards += data.sold;
+        groups.forEach((g, k) => {
+          const sold = data.per_item[k]?.sold ?? 0;
+          if (sold < g.qty) shortfall = true;
+          g.indices.slice(0, sold).forEach((i) => newlySold.add(i));
+        });
       }
     } catch {
       if (mountedRef.current)
