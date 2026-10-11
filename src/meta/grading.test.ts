@@ -13,6 +13,13 @@ import {
   gradeOddsFor,
   expectedGradeMultiplier,
   expectedSlabValue,
+  gradingEVTable,
+  bestForBands,
+  gradingMinCards,
+  weekSpecial,
+  isoWeek,
+  collectorFavourite,
+  GRADING_COLOURS,
   chanceOfAtLeast,
   gradingVoucherFee,
   VOUCHER_RATE,
@@ -51,7 +58,7 @@ describe('grading economy mirrors', () => {
   it('unit fee mirrors the SQL formula (ceil of base × speed × bulk)', () => {
     expect(gradingUnitFee('tca', 'standard', 1)).toBe(400);
     expect(gradingUnitFee('tca', 'rush', 1)).toBe(Math.ceil(400 * 1.75));
-    expect(gradingUnitFee('amg', 'standard', 10)).toBe(Math.ceil(180 * 0.65));
+    expect(gradingUnitFee('amg', 'standard', 10)).toBe(Math.ceil(150 * 0.65));
     expect(gradingUnitFee('keeper', 'instant', 1)).toBe(70 * 5);
   });
 
@@ -99,11 +106,14 @@ describe('grading economy mirrors', () => {
   });
 
   it("Keeper's half-point bump raises its expected grade, and never past 10", () => {
-    expect(expectedGradeMultiplier('keeper')).toBeGreaterThan(expectedGradeMultiplier('tca'));
-    // TCA and AMG roll the identical table — only the premium differs.
-    expect(expectedGradeMultiplier('tca')).toBe(expectedGradeMultiplier('amg'));
+    expect(expectedGradeMultiplier('keeper')).toBeGreaterThan(expectedGradeMultiplier('amg'));
+    // TCA is strictest: a lower expected multiplier than AMG even with Pristine.
+    expect(expectedGradeMultiplier('tca')).toBeLessThan(expectedGradeMultiplier('amg'));
+    // ...and a crossed (non-direct) TCA roll is worth less still: no Pristine.
+    expect(expectedGradeMultiplier('tca', false)).toBeLessThan(expectedGradeMultiplier('tca'));
     expect(gradeOddsFor('keeper').every(([g]) => g <= 10)).toBe(true);
-    expect(chanceOfAtLeast('keeper', 9)).toBeGreaterThan(chanceOfAtLeast('tca', 9));
+    expect(chanceOfAtLeast('keeper', 9)).toBeGreaterThan(chanceOfAtLeast('amg', 9));
+    expect(chanceOfAtLeast('amg', 9)).toBeGreaterThan(chanceOfAtLeast('tca', 9));
     expect(chanceOfAtLeast('tca', 5)).toBeCloseTo(1, 10);
   });
 
@@ -123,5 +133,52 @@ describe('grading economy mirrors', () => {
     // Never free: the cheapest submission in the game still costs a voucher.
     expect(gradingVoucherFee(70)).toBe(1);
     expect(gradingVoucherFee(1)).toBe(1);
+  });
+
+  it('v2: no company strictly dominates another across rarities', () => {
+    const table = gradingEVTable();
+    const services = ['tca', 'amg', 'keeper'] as const;
+    for (const a of services) {
+      for (const b of services) {
+        if (a === b) continue;
+        // a never beats b on every row
+        expect(table.every((r) => r.net[a] > r.net[b])).toBe(false);
+      }
+      expect(table.some((r) => r.best === a)).toBe(true);
+    }
+    const bands = bestForBands();
+    expect(bands.map((b) => b.service)).toEqual(['keeper', 'amg', 'tca']);
+    expect(bands[1].from).toBeGreaterThan(150);
+    expect(bands[2].from).toBeGreaterThan(300);
+  });
+
+  it('v2: pristine, pop and reputation modifiers on the quicksell mirror', () => {
+    const gem = gradedQuicksellPrice('Rare', false, 10, 'tca');
+    expect(gradedQuicksellPrice('Rare', false, 10, 'tca', { pristine: true })).toBe(
+      Math.ceil(40 * 40 * 1.6),
+    );
+    expect(gem).toBe(Math.ceil(40 * 12 * 1.6));
+    expect(gradedQuicksellPrice('Rare', false, 9, 'amg', { pop: 1 })).toBe(
+      Math.ceil(40 * 4.5 * 1.3 * 1.1),
+    );
+    expect(gradedQuicksellPrice('Rare', false, 9, 'tca', { pop: 1 })).toBe(
+      Math.ceil(40 * 4.5 * 1.6),
+    );
+    expect(gradedQuicksellPrice('Rare', false, 9, 'keeper', { favourite: 'keeper' })).toBe(
+      Math.ceil(40 * 4.5 * 1.15),
+    );
+    expect(gradingMinCards('amg')).toBe(3);
+  });
+
+  it('v2: weekly special and collector favourite are deterministic', () => {
+    // ISO 2026-W41 (Oct 5–11): h = (202641 * 7919) % 10007
+    const h = (202641 * 7919) % 10007;
+    expect(weekSpecial(new Date('2026-10-11T12:00:00Z'))).toEqual({
+      service: ['tca', 'amg', 'keeper'][h % 3],
+      colour: GRADING_COLOURS[Math.floor(h / 3) % 7],
+    });
+    expect(isoWeek(new Date('2021-01-03T00:00:00Z'))).toEqual({ year: 2020, week: 53 });
+    expect(collectorFavourite(new Date('2026-01-01T05:00:00Z'))).toBe('tca');
+    expect(collectorFavourite(new Date('2026-01-02T05:00:00Z'))).toBe('amg');
   });
 });
