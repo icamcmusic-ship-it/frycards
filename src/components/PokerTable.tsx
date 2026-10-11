@@ -75,6 +75,7 @@ import {
   type ExtraCost,
   type LogEntry,
   type Match,
+  type SeatStats,
   type MatchSetup,
   type PCard,
 } from '../game/poker/engine';
@@ -84,7 +85,7 @@ import { LOCATION_TEMPLATES, ruleText } from '../game/poker/locations';
 import { ordinal, placementReward } from '../game/poker/rewards';
 import { runBots } from '../game/poker/sim';
 import { isHidden, viewFor } from '../game/poker/view';
-import type { MatchResult } from '../lib/supabase';
+import type { MatchResult, MatchStats } from '../lib/supabase';
 import { isVideoSrc, mediaUrl } from '../lib/media';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { cn } from '../lib/utils';
@@ -103,7 +104,6 @@ import {
   loadHandSort,
   loadPauseOnTarget,
   loadTimerMode,
-  rewardFloorMs,
   saveAmountsInBB,
   saveAutoDeal,
   saveCpuSpeed,
@@ -115,7 +115,6 @@ import {
   type HandSort,
   type TimerMode,
 } from '../meta/matchPrefs';
-import { MetaContext } from '../meta/MetaContext';
 import { recordMatch } from '../meta/matchHistory';
 import { askConfirm } from '../meta/confirm';
 import { useReducedMotion } from '../meta/useMotionMode';
@@ -142,11 +141,6 @@ const BOARD_X2_MIN_FELT_PX = 450;
 /** A human action this soon after the previous one, or after the decision
  * first appeared, is the tail of a double-click / double-tap and is dropped. */
 export const ACT_GUARD_MS = 350;
-/** Margin over the server's reward floor: the ticket is minted a moment after
- * the table mounts (and may be re-minted after a failed first try). */
-const FLOOR_MARGIN_MS = 10_000;
-/** Back-off for re-sending a result the server still called `too_early`. */
-const TOO_EARLY_RETRY_MS = [15_000, 30_000, 60_000, 120_000];
 
 export interface PokerTableProps {
   key?: React.Key;
@@ -156,17 +150,40 @@ export interface PokerTableProps {
   onExit: () => void;
   onRematch: () => void;
   /** Called once when the match ends (or the human concedes) with the human's
-   * place — held back until the server's reward floor has passed (A20), and
-   * re-sent with back-off when the server still answers `too_early`. */
-  onResult?: (r: { place: number; seats: number; mode: MatchSetup['mode']; hands: number }) => void;
+   * place, the hands played and the human seat's MatchStats. The app owns
+   * the reward floor (it holds and re-sends on `too_early`, see
+   * src/meta/pendingResult.ts). */
+  onResult?: (r: MatchReport) => void;
   reward?: MatchResult | null;
   rewardError?: string | null;
   rewardPending?: boolean;
+  /** The server asked to wait: the reward pays at this time (ms epoch). */
+  rewardHoldUntil?: number | null;
+  /** Replays, pasted decks, the Daily Table, practice: nothing is paid. */
+  unrewarded?: boolean;
+  /** A label for this table in history (e.g. "Daily 2026-10-11"). */
+  tableTag?: string;
+  /** Share line for the game-over COPY RESULT (the Daily Table). */
+  shareLine?: (place: number, seats: number, hands: number) => string;
   /** The human's deck as a share code, for match history. */
   humanDeckCode?: string;
 }
 
-type MatchReport = { place: number; seats: number; mode: MatchSetup['mode']; hands: number };
+export type MatchReport = {
+  place: number;
+  seats: number;
+  mode: MatchSetup['mode'];
+  hands: number;
+  stats: MatchStats;
+};
+
+/** The server's MatchStats from the engine's tally (recap-only fields dropped). */
+export function toMatchStats(st: SeatStats | undefined, leaderId: string): MatchStats {
+  if (!st) return { leader: leaderId };
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { biggest_pot, best_category, called_out, ...rest } = st;
+  return { ...rest, kw: [...new Set(rest.kw)], leader: leaderId };
+}
 
 /** A seat's last action this street, for its speech burst (U1). */
 interface Bubble {
@@ -488,6 +505,10 @@ export function PokerTable({
   reward,
   rewardError,
   rewardPending,
+  rewardHoldUntil = null,
+  unrewarded = false,
+  tableTag,
+  shareLine,
   humanDeckCode,
 }: PokerTableProps) {
   const [match, setMatch] = useState<Match>(() => createMatch(setup));
@@ -536,7 +557,6 @@ export function PokerTable({
   const feltH = felt.h;
   // Live: a change in Settings (or the OS) reaches a match already running (S-3).
   const reduced = useReducedMotion();
-  const signedIn = !!useContext(MetaContext)?.session;
 
   const view = useMemo(() => viewFor(match, HUMAN), [match]);
   const h = view.hand;
@@ -820,18 +840,12 @@ export function PokerTable({
 
   // ---- match end: history + result -----------------------------------------
   const reported = useRef(false);
-  const startedAt = useRef(0);
-  useEffect(() => {
-    startedAt.current = Date.now();
-  }, []);
-  /** A result waiting on the server's reward floor (A20). */
-  const [held, setHeld] = useState<{ r: MatchReport; dueAt: number } | null>(null);
-  const [sent, setSent] = useState<MatchReport | null>(null);
   const report = useCallback(
     (m: Match, place: number) => {
       if (reported.current) return;
       reported.current = true;
       const others = m.seats.filter((s) => s.idx !== HUMAN).map((s) => s.name);
+      const st = m.stats?.[HUMAN];
       recordMatch({
         seed: m.seed,
         finishedAt: Date.now(),
@@ -845,55 +859,36 @@ export function PokerTable({
         cpuLabel: others.join(', '),
         humanDeck: humanDeckCode,
         finalStack: m.seats[HUMAN].stack,
+        leader: m.seats[HUMAN].leader.name,
+        opponents: m.seats.filter((s) => s.idx !== HUMAN).map((s) => s.leader.name),
+        tag: tableTag,
+        unrewarded: unrewarded || undefined,
+        recap: st
+          ? {
+              handsWon: st.hands_won,
+              showdownWins: st.showdown_wins,
+              biggestPot: st.biggest_pot,
+              powersCast: st.powers_cast,
+              calledOut: st.called_out,
+              bestCategory: st.best_category,
+            }
+          : undefined,
       });
-      const r: MatchReport = { place, seats: m.seats.length, mode: m.mode, hands: m.handNo };
-      const dueAt =
-        startedAt.current +
-        rewardFloorMs(MODES[m.mode].minMatchMs, m.seats.length) +
-        FLOOR_MARGIN_MS;
-      // A guest earns nothing, so there is nothing to wait for.
-      if (signedIn && Date.now() < dueAt) setHeld({ r, dueAt });
-      else {
-        setSent(r);
-        onResult?.(r);
-      }
+      if (unrewarded) return;
+      onResult?.({
+        place,
+        seats: m.seats.length,
+        mode: m.mode,
+        hands: m.handNo,
+        stats: toMatchStats(st, m.seats[HUMAN].leader.id),
+      });
     },
-    [onResult, setup, humanDeckCode, signedIn],
+    [onResult, setup, humanDeckCode, unrewarded, tableTag],
   );
   useEffect(() => {
     if (match.phase === 'over' && match.placements)
       report(match, match.placements.indexOf(HUMAN) + 1);
   }, [match, report]);
-  // Release a held result once the floor has passed.
-  useEffect(() => {
-    if (!held) return;
-    const t = window.setTimeout(
-      () => {
-        setHeld(null);
-        setSent(held.r);
-        onResult?.(held.r);
-      },
-      Math.max(0, held.dueAt - Date.now()),
-    );
-    return () => window.clearTimeout(t);
-  }, [held, onResult]);
-  // The server still said too early (a slow ticket mint): try again with
-  // back-off while the table is open — the ticket stays unredeemed.
-  const tooEarly =
-    reward == null &&
-    !rewardPending &&
-    !!rewardError &&
-    /too quickly|too_early|too early/i.test(rewardError);
-  const [retries, setRetries] = useState(0);
-  useEffect(() => {
-    if (!tooEarly || !sent || retries >= TOO_EARLY_RETRY_MS.length) return;
-    const t = window.setTimeout(() => {
-      setRetries((n) => n + 1);
-      onResult?.(sent);
-    }, TOO_EARLY_RETRY_MS[retries]);
-    return () => window.clearTimeout(t);
-  }, [tooEarly, sent, retries, onResult]);
-  const rewardWaiting = !!held || (tooEarly && retries < TOO_EARLY_RETRY_MS.length);
 
   const concede = async () => {
     if (over) {
@@ -924,16 +919,6 @@ export function PokerTable({
     matchRef.current = m;
     setMatch(m);
     setSeq(actionsRef.current.length);
-  };
-
-  /** Leaving with a result still held forfeits its reward: ask first. */
-  const leave = (go: () => void) => async () => {
-    if (
-      rewardWaiting &&
-      !(await askConfirm('Leave now? This match’s reward has not been paid yet and will be lost.'))
-    )
-      return;
-    go();
   };
 
   // ---- derived display ------------------------------------------------------
@@ -1041,7 +1026,7 @@ export function PokerTable({
           data-coach-avoid
         >
           <button
-            onClick={over ? leave(onExit) : concede}
+            onClick={over ? onExit : concede}
             className={cn(
               'btn-pop heading-font fs-xs px-3 ink-border-sm',
               narrow ? 'min-h-[32px] py-1' : 'py-1',
@@ -1421,13 +1406,14 @@ export function PokerTable({
           <GameOver
             match={match}
             conceded={conceded}
-            onExit={leave(onExit)}
-            onRematch={leave(onRematch)}
+            onExit={onExit}
+            onRematch={onRematch}
             reward={reward}
-            rewardError={rewardWaiting ? null : rewardError}
+            rewardError={rewardError}
             rewardPending={rewardPending}
-            heldUntil={held?.dueAt ?? null}
-            retrying={tooEarly && retries < TOO_EARLY_RETRY_MS.length}
+            heldUntil={rewardHoldUntil}
+            unrewarded={unrewarded}
+            shareLine={shareLine}
           />
         )}
         {/* The coach sits above everything (z-70), so it steps aside while a
@@ -3074,7 +3060,8 @@ function GameOver({
   rewardError,
   rewardPending,
   heldUntil,
-  retrying,
+  unrewarded,
+  shareLine,
 }: {
   match: Match;
   conceded: boolean;
@@ -3083,9 +3070,10 @@ function GameOver({
   reward?: MatchResult | null;
   rewardError?: string | null;
   rewardPending?: boolean;
-  /** The result is held until the server's reward floor passes (A20). */
+  /** The server asked to wait: the reward pays at this time (A20). */
   heldUntil: number | null;
-  retrying: boolean;
+  unrewarded: boolean;
+  shareLine?: (place: number, seats: number, hands: number) => string;
 }) {
   const live = standings(match);
   const concededNow = conceded && match.phase !== 'over' && !match.seats[HUMAN].busted;
@@ -3163,11 +3151,11 @@ function GameOver({
         ) : heldUntil !== null ? (
           <div className="text-center text-xs font-bold" role="status">
             Reward unlocks in {fmtClock(heldUntil - (nowTs || heldUntil))} — a match has to run a
-            minimum time to pay. Stay on this screen and it is paid automatically.
+            minimum time to pay. It is saved: you can leave, and it is paid automatically.
           </div>
-        ) : retrying ? (
-          <div className="text-center text-xs font-bold" role="status">
-            The server needs a little longer before it pays this match — retrying shortly…
+        ) : unrewarded ? (
+          <div className="text-center fs-xs font-bold text-[var(--c-steel)]">
+            Practice table — no credits or XP for this one.
           </div>
         ) : rewardPending ? (
           <div className="text-center text-xs font-bold animate-pulse">Saving your reward…</div>

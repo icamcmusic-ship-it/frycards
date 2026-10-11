@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
   fetchCardTemplates,
-  recordMatchPlacement,
   beginMatch,
   MatchResult,
   MatchResultStatus,
   type MatchStats,
 } from './lib/supabase';
+import { minPaidHands } from './game/poker/rewards';
+import { holdLabel, loadPending, submitResult, submitting } from './meta/pendingResult';
 import { legalModes } from './game/poker/deck';
 import { MODES, MODE_IDS, MAX_SEATS, MIN_SEATS, type ModeId } from './game/poker/constants';
 import { POOL_BY_ID, applyCardPool } from './game/poker/cardpool';
@@ -49,25 +50,36 @@ const CATALOG_CACHE_KEY = 'catalog';
  * it. Cards approved in between show up within this window. */
 const CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
 
-/** One reward round-trip gets this long before it counts as a failed attempt. */
-const RECORD_ATTEMPT_MS = 20_000;
-/** "m:ss" until `until` (ms epoch). */
-function holdLabel(until: number): string {
-  const sec = Math.max(0, Math.ceil((until - Date.now()) / 1000));
-  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-}
-
-/** Longest a `too_early` result is held for a retry (the Deep 6-seat floor is 20 min). */
-const MAX_HOLD_MS = 21 * 60 * 1000;
-
-const NO_REWARD_REASON: Record<MatchResultStatus, string> = {
-  too_early: 'No reward: the match ended too quickly to count.',
-  expired: 'No reward: this match was started too long ago to count.',
-  duplicate: 'This match was already recorded — check your credits.',
-  invalid: 'No reward for this match (it was not recognised by the server).',
-  capped: "No reward: you've reached today's payout limit. It resets within 24 hours.",
-  too_short: 'No reward: a match has to last a few hands before a finish below 1st pays.',
+type MatchReport = {
+  place: number;
+  seats: number;
+  mode: ModeId;
+  /** Hands the match lasted (the server's concede rule, audit F-5). */
+  hands?: number;
+  /** The human seat's tally for poker missions (see MatchStats). */
+  stats?: MatchStats;
 };
+
+/** Why a finished match paid nothing, in the player's terms. */
+export function noRewardReason(
+  status: MatchResultStatus,
+  r: { seats: number; hands?: number },
+): string {
+  switch (status) {
+    case 'too_early':
+      return 'No reward: the match ended too quickly to count.';
+    case 'expired':
+      return 'No reward: this match was started too long ago to count.';
+    case 'duplicate':
+      return 'This match was already recorded — check your credits.';
+    case 'capped':
+      return "No reward: you've reached today's payout limit. It resets within 24 hours.";
+    case 'too_short':
+      return `No reward: at ${r.seats} seats a finish below 1st pays only after ${minPaidHands(r.seats)} hands${r.hands !== undefined ? ` — this one lasted ${r.hands}` : ''}. Winning the table always pays.`;
+    default:
+      return 'No reward for this match (it was not recognised by the server).';
+  }
+}
 
 /**
  * Route-level code splitting (finding 2.1).
@@ -420,7 +432,8 @@ export function Game({
   const { session, profile, refreshProfile } = useMeta();
   const { toast } = useToast();
   // One roll per mount — the gameKey remount (REMATCH) rolls a fresh table.
-  const [matchSeed] = useState(newMatchSeed);
+  // A replay (Q1) or the Daily Table brings its own seed.
+  const [matchSeed] = useState(() => setup.seed ?? newMatchSeed());
   const [reward, setReward] = useState<MatchResult | null>(null);
   const [rewardError, setRewardError] = useState<string | null>(null);
   // While the result call is in flight both of the above stay null — this
@@ -446,8 +459,10 @@ export function Game({
   // The ticket records the table's mode and seats (A21); the server pays on those.
   const setupMode = setup.mode;
   const setupSeats = setup.seats;
+  const unrewarded = !!setup.unrewarded;
   useEffect(() => {
-    if (!ticketUserId) return; // guests never earn a reward, so never mint a ticket
+    // Guests and unrewarded tables never earn a reward, so never mint a ticket.
+    if (!ticketUserId || unrewarded) return;
     let cancelled = false;
     let timer: number | undefined;
     const mint = (retriesLeft: number) => {
@@ -468,73 +483,47 @@ export function Game({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [ticketUserId, setupMode, setupSeats]);
+  }, [ticketUserId, setupMode, setupSeats, unrewarded]);
 
-  // The reward is paid by finishing place — never by chips. Retry a couple of
-  // times before telling the player their reward didn't sync.
-  const onResult = async (r: {
-    place: number;
-    seats: number;
-    mode: ModeId;
-    /** Hands the match lasted (the server's concede rule, audit F-5). */
-    hands?: number;
-    /** The human seat's tally for poker missions (see MatchStats). */
-    stats?: MatchStats;
-  }) => {
-    if (!session) return;
+  // The reward is paid by finishing place — never by chips. One path
+  // (src/meta/pendingResult.ts): sent at once, held for the server's
+  // `retryAfterMs` on `too_early`, and kept in localStorage so a reload or
+  // BACK TO MENU still pays it.
+  const onResult = async (r: MatchReport) => {
+    if (!session || setup.unrewarded) return;
     setRewardPending(true);
-    let holdUsed = false;
     try {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) await new Promise((res) => setTimeout(res, 1500));
-        // Bounded: a request that stalls instead of failing would otherwise
-        // hold rewardPending (and with it REMATCH / BACK TO MENU) forever.
-        const { data, error, status, retryable, retryAfterMs } = await withTimeout(
-          recordMatchPlacement(r.place, r.seats, r.mode, matchIdRef.current ?? undefined, {
-            stats: r.stats,
-            hands: r.hands,
-          }),
-          RECORD_ATTEMPT_MS,
-          { data: null, error: 'timed out', status: null, retryable: false, retryAfterMs: null },
-        );
-        if (retryable && retryAfterMs !== null && retryAfterMs <= MAX_HOLD_MS && !holdUsed) {
-          // The match beat the server's minimum length in wall time (SKIP TO
-          // RESULT, fast bots). The ticket stays valid: hold the result (and
-          // with it REMATCH / BACK) until it pays, then send it again.
-          holdUsed = true;
-          setRewardHoldUntil(Date.now() + retryAfterMs);
-          await new Promise((res) => setTimeout(res, retryAfterMs + 1000));
-          setRewardHoldUntil(null);
-          attempt = -1;
-          continue;
-        }
-        if (status) {
-          setRewardError(NO_REWARD_REASON[status]);
-          return;
-        }
-        if (data) {
-          setReward(data);
-          // The realtime profile subscription catches the wallet up anyway.
-          refreshProfile().catch(() => {});
-          return;
-        }
-        if (!error) {
-          setRewardError(
-            attempt > 0
-              ? 'This match may already have been recorded — check your credits.'
-              : NO_REWARD_REASON.invalid,
-          );
-          return;
-        }
-      }
-      setRewardError(
-        "Couldn't record this match's result — check your connection and try again from the menu.",
+      const out = await submitResult(
+        {
+          matchId: matchIdRef.current,
+          place: r.place,
+          seats: r.seats,
+          mode: r.mode,
+          hands: r.hands,
+          stats: r.stats,
+          at: Date.now(),
+        },
+        setRewardHoldUntil,
       );
+      if (out.kind === 'paid') {
+        setReward(out.data);
+        // The realtime profile subscription catches the wallet up anyway.
+        refreshProfile().catch(() => {});
+      } else if (out.kind === 'refused') {
+        setRewardError(noRewardReason(out.status, r));
+      } else if (out.kind === 'unknown') {
+        setRewardError('This match may already have been recorded — check your credits.');
+      } else {
+        setRewardError(
+          "Couldn't record this match's result yet — it is saved and will be sent again next time you open FryCards.",
+        );
+      }
     } catch {
       setRewardError(
-        "Couldn't record this match's result — check your connection and try again from the menu.",
+        "Couldn't record this match's result yet — it is saved and will be sent again next time you open FryCards.",
       );
     } finally {
+      setRewardHoldUntil(null);
       setRewardPending(false);
     }
   };
@@ -550,7 +539,7 @@ export function Game({
       if (rewardPending && !(allowDuringHold && rewardHoldUntil !== null)) {
         toast(
           rewardHoldUntil !== null
-            ? `Your reward credits in ${holdLabel(rewardHoldUntil)} — rematch after that.`
+            ? `Reward unlocks in ${holdLabel(rewardHoldUntil)} — rematch after that.`
             : 'Saving your reward… one moment.',
         );
         return;
@@ -566,7 +555,7 @@ export function Game({
           className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs px-3 py-1 heading-font fs-sm animate-pulse"
         >
           {rewardHoldUntil !== null
-            ? `Reward credits in ${holdLabel(rewardHoldUntil)}`
+            ? `Reward unlocks in ${holdLabel(rewardHoldUntil)}`
             : 'Saving your reward…'}
         </div>
       )}
@@ -580,6 +569,8 @@ export function Game({
         reward={reward}
         rewardError={rewardError}
         rewardPending={rewardPending}
+        rewardHoldUntil={rewardHoldUntil}
+        unrewarded={unrewarded || !session}
       />
     </div>
   );
@@ -665,6 +656,21 @@ function AppInner({
   const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
   const { toast } = useToast();
   const [match, setMatchState] = useState<PlaySetup | null>(null);
+  // A result stored by an earlier visit (reload or closed tab while the
+  // reward floor was running) is sent once per signed-in session (A20).
+  const resumeUserId = session?.user?.id;
+  useEffect(() => {
+    if (!resumeUserId || submitting()) return;
+    const p = loadPending();
+    if (!p) return;
+    submitResult(p).then((out) => {
+      if (out.kind === 'paid')
+        toast(`Your last match paid ${out.data.reward} credits (+${out.data.xp_gained} XP).`);
+      else if (out.kind === 'refused') toast(noRewardReason(out.status, p));
+    });
+    // Once per user: the stored result is cleared as soon as it is answered.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeUserId]);
   const setMatch = (m: PlaySetup | null) => {
     setMatchState(m);
     onMatchChange(m !== null);

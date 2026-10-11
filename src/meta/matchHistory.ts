@@ -47,6 +47,24 @@ export interface MatchRecord {
   humanDeck?: string;
   /** The human's final stack in chips (older entries were saved in chip units). */
   finalStack?: number;
+  /** The human's Leader name. */
+  leader?: string;
+  /** The other seats' Leader names. */
+  opponents?: string[];
+  /** A table label: "Replay", "Daily 2026-10-11", "Practice"… */
+  tag?: string;
+  /** Paid nothing by design (replay, pasted deck, daily, practice). */
+  unrewarded?: boolean;
+  /** The engine's tally for the human (Q16). */
+  recap?: {
+    handsWon: number;
+    showdownWins: number;
+    biggestPot: number;
+    powersCast: number;
+    calledOut: number;
+    /** Best hand category won with at showdown (-1 = none). */
+    bestCategory: number;
+  };
   // -- Retired-game fields, still read from old records --
   turns?: number;
   firstPlayer?: 'P1' | 'P2';

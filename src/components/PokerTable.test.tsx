@@ -18,7 +18,6 @@ import { rngOn } from '../game/poker/rng';
 import { cpuTableSetup } from '../game/poker/sim';
 import { ConfirmHost } from '../meta/confirm';
 import { ToastProvider } from '../meta/toast';
-import { MetaContext } from '../meta/MetaContext';
 
 function setupFor(seats: number, seed: number) {
   const rng = rngOn({ rng: seed });
@@ -230,21 +229,19 @@ describe('concede (A16/A24)', () => {
   });
 });
 
-describe('reward floor (A20)', () => {
-  test('a result that would beat the server floor is held, then sent once', async () => {
-    const onResult = vi.fn();
+describe('match result (A20: the app owns the reward floor)', () => {
+  const concedeNow = async (unrewarded = false, onResult = vi.fn()) => {
     render(
-      <MetaContext.Provider value={{ session: { user: { id: 'u' } } } as never}>
-        <ToastProvider>
-          <PokerTable
-            setup={setupFor(2, 7)}
-            onExit={() => {}}
-            onRematch={() => {}}
-            onResult={onResult}
-          />
-          <ConfirmHost />
-        </ToastProvider>
-      </MetaContext.Provider>,
+      <ToastProvider>
+        <PokerTable
+          setup={setupFor(2, 7)}
+          onExit={() => {}}
+          onRematch={() => {}}
+          onResult={onResult}
+          unrewarded={unrewarded}
+        />
+        <ConfirmHost />
+      </ToastProvider>,
     );
     expect(untilHuman('bet')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'CONCEDE' }));
@@ -256,11 +253,24 @@ describe('reward floor (A20)', () => {
       fireEvent.click(buttons[buttons.length - 1]);
     });
     step(1000);
-    expect(onResult).not.toHaveBeenCalled();
-    expect(screen.getByText(/Reward unlocks in/)).toBeTruthy();
-    // Quick heads-up: floor 2 min (+ a margin for the ticket mint).
-    step(3 * 60_000);
+    return onResult;
+  };
+
+  test('the result is sent once, at once, with hands and the MatchStats tally', async () => {
+    const onResult = await concedeNow();
     expect(onResult).toHaveBeenCalledTimes(1);
-    expect(onResult.mock.calls[0][0]).toMatchObject({ place: 2, seats: 2, mode: 'quick' });
+    const r = onResult.mock.calls[0][0];
+    expect(r).toMatchObject({ place: 2, seats: 2, mode: 'quick' });
+    expect(typeof r.hands).toBe('number');
+    expect(r.stats.leader).toBeTruthy();
+    expect(r.stats).not.toHaveProperty('biggest_pot');
+    step(5 * 60_000);
+    expect(onResult).toHaveBeenCalledTimes(1);
+  });
+
+  test('an unrewarded table never reports a result', async () => {
+    const onResult = await concedeNow(true);
+    expect(onResult).not.toHaveBeenCalled();
+    expect(screen.getByText(/no credits or XP/)).toBeTruthy();
   });
 });
