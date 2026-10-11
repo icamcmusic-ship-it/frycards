@@ -737,3 +737,100 @@ html[data-motion='reduced'] .splash-indeterminate {
   width: 100%;
   opacity: 0.5;
 }
+
+/* ---------------------------------------------------------------------------
+   Poker table motion (AUDIT-2026-10-11 §2 section 0): speech bursts (U1),
+   stack deltas (U7), the "a power is aimed at you" flash (U4), the spotlight
+   fade. Tailwind v4's translate utilities use the separate `translate`
+   property, so these keyframes animate `transform` without fighting them. Under reduced motion each keeps a plain fade or holds still — the
+   information stays, only the movement goes.
+   --------------------------------------------------------------------------- */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes speech-burst-kf {
+  0% {
+    transform: scale(0.6) rotate(-6deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-2deg);
+  }
+}
+.speech-burst {
+  animation: speech-burst-kf 0.22s ease-out both;
+}
+/* The burst's tail, pointing down at the plate. */
+.speech-burst::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  margin-left: -5px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--c-ink);
+}
+@keyframes chip-float-kf {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-22px);
+    opacity: 0;
+  }
+}
+.chip-float {
+  animation: chip-float-kf 0.9s ease-out both;
+}
+@keyframes chip-fade-kf {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes targeted-flash-kf {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 4px var(--c-red);
+  }
+  50% {
+    box-shadow: inset 0 0 0 8px var(--c-red);
+  }
+}
+.targeted-flash {
+  box-shadow: inset 0 0 0 4px var(--c-red);
+  animation: targeted-flash-kf 0.6s ease-in-out 3;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion='full']) .speech-burst,
+  html:not([data-motion='full']) .targeted-flash {
+    animation: none;
+  }
+  html:not([data-motion='full']) .chip-float {
+    animation: chip-fade-kf 0.9s linear both;
+  }
+}
+html[data-motion='reduced'] .speech-burst,
+html[data-motion='reduced'] .targeted-flash {
+  animation: none;
+}
+html[data-motion='reduced'] .chip-float {
+  animation: chip-fade-kf 0.9s linear both;
+}

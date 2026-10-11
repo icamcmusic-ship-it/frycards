@@ -245,7 +245,15 @@ const RING_CSS = `
 html[data-motion='reduced'] .coach-ring { animation: none; }
 `;
 
-export function CoachOverlay({ stage }: { stage: string }) {
+export function CoachOverlay({
+  stage,
+  onShowingChange,
+}: {
+  stage: string;
+  /** Told whenever a callout appears or goes: the table runs with no clocks
+   * while the coach is talking (AUDIT-2026-10-11 TM-4). */
+  onShowingChange?: (showing: boolean) => void;
+}) {
   const [dismissed, setDismissed] = useState(isCoachDone);
   /** The step on screen; `last` = every scripted idea has now been shown. */
   const [step, setStep] = useState<((typeof SCRIPT)[number] & { last: boolean }) | null>(null);
@@ -275,6 +283,14 @@ export function CoachOverlay({ stage }: { stage: string }) {
   // popovers wait their turn (see holdKeywordIntros).
   const active = !dismissed && !!step;
   useEffect(() => (active ? holdKeywordIntros() : undefined), [active]);
+  const notify = useRef(onShowingChange);
+  useEffect(() => {
+    notify.current = onShowingChange;
+  });
+  useEffect(() => {
+    notify.current?.(active);
+  }, [active]);
+  useEffect(() => () => notify.current?.(false), []);
 
   const boxRef = useRef<HTMLDivElement>(null);
   const [target, setTarget] = useState<Rect | null>(null);

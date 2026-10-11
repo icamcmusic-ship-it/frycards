@@ -120,6 +120,14 @@ async function shot(page: Page, name: string): Promise<void> {
 /** One driver step: act on whatever the table is asking for. Returns a label
  * for what it did (or '' when there was nothing to do). */
 async function step(page: Page, rand: () => number, cov: Coverage): Promise<string> {
+  // A power aimed at the human holds its spotlight (and the bots) until it is
+  // acknowledged ("Pause when a power targets me", on by default).
+  const gotIt = page.getByRole('button', { name: /^GOT IT/ });
+  if ((await gotIt.count()) && (await gotIt.isVisible())) {
+    await gotIt.click();
+    return 'got-it';
+  }
+
   // Busted: spectate a moment, then skip.
   const skip = page.getByRole('button', { name: /SKIP TO RESULT/ });
   if ((await skip.count()) && (await skip.isVisible())) {
