@@ -362,8 +362,8 @@ export function SettingsScreen({
           <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
             <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
               How well the bots at your table play — how they read their hands and when they bet and
-              cast. Takes effect from your next match; rewards are the same at every level. Saved
-              locally.
+              cast. Takes effect from your next match; credits pay ×0.8 on Easy, ×1 on Normal and
+              ×1.15 on Hard and Shark. Saved locally.
             </p>
             <div className="flex flex-wrap gap-2">
               {CPU_DIFFICULTIES.map((d) => (

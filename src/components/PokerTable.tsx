@@ -175,6 +175,8 @@ export interface PokerTableProps {
   shareLine?: (place: number, seats: number, hands: number) => string;
   /** The human's deck as a share code, for match history. */
   humanDeckCode?: string;
+  /** Reward tier of the bot difficulty (S-2); omitted pays like Normal. */
+  rewardTier?: 'easy' | 'normal' | 'hard';
 }
 
 export type MatchReport = {
@@ -516,6 +518,7 @@ export function PokerTable({
   rewardHoldUntil = null,
   unrewarded = false,
   tableTag,
+  rewardTier,
   shareLine,
   humanDeckCode,
 }: PokerTableProps) {
@@ -610,33 +613,41 @@ export function PokerTable({
   const lastActAt = useRef(0);
   /** Apply an action. `quiet` (bots, timers) never shows the red notice: a
    * bot's illegal move is not the player's mistake. */
-  const dispatch = useCallback((action: Action, quiet = false) => {
-    const prev = matchRef.current;
-    try {
-      const next = applyAction(prev, action);
-      actionsRef.current.push(action);
-      matchRef.current = next;
-      setMatch(next);
-      setSeq(actionsRef.current.length);
-      if (!quiet) setNotice(null);
-      const b = bubbleFor(prev, next, action);
-      if (b && 'seat' in action && typeof action.seat === 'number') {
-        const seat = action.seat;
-        setBubbles((bs) => ({ ...bs, [seat]: b }));
-        if (b.kind === 'allin') burst('ALL IN!', 'red');
+  const dispatch = useCallback(
+    (action: Action, quiet = false) => {
+      const prev = matchRef.current;
+      try {
+        const next = applyAction(prev, action);
+        actionsRef.current.push(action);
+        matchRef.current = next;
+        setMatch(next);
+        setSeq(actionsRef.current.length);
+        if (!quiet) setNotice(null);
+        const b = bubbleFor(prev, next, action);
+        if (b && 'seat' in action && typeof action.seat === 'number') {
+          const seat = action.seat;
+          setBubbles((bs) => ({ ...bs, [seat]: b }));
+          if (b.kind === 'allin') burst('ALL IN!', 'red');
+        }
+        // U72: a hand that reaches showdown.
+        if (
+          next.hand?.done &&
+          !prev.hand?.done &&
+          next.hand.result &&
+          !next.hand.result.uncontested
+        )
+          burst('SHOWDOWN!');
+        return true;
+      } catch (e) {
+        if (e instanceof IllegalAction) {
+          if (!quiet) setNotice(e.message);
+          return false;
+        }
+        throw e;
       }
-      // U72: a hand that reaches showdown.
-      if (next.hand?.done && !prev.hand?.done && next.hand.result && !next.hand.result.uncontested)
-        burst('SHOWDOWN!');
-      return true;
-    } catch (e) {
-      if (e instanceof IllegalAction) {
-        if (!quiet) setNotice(e.message);
-        return false;
-      }
-      throw e;
-    }
-  }, [burst]);
+    },
+    [burst],
+  );
 
   const [spot, setSpot] = useState<Spot | null>(null);
 
@@ -994,7 +1005,7 @@ export function PokerTable({
     const now = matchRef.current;
     const openPlace = now.seats.filter((x) => !x.busted).length;
     const n = now.seats.length;
-    const pay = placementReward(openPlace, n, now.mode, now.handNo);
+    const pay = placementReward(openPlace, n, now.mode, now.handNo, rewardTier);
     const need = minPaidHands(n);
     const payLine = unrewarded
       ? 'This is a practice table: nothing is paid either way.'
@@ -1549,6 +1560,7 @@ export function PokerTable({
             unrewarded={unrewarded}
             shareLine={shareLine}
             deckCode={humanDeckCode}
+            rewardTier={rewardTier}
           />
         )}
         {/* The coach sits above everything (z-70), so it steps aside while a
@@ -3355,7 +3367,9 @@ function GameOver({
   unrewarded,
   shareLine,
   deckCode,
+  rewardTier,
 }: {
+  rewardTier?: 'easy' | 'normal' | 'hard';
   match: Match;
   conceded: boolean;
   onExit: () => void;
@@ -3388,7 +3402,7 @@ function GameOver({
         return rest;
       })()
     : live;
-  const preview = placementReward(place, match.seats.length, match.mode, match.handNo);
+  const preview = placementReward(place, match.seats.length, match.mode, match.handNo, rewardTier);
   const [nowTs, setNowTs] = useState(0);
   useEffect(() => {
     if (heldUntil === null) return;

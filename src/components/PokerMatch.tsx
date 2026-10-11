@@ -16,7 +16,7 @@ import type { MutatorId } from '../game/poker/mutators';
 import { cpuTableSetup } from '../game/poker/sim';
 import type { DeckRow } from '../lib/supabase';
 import { encodeDeckCode } from '../meta/deckcode';
-import { CPU_DIFFICULTIES, type CpuDifficultyId } from '../meta/matchPrefs';
+import { CPU_DIFFICULTIES, rewardDifficulty, type CpuDifficultyId } from '../meta/matchPrefs';
 import { PokerTable, type PokerTableProps } from './PokerTable';
 
 export type PlaySetup = {
@@ -103,7 +103,10 @@ export default function PokerMatch({
   play: PlaySetup;
   matchSeed: number;
   playerName: string;
-} & Omit<PokerTableProps, 'setup' | 'tutorial' | 'humanDeckCode' | 'tableTag' | 'shareLine'>) {
+} & Omit<
+  PokerTableProps,
+  'setup' | 'tutorial' | 'humanDeckCode' | 'tableTag' | 'shareLine' | 'rewardTier'
+>) {
   const [built] = useState(() => buildTable(play, matchSeed, playerName));
   return (
     <PokerTable
@@ -112,6 +115,7 @@ export default function PokerMatch({
       tutorial={play.tutorial}
       humanDeckCode={built.deckCode}
       tableTag={play.tag}
+      rewardTier={rewardDifficulty(play.difficulty)}
       shareLine={
         play.tag?.startsWith('Daily')
           ? (place, seats, hands) =>

@@ -215,6 +215,17 @@ export function loadCpuDifficulty(): CpuDifficultyId {
   }
 }
 
+/** The reward tier a bot difficulty pays at (S-2): SHARK pays like HARD. */
+export function rewardDifficulty(id: CpuDifficultyId): 'easy' | 'normal' | 'hard' {
+  return id === 'shark' ? 'hard' : id;
+}
+/** Credit multiplier label per difficulty: "×0.8", "×1", "×1.15". */
+export const REWARD_MULT_LABEL: Record<'easy' | 'normal' | 'hard', string> = {
+  easy: '×0.8',
+  normal: '×1',
+  hard: '×1.15',
+};
+
 export function saveCpuDifficulty(id: CpuDifficultyId): void {
   if (!CPU_DIFFICULTIES.some((d) => d.id === id)) return;
   try {

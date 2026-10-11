@@ -29,6 +29,8 @@ import {
   CPU_DIFFICULTIES,
   loadCpuDifficulty,
   saveCpuDifficulty,
+  rewardDifficulty,
+  REWARD_MULT_LABEL,
   type CpuDifficultyId,
 } from './matchPrefs';
 import { usePersistedState } from './usePersistedState';
@@ -240,9 +242,12 @@ export function PlayScreen({
                     saveCpuDifficulty(d.id);
                   }}
                   className={pick(difficulty === d.id)}
-                  title={d.blurb}
+                  title={`${d.blurb} · credits ${REWARD_MULT_LABEL[rewardDifficulty(d.id)]}`}
                 >
                   {d.label}
+                  <span className="ml-1 opacity-70">
+                    {REWARD_MULT_LABEL[rewardDifficulty(d.id)]}
+                  </span>
                 </button>
               ))}
             </div>

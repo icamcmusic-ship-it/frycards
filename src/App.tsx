@@ -245,6 +245,7 @@ export function Game({
   // The ticket records the table's mode and seats (A21); the server pays on those.
   const setupMode = setup.mode;
   const setupSeats = setup.seats;
+  const setupDifficulty = setup.difficulty;
   const unrewarded = !!setup.unrewarded;
   useEffect(() => {
     // Guests and unrewarded tables never earn a reward, so never mint a ticket.
@@ -252,7 +253,12 @@ export function Game({
     let cancelled = false;
     let timer: number | undefined;
     const mint = (retriesLeft: number) => {
-      beginMatch(setupMode, setupSeats).then(({ matchId, error }) => {
+      beginMatch(
+        setupMode,
+        setupSeats,
+        // S-2: SHARK pays like HARD.
+        setupDifficulty === 'shark' ? 'hard' : setupDifficulty,
+      ).then(({ matchId, error }) => {
         if (cancelled) return;
         if (matchId) {
           matchIdRef.current = matchId;
@@ -269,7 +275,7 @@ export function Game({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [ticketUserId, setupMode, setupSeats, unrewarded]);
+  }, [ticketUserId, setupMode, setupSeats, setupDifficulty, unrewarded]);
 
   // The reward is paid by finishing place — never by chips. One path
   // (src/meta/pendingResult.ts): sent at once, held for the server's
