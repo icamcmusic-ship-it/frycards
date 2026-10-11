@@ -31,8 +31,12 @@
  * every deployment as CardBacks/<slug>.webp (+ CardBacks/thumb/); a run with
  * nothing else to do still deploys when one of them is not live yet. `--dry-run` lists what would change and deploys nothing.
  *
- * The player's original link is never deleted: it stays on the submission row
- * (card_submissions.image_url), which is the retention policy for showcase art.
+ * A player's original link is never deleted: it stays on the submission row
+ * (card_submissions.image_url). An UPLOADED original (art_path, private
+ * submission-art bucket) is fetched through a signed URL from the
+ * submission-art Edge Function and deleted by the same function once the
+ * art is published (or 30 days after a denial/withdrawal); see
+ * docs/CARD_SUBMISSIONS.md.
  *
  * Environment:
  *   ART_PIPELINE_TOKEN       shared secret; its SHA-256 is set in the DB with
@@ -63,6 +67,7 @@ import {
   parseCosmetics,
   planCosmetics,
   repoCardBackKeys,
+  submissionArtCall,
 } from './lib/showcase';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
@@ -91,6 +96,23 @@ if (error) {
 }
 const jobs = parseJobs(data);
 console.log(`${jobs.pending.length} pending, ${jobs.published.length} already published.`);
+
+// Uploaded originals (private submission-art bucket) that are published,
+// denied/withdrawn 30+ days ago, or orphaned are deleted through the
+// submission-art Edge Function: one small call per run, never fatal.
+if (!DRY_RUN) {
+  try {
+    const { removed } = await submissionArtCall<{ removed: string[] }>(
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      TOKEN,
+      'cleanup',
+    );
+    if (removed.length > 0) console.log(`Removed ${removed.length} uploaded original(s).`);
+  } catch (e) {
+    console.log(`Upload cleanup skipped: ${(e as Error).message}`);
+  }
+}
 
 const cos = await supabase.rpc('cosmetics_mirror_jobs', { p_token: TOKEN });
 if (cos.error) {
@@ -232,11 +254,29 @@ for (const url of [
 // Repo card backs, always (a Pages deploy replaces the whole site).
 for (const b of cardBacks) write(b.key, fs.readFileSync(path.join(CARDBACK_DIR, b.rel)));
 
-// 2. Encode the queue.
+// 2. Encode the queue. Uploaded originals are fetched through short-lived
+// signed URLs (one Edge Function call for the whole queue).
+let signed: Record<string, string> = {};
+if (jobs.pending.some((j) => j.art_path)) {
+  try {
+    signed = (
+      await submissionArtCall<{ urls: Record<string, string> }>(
+        SUPABASE_URL,
+        SUPABASE_KEY,
+        TOKEN,
+        'sign',
+      )
+    ).urls;
+  } catch (e) {
+    console.log(`Could not sign uploaded art (${(e as Error).message}).`);
+  }
+}
 type Result = { submission_id: string; ok: boolean; art_url?: string; error?: string };
 const results: Result[] = [];
 async function processJob(j: PendingJob): Promise<Result> {
-  const src = await download(j.source_url);
+  const from = j.art_path ? signed[j.art_path] : j.source_url;
+  if (!from) throw new Error('uploaded art could not be signed');
+  const src = await download(from);
   let key: string;
   let body: Buffer;
   if (isVideoSource(j.source_url, j.treatment)) {

@@ -2470,6 +2470,10 @@ export interface CardSubmission {
   art_url?: string | null;
   art_error?: string | null;
   art_updated_at?: string | null;
+  /** Uploaded original in the private submission-art bucket (migration
+   * 20261013000002); image_url then holds a placeholder. Null for links. */
+  art_path?: string | null;
+  art_removed_at?: string | null;
 }
 
 export type ArtPipelineStatus = 'pending' | 'published' | 'failed';
@@ -2542,6 +2546,84 @@ export async function submitCard(input: {
     p_treatment: input.treatment,
   });
   return { data: (data as CardSubmission) || null, error: rpcError(error) };
+}
+
+/** Submit a card whose art was uploaded with uploadSubmissionArt. */
+export async function submitCardWithArt(input: {
+  name: string;
+  type: string;
+  flavor: string;
+  artPath: string;
+  treatment: SubmissionTreatment;
+}): Promise<{ data: CardSubmission | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('submit_card_art', {
+    p_name: input.name,
+    p_type: input.type,
+    p_flavor: input.flavor,
+    p_art_path: input.artPath,
+    p_treatment: input.treatment,
+  });
+  return { data: (data as CardSubmission) || null, error: rpcError(error) };
+}
+
+export const SUBMISSION_ART_BUCKET = 'submission-art';
+
+/**
+ * Upload a submission's art straight to the private submission-art bucket as
+ * `<uid>/<uuid>.<ext>` (RLS: own folder, 3 pending uploads, 8 MB, image /
+ * mp4 / webm). Plain XHR rather than supabase-js so the form can show upload
+ * progress. Resolves to the object path, or rejects with a player-facing
+ * message.
+ */
+export async function uploadSubmissionArt(
+  file: File,
+  ext: string,
+  onProgress?: (fraction: number) => void,
+): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const session = data.session;
+  if (!session) throw new Error('Sign in to upload art.');
+  const path = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${SUPABASE_URL}/storage/v1/object/${SUBMISSION_ART_BUCKET}/${path}`);
+    xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
+    xhr.setRequestHeader('apikey', SUPABASE_KEY);
+    xhr.setRequestHeader('Content-Type', file.type);
+    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      let msg = '';
+      try {
+        msg = JSON.parse(xhr.responseText)?.message ?? '';
+      } catch {
+        /* not json */
+      }
+      reject(
+        new Error(
+          /row-level security|policy/i.test(msg)
+            ? 'Upload refused — you may already have 3 uploads awaiting review.'
+            : /size|too large|payload/i.test(msg)
+              ? 'That file is over the 8 MB limit.'
+              : msg || `Upload failed (HTTP ${xhr.status}).`,
+        ),
+      );
+    };
+    xhr.onerror = () => reject(new Error('Upload failed — check your connection and try again.'));
+    xhr.send(file);
+  });
+  return path;
+}
+
+/** Creator only (RLS): a short-lived link to preview an uploaded original. */
+export async function signedSubmissionArtUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(SUBMISSION_ART_BUCKET)
+    .createSignedUrl(path, 3600);
+  return error ? null : data.signedUrl;
 }
 
 export async function withdrawSubmission(id: string): Promise<string | null> {

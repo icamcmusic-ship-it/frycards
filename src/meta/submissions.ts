@@ -138,6 +138,57 @@ export interface SubmissionDraft {
   flavor: string;
   imageUrl: string;
   treatment: Treatment;
+  /** Set when the art is an uploaded file instead of a link: the URL checks
+   * are skipped and the file is checked by validateArtFile. */
+  artFile?: { type: string; size: number } | null;
+}
+
+/** Mirrors the submission-art bucket (migration 20261013000002). */
+export const UPLOAD_LIMITS = {
+  maxBytes: 8 * 1024 * 1024,
+  imageTypes: ['image/png', 'image/jpeg', 'image/webp'],
+  videoTypes: ['video/mp4', 'video/webm'],
+  /** Uploads not yet attached to a reviewed submission, per account. */
+  maxPendingUploads: 3,
+} as const;
+
+const EXT_FOR_TYPE: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+};
+
+/** Storage extension for an accepted upload type, else null. */
+export function uploadExt(type: string): string | null {
+  return EXT_FOR_TYPE[type] ?? null;
+}
+
+/** Client mirror of the bucket limits plus the treatment rule (video only
+ * for a video Mythic). Returns a player-facing problem or null. */
+export function validateArtFile(f: { type: string; size: number }, treatment: Treatment) {
+  const isVideo = (UPLOAD_LIMITS.videoTypes as readonly string[]).includes(f.type);
+  const isImage = (UPLOAD_LIMITS.imageTypes as readonly string[]).includes(f.type);
+  if (!isVideo && !isImage)
+    return 'Upload a PNG, JPEG or WebP image (or MP4 / WebM for a video Mythic).';
+  if (f.size > UPLOAD_LIMITS.maxBytes) return 'That file is over the 8 MB limit.';
+  if (treatment === 'video_mythic' && !isVideo) return 'A video Mythic needs an MP4 or WebM file.';
+  if (treatment !== 'video_mythic' && isVideo)
+    return 'Video art can only be submitted as a video Mythic.';
+  return null;
+}
+
+/** Cards print at 5:7. A hint (not a rule) when the art is far from it,
+ * since the frame will crop it. */
+export function aspectHint(width: number, height: number): string | null {
+  if (!width || !height) return null;
+  const r = width / height;
+  const target = 5 / 7;
+  if (Math.abs(r - target) / target <= 0.04) return null;
+  return r > target
+    ? 'Wider than 5:7 — the sides will be cropped (see the crop preview).'
+    : 'Taller than 5:7 — the top and bottom will be cropped (see the crop preview).';
 }
 
 /**
@@ -159,6 +210,7 @@ export function validateSubmission(d: SubmissionDraft): string | null {
   if (flavor.length < flavorMin || flavor.length > flavorMax) {
     return `Flavor text must be ${flavorMin}–${flavorMax} characters.`;
   }
+  if (d.artFile) return validateArtFile(d.artFile, d.treatment);
   if (!HTTPS_RE.test(url)) return 'Art link must be an https:// URL.';
   // Stricter than `submit_card`, deliberately: the server accepts any https
   // link, but art served from the project's own storage is billed egress on

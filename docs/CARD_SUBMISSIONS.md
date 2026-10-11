@@ -97,7 +97,7 @@ player submits link ──► pending ──(Creator: APPROVE, one RPC)──►
   the original link; approval never waits for the upload.
 - **Upload**: `.github/workflows/showcase-art.yml` runs
   `scripts/publish-showcase-art.ts`. **Run it by hand** after approving cards:
-  Actions → *Showcase art* → *Run workflow*, with inputs `dry_run` (list the
+  Actions → _Showcase art_ → _Run workflow_, with inputs `dry_run` (list the
   queue, change nothing), `limit` (1–25 cards this run) and an optional
   `reason` for the log. Locally: `npm run art:showcase -- --dry-run --limit=5`.
   A daily schedule (06:17 UTC) is only a fallback: its first step asks the
@@ -149,14 +149,14 @@ player submits link ──► pending ──(Creator: APPROVE, one RPC)──►
 
 ### What you must set up (once)
 
-| Where | Name | What |
-|---|---|---|
-| GitHub Actions secret | `ART_PIPELINE_TOKEN` | any random string, ≥ 24 chars (e.g. `openssl rand -hex 24`) |
-| Supabase SQL (as Creator in the app, or SQL editor) | — | `select creator_set_art_pipeline_token('<same string>');` (in the SQL editor, which has no Creator session: `insert into art_pipeline_secret (id, token_hash) values (1, encode(sha256(convert_to('<same string>','UTF8')),'hex')) on conflict (id) do update set token_hash = excluded.token_hash;`) |
-| GitHub Actions secret | `CLOUDFLARE_API_TOKEN` | API token with **Account → Cloudflare Pages → Edit** |
-| GitHub Actions secret | `CLOUDFLARE_ACCOUNT_ID` | the account id from the Cloudflare dashboard |
-| Actions variable (optional) | `SHOWCASE_PAGES_PROJECT` | default `frycards-showcase` (created on first run) |
-| Actions variable (optional) | `SHOWCASE_ART_BASE_URL` | default `https://<project>.pages.dev` |
+| Where                                               | Name                     | What                                                                                                                                                                                                                                                                                                  |
+| --------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub Actions secret                               | `ART_PIPELINE_TOKEN`     | any random string, ≥ 24 chars (e.g. `openssl rand -hex 24`)                                                                                                                                                                                                                                           |
+| Supabase SQL (as Creator in the app, or SQL editor) | —                        | `select creator_set_art_pipeline_token('<same string>');` (in the SQL editor, which has no Creator session: `insert into art_pipeline_secret (id, token_hash) values (1, encode(sha256(convert_to('<same string>','UTF8')),'hex')) on conflict (id) do update set token_hash = excluded.token_hash;`) |
+| GitHub Actions secret                               | `CLOUDFLARE_API_TOKEN`   | API token with **Account → Cloudflare Pages → Edit**                                                                                                                                                                                                                                                  |
+| GitHub Actions secret                               | `CLOUDFLARE_ACCOUNT_ID`  | the account id from the Cloudflare dashboard                                                                                                                                                                                                                                                          |
+| Actions variable (optional)                         | `SHOWCASE_PAGES_PROJECT` | default `frycards-showcase` (created on first run)                                                                                                                                                                                                                                                    |
+| Actions variable (optional)                         | `SHOWCASE_ART_BASE_URL`  | default `https://<project>.pages.dev`                                                                                                                                                                                                                                                                 |
 
 Without `ART_PIPELINE_TOKEN` the job succeeds doing nothing; without the
 Cloudflare pair it reads the queue and leaves it pending. Cards keep their
@@ -171,6 +171,55 @@ original art either way.
   touches rows that are `approved` and still `pending`.
 - `creator_set_art_pipeline_token`, `creator_retry_submission_art`,
   `get_card_submissions_v2` (Creator only).
+
+### Uploaded art (migration `20261013000002_submission_art_uploads.sql`, applied live)
+
+Players can now **upload the art file** instead of pasting a link (the link
+stays as the PASTE LINK fallback).
+
+- **Bucket** `submission-art`, private: 8 MB, `image/png`, `image/jpeg`,
+  `image/webp`, plus `video/mp4` / `video/webm` (video only for the video
+  Mythic treatment, the same rule `submit_card` applies to links).
+- **RLS on `storage.objects`**: an uploader may INSERT only
+  `<own uid>/<file>` (one level), while not submission-banned and with fewer
+  than **3 pending uploads** (uploads not yet attached to a reviewed
+  submission, orphans included). Only the Creator may SELECT. No UPDATE or
+  DELETE policy, so players cannot overwrite or delete anything.
+- **Client** (`SubmitPanel` in `CardSubmissionsScreen.tsx`,
+  `src/meta/submissions.ts`): drag-drop or file picker, a local preview, a
+  5:7 crop preview with an aspect hint, client-side type/size/treatment
+  checks (`validateArtFile`), and upload progress. The browser uploads
+  **straight to Storage** (XHR, for progress) as `<uid>/<uuid>.<ext>` when
+  the player presses SUBMIT, then calls `submit_card_art(name, type,
+flavor, art_path, treatment)`. If the submit step fails, the uploaded path
+  is reused on retry. No polling anywhere.
+- `submit_card_art` checks the path is the caller's and the object exists,
+  then reuses `submit_card`'s validation with the placeholder image
+  `https://submission-art.invalid/<path>` (the column is NOT NULL), and
+  records `card_submissions.art_path`. An approved upload's card shows that
+  placeholder (a blank frame) until the next workflow run publishes the art.
+- **Review**: the Creator screen previews the original through a 1-hour
+  signed URL (`signedSubmissionArtUrl`); approval keeps sending the
+  placeholder, never the signed link.
+- **Pipeline**: `art_pipeline_jobs` now returns `art_path`. The workflow has
+  no service-role key, so it calls the **`submission-art` Edge Function**
+  (deployed, `verify_jwt` off, authenticated by `ART_PIPELINE_TOKEN`):
+  `sign` returns 10-minute signed URLs for exactly the paths
+  `submission_art_sign_jobs(token)` lists (approved, art pending), which the
+  script downloads, converts and publishes to Cloudflare as before.
+- **Removal**: a trigger marks an upload removable when its art is
+  published, or **30 days** after the submission is denied or withdrawn;
+  uploads never attached to a submission are removable after 2 days. Every
+  workflow run makes one `cleanup` call to the same Edge Function, which
+  deletes `submission_art_cleanup_jobs(token)` through the Storage API and
+  records it with `submission_art_mark_removed`.
+  _Why the Edge Function and not a pending SQL file:_ Storage blocks plain
+  SQL `DELETE` on `storage.objects` (its `protect_delete` trigger), so a SQL
+  file could not remove the bytes anyway, and this way no migration contains
+  a DELETE. The rows' `art_path` is kept as history; `art_removed_at` says
+  the bytes are gone.
+- The cleanup only runs when the workflow runs (it needs `ART_PIPELINE_TOKEN`
+  set); until then removable uploads simply stay in the private bucket.
 
 Pending (not applied, needs a DROP):
 `20261012000092_pending_showcase_cleanup.sql` — fixes the `Item` CHECK bug and
@@ -232,3 +281,7 @@ overrides derives exactly as before (`cardpool.test.ts`).
 - `src/meta/cardEditor.test.ts` — override application, MANUAL seeding,
   validation.
 - `scripts/lib/showcase.test.ts` — key naming, URL handling, job parsing.
+- `supabase/submission-art-uploads.test.ts` — bucket limits, own-folder and
+  3-pending-upload RLS, Creator-only reads, `submit_card_art`, token-gated
+  sign/cleanup lists, removal schedule (PGlite).
+- `src/meta/submissionUpload.test.ts` — client file checks and 5:7 hint.

@@ -17,6 +17,9 @@ recent entries. This file is the archive; that screen is not.
   vouchers).
 - **Slabs pin to your main showcase**: graded slabs and cards now share the
   one profile showcase (6 slots) instead of a separate graded row.
+- **Upload your card art**: Player Showcase submissions take the art file
+  itself (drag-drop or pick, up to 8 MB, with a 5:7 crop preview and upload
+  progress); pasting a link still works.
 - **3D Showroom fullscreen** fills the whole screen instead of leaving the
   bottom half black.
 
