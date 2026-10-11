@@ -693,7 +693,14 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   };
   const removeCard = (id: string) => {
     const idx = cardIds.lastIndexOf(id);
-    if (idx >= 0) setCardIds([...cardIds.slice(0, idx), ...cardIds.slice(idx + 1)]);
+    if (idx < 0) return;
+    const before = cardIds;
+    setCardIds([...cardIds.slice(0, idx), ...cardIds.slice(idx + 1)]);
+    // U74: a removal is one tap to take back.
+    toast(`Removed ${db.get(id)?.name ?? 'card'}`, {
+      ms: 3000,
+      action: { label: 'UNDO', run: () => setCardIds(before) },
+    });
   };
 
   /** Auto-fills a legal deck for the current format from owned cards: one

@@ -18,14 +18,21 @@ import { cn } from '../lib/utils';
  */
 export type ToastKind = 'info' | 'gain' | 'loss';
 
+/** U74: one button on the toast ("UNDO"); it runs once and dismisses. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 interface ToastItem {
   id: number;
   message: string;
   kind: ToastKind;
+  action?: ToastAction;
 }
 
 export interface ToastApi {
-  toast: (message: string, opts?: { kind?: ToastKind; ms?: number }) => void;
+  toast: (message: string, opts?: { kind?: ToastKind; ms?: number; action?: ToastAction }) => void;
 }
 
 const NOOP: ToastApi = { toast: () => undefined };
@@ -55,7 +62,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback<ToastApi['toast']>(
     (message, opts) => {
       const id = nextId.current++;
-      setItems((cur) => [...cur, { id, message, kind: opts?.kind ?? 'info' }].slice(-MAX_VISIBLE));
+      setItems((cur) =>
+        [...cur, { id, message, kind: opts?.kind ?? 'info', action: opts?.action }].slice(
+          -MAX_VISIBLE,
+        ),
+      );
       timers.current.set(
         id,
         window.setTimeout(() => dismiss(id), opts?.ms ?? DEFAULT_MS),
@@ -96,6 +107,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             )}
           >
             <span className="min-w-0">{t.message}</span>
+            {t.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  t.action!.run();
+                  dismiss(t.id);
+                }}
+                className="shrink-0 heading-font fs-xs px-2 min-h-[28px] ink-border-sm bg-[var(--c-yellow)] text-[var(--c-ink)]"
+              >
+                {t.action.label}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => dismiss(t.id)}
