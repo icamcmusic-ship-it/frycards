@@ -78,6 +78,7 @@ import {
   applyInPlace,
   chipsInPlay,
   createMatch,
+  fallbackAction,
   IllegalAction,
   leaderPseudoDef,
   personaFor,
@@ -151,6 +152,8 @@ interface Hooks {
  * engine bug — the seat folds/passes instead and the match carries on. */
 const illegal = new Map<string, number>();
 let abortedMatches = 0;
+/** Bot casts refused because a Veiled cast had already hit the target. */
+let hiddenTargetRetries = 0;
 /** Matches that hit the step guard without ending, and matches whose chip
  * total drifted from the starting stacks (powers move chips, never mint). */
 let unfinishedMatches = 0;
@@ -168,8 +171,9 @@ function play(setup: MatchSetup, botSeed: number, hooks: Hooks = {}): Match {
     if (w.kind === 'start') action = { type: 'start', dt: 2000 };
     else {
       const seat = w.kind === 'window' ? w.seats[0] : w.seat;
-      fallback = w.kind === 'window' ? { type: 'pass', seat } : { type: 'fold', seat };
+      fallback = fallbackAction(m, seat);
       action = botAction(viewFor(m, seat), seat, rng) ?? fallback;
+      if (!action) break;
     }
     hooks.beforeAction?.(m, action);
     try {
@@ -183,9 +187,16 @@ function play(setup: MatchSetup, botSeed: number, hooks: Hooks = {}): Match {
         );
         break;
       }
-      const key = `${action.type}: ${e.message}`;
-      illegal.set(key, (illegal.get(key) ?? 0) + 1);
-      action = fallback;
+      const seat = 'seat' in action ? action.seat : -1;
+      if (e.code === 'hiddenTarget') {
+        // Expected: a Veiled hit the bot's view does not show. Not a fault.
+        hiddenTargetRetries++;
+        action = botAction(viewFor(m, seat), seat, rng, { noPowers: true }) ?? fallback;
+      } else {
+        const key = `${action.type}: ${e.message}`;
+        illegal.set(key, (illegal.get(key) ?? 0) + 1);
+        action = fallback;
+      }
       applyInPlace(m, action);
     }
     hooks.afterAction?.(m, action);
@@ -650,6 +661,10 @@ if (illegal.size === 0) console.log('  none');
 for (const [k, n] of [...illegal.entries()].sort((a, b) => b[1] - a[1]))
   console.log(`  ${lpad(n, 6)}× ${k}`);
 if (abortedMatches) console.log(`  ${abortedMatches} match(es) aborted (no legal fallback).`);
+if (hiddenTargetRetries)
+  console.log(
+    `  ${hiddenTargetRetries} cast(s) refused by a Veiled hit the bot could not see (expected).`,
+  );
 
 console.log(
   `\n${tableHands} table-suite hands, ${castAll.n} resolved casts. ` +

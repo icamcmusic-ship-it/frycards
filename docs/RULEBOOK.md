@@ -90,6 +90,12 @@ Keyboard: **F** fold, **C** check/call, **R** raise (with a slider).
   `max raise-to = current bet + (pot + your call)`.
 - **Minimum raise:** the size of the last bet or raise on this street, and at
   least one big blind.
+- **Short all-in raises do not re-open the betting.** An all-in raise smaller
+  than a full minimum raise must still be called (or folded to) by the seats
+  that already acted, but they may not re-raise. A full raise re-opens the
+  action for everyone.
+- Power costs land in the pot before betting, so casting first raises your
+  own pot-limit cap: a cast is a bet.
 - A street ends when every seat still able to bet has acted and matched the
   current bet. If everyone left is all-in (or only one seat can still act and
   owes nothing), the rest of the board is dealt with no more betting.
@@ -99,7 +105,9 @@ Keyboard: **F** fold, **C** check/call, **R** raise (with a slider).
 - Chips that an all-in seat could not match form a **side pot** it cannot
   win. Each pot is awarded separately to the best eligible hand.
 - Money in the pot that belongs to no seat's bet — power costs, drains,
-  antes, a jackpot — joins the **main pot**.
+  antes, a jackpot — joins the **main pot**, which every live seat can win.
+  A seat whose whole stake is dead money (a Bomb Pot ante all-in, or drained
+  to 0 before posting) is still eligible for it.
 - **Who shows:** every pot winner, and the last seat that bet or raised (it
   must show to claim — and may be caught bluffing). Everyone else mucks a
   losing hand unless the Location is **Open Table**.
@@ -131,7 +139,8 @@ same stack; chips in play never change (powers move chips, never create them).
   1,000, then 100) so the small blind is whole too: 16 · 24 · 36 · 50 · 80 ·
   120 · 180 · 250 · 400 · 600 · 900 · 1,400 …
 - **At the cap** the hand in progress finishes, then every live seat is ranked
-  by stack.
+  by stack. A stack tie breaks on the stack at the start of the final hand,
+  then on a seeded draw (never on seat order).
 - **Busting:** a seat at 0 chips after a hand is out. Seats that bust in the
   same hand are ranked by their stack at the start of that hand. A busted
   player can watch at 4× speed or skip.
@@ -336,6 +345,14 @@ named hand category**.
   the whole table.
 - Other seats' power hands are hidden (only the count shows).
 - Each match logs its seed; the same seed and action list replays it exactly.
+  The seed would let anyone replay every shuffle, so it is shown only once the
+  match is over.
+- **Veil:** a Veiled cast's target is hidden from the rest of the table until
+  the street ends — the cast line, its effect lines ("a hidden seat") and the
+  marks it leaves (hit this street, Locked, poisoned, bountied). The caster and
+  the target see it in full. Stack and nerve changes stay visible. A seat that
+  picks the hidden target for its own hostile power is told only "No legal
+  target", and nothing is paid.
 
 ### 8.2 Bluff levers
 
@@ -371,7 +388,8 @@ Nerve is a **public** meter from 0 to 10; every seat starts at 5.
 
 **Tilt:** at 0 nerve your Leader is locked and every power costs one step more
 until your nerve recovers. Elimination is chips-only; nerve never knocks you
-out. **Tilt Zone** doubles every nerve change.
+out. **Tilt Zone** doubles every nerve change, a Leader ability's nerve cost
+included: you must hold the doubled cost to use it.
 
 ### 8.4 Bots
 
@@ -401,14 +419,14 @@ game with a new poker meaning. _Modifiers_ change how or when the effect lands.
 
 ### Ember — pressure and chaos
 
-| Keyword  | Type     | Meaning                                                                                                        |
-| -------- | -------- | -------------------------------------------------------------------------------------------------------------- |
-| Straddle | effect   | Pre-flop, before any raise or your own action: raise your blind to double the big blind; you act last pre-flop |
-| Kindle ✔ | effect   | **Hostile.** Drain N from a target's stack into the pot                                                        |
-| Tax      | effect   | Every opponent still in the hand antes N more                                                                  |
-| Bounty   | effect   | **Hostile.** Mark a target; if it busts this hand, you collect N from the winner                               |
-| Roulette | modifier | The effect hits a random seat still in the hand — possibly you                                                 |
-| Gambit   | modifier | Cast for no chips; if you don't win the pot, pay double the chip cost to the winner                            |
+| Keyword  | Type     | Meaning                                                                                                           |
+| -------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| Straddle | effect   | Pre-flop, before any raise or your own action: raise your blind to double the big blind; you act last pre-flop    |
+| Kindle ✔ | effect   | **Hostile.** Drain N from a target's stack into the pot                                                           |
+| Tax      | effect   | Every opponent still in the hand antes N more                                                                     |
+| Bounty   | effect   | **Hostile.** Mark a target; if it busts this hand, you collect N from the winner                                  |
+| Roulette | modifier | The effect hits a random seat still in the hand — possibly you; a hostile one skips seats already hit this street |
+| Gambit   | modifier | Cast for no chips; if you don't win the pot, pay double the chip cost to the winner                               |
 
 ### Tide — receiving and flow
 
@@ -422,23 +440,23 @@ game with a new poker meaning. _Modifiers_ change how or when the effect lands.
 
 ### Root — growth and endurance
 
-| Keyword     | Type     | Meaning                                                                                                                   |
-| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Bulwark ✔   | effect   | If you don't win this hand (folding included), take back up to N of your own chips from the pot                           |
+| Keyword     | Type     | Meaning                                                                                                                              |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Bulwark ✔   | effect   | If you don't win this hand (folding included), take back up to N of your own chips from the pot                                      |
 | Bloom       | effect   | **Gated.** When the next street is dealt, a random one of your hole cards (not an Ace) grows one rank higher; no effect on the river |
-| Rerun       | effect   | If the hand goes all-in before the river, the rest of the board is dealt twice and each pot splits between the two boards |
-| Thriving ✔  | modifier | On a Unit: the effect fires again at the start of every later street, N growing each time                                 |
-| Fuse        | modifier | The effect lands N streets later — everyone sees it coming; it fizzles if you have folded                                 |
-| Soulbound ✔ | modifier | Returns to your hand after use                                                                                            |
+| Rerun       | effect   | If the hand goes all-in before the river, the rest of the board is dealt twice and each pot splits between the two boards            |
+| Thriving ✔  | modifier | On a Unit: the effect fires again at the start of every later street, N growing each time (not while its target is folded)           |
+| Fuse        | modifier | The effect lands N streets later — everyone sees it coming; it fizzles if you or its target have folded                              |
+| Soulbound ✔ | modifier | Returns to your hand after use                                                                                                       |
 
 ### Gale — timing and movement
 
-| Keyword       | Type     | Meaning                                                                    |
-| ------------- | -------- | -------------------------------------------------------------------------- |
-| Cut           | effect   | Move the top card of the deck to the bottom                                |
-| Pass          | effect   | Every seat still in passes a random hole card to the next seat on its left |
-| Ambush ✔      | modifier | Castable in response windows during other seats' betting                   |
-| Quickstrike ✔ | modifier | Resolves at once, with no response window                                  |
+| Keyword       | Type     | Meaning                                                                                                |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| Cut           | effect   | Move the top card of the deck to the bottom                                                            |
+| Pass          | effect   | Every seat still in passes a random hole card to the next seat on its left (the passer still knows it) |
+| Ambush ✔      | modifier | Castable in response windows during other seats' betting                                               |
+| Quickstrike ✔ | modifier | Resolves at once, with no response window                                                              |
 
 ### Light — truth and protection
 

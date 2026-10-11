@@ -526,7 +526,13 @@ function pace(action: Action, v: Match, seat: number, rng: Rng): number {
  * the match isn't waiting on this seat. The action's `dt` is its nominal
  * pacing (independent of hand strength, so it is never a tell).
  */
-export function botAction(view: Match, seat: number, rng: Rng): Action | null {
+export function botAction(
+  view: Match,
+  seat: number,
+  rng: Rng,
+  /** noPowers: bet only (a retry after a cast the engine refused). */
+  opts: { noPowers?: boolean } = {},
+): Action | null {
   const h = view.hand;
   if (!h || h.done || view.phase !== 'hand') return null;
   const p = h.pending;
@@ -537,7 +543,7 @@ export function botAction(view: Match, seat: number, rng: Rng): Action | null {
   } else if (p) {
     if (!p.seats.includes(seat)) return null;
     const r = read(view, seat, rng);
-    action = tryCast(view, seat, r, rng, true) ?? { type: 'pass', seat };
+    action = (opts.noPowers ? null : tryCast(view, seat, r, rng, true)) ?? { type: 'pass', seat };
   } else if (h.toAct === seat) {
     const r = read(view, seat, rng);
     const persona = view.seats[seat].persona;
@@ -545,9 +551,9 @@ export function botAction(view: Match, seat: number, rng: Rng): Action | null {
       const opts = h.dealtIn.map((_, i) => i).filter((i) => i !== seat && inHand(h, i));
       if (opts.length) action = { type: 'freePeek', seat, target: threatTarget(view, seat, opts) };
     }
-    if (!action && rng.next() < 0.2 + persona.powerUse * 0.3)
+    if (!action && !opts.noPowers && rng.next() < 0.2 + persona.powerUse * 0.3)
       action = tryCast(view, seat, r, rng, false);
-    if (!action && rng.next() < 0.5) action = tryLeader(view, seat, r, rng);
+    if (!action && !opts.noPowers && rng.next() < 0.5) action = tryLeader(view, seat, r, rng);
     if (!action) action = betDecision(view, seat, r, rng);
   }
   if (!action) return null;

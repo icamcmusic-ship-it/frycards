@@ -8,6 +8,8 @@ import { buildDeck, type DeckDef } from './deck';
 import {
   applyInPlace,
   createMatch,
+  fallbackAction,
+  IllegalAction,
   personaFor,
   waitingOn,
   type Action,
@@ -77,9 +79,20 @@ export function runBots(
       const seats = w.kind === 'window' ? w.seats : [w.seat];
       const bot = seats.find((s) => !humans.has(s));
       if (bot === undefined) break;
-      action = botAction(viewFor(m, bot), bot, rng);
-      if (!action)
-        action = w.kind === 'window' ? { type: 'pass', seat: bot } : { type: 'fold', seat: bot };
+      action = botAction(viewFor(m, bot), bot, rng) ?? fallbackAction(m, bot);
+      if (!action) break;
+      try {
+        applyInPlace(m, action);
+      } catch (e) {
+        // A Veiled hit the bot could not see: retry without powers. Any
+        // other refusal is a real bug and still throws.
+        if (!(e instanceof IllegalAction) || e.code !== 'hiddenTarget') throw e;
+        action =
+          botAction(viewFor(m, bot), bot, rng, { noPowers: true }) ?? fallbackAction(m, bot)!;
+        applyInPlace(m, action);
+      }
+      log.push(action);
+      continue;
     }
     applyInPlace(m, action);
     log.push(action);
