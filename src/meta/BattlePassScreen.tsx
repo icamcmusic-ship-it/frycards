@@ -69,6 +69,7 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
     };
   }, [userId, attempt]);
 
+  const [openedAt] = useState(() => Date.now());
   const xp = progress?.xp ?? 0;
   const claimed = useMemo(() => new Set(progress?.claimed_tiers ?? []), [progress]);
   const currentTier = Math.min(tiers.length, Math.floor(xp / BP_XP_PER_TIER));
@@ -330,10 +331,7 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
           {season.ends_at && (
             <span>
               · ENDS IN{' '}
-              {Math.max(
-                0,
-                Math.ceil((new Date(season.ends_at).getTime() - Date.now()) / 86_400_000),
-              )}
+              {Math.max(0, Math.ceil((new Date(season.ends_at).getTime() - openedAt) / 86_400_000))}
               D
             </span>
           )}

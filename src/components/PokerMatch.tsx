@@ -9,6 +9,7 @@ import { MODES, type ModeId } from '../game/poker/constants';
 import { buildDeck, deckDefFromCustom, randomLeader, type DeckDef } from '../game/poker/deck';
 import type { MatchSetup as EngineSetup } from '../game/poker/engine';
 import { rngOn } from '../game/poker/rng';
+import { ordinal } from '../game/poker/rewards';
 import { POOL_BY_ID } from '../game/poker/cardpool';
 import type { FormatId } from '../game/poker/formats';
 import type { MutatorId } from '../game/poker/mutators';
@@ -97,7 +98,7 @@ export default function PokerMatch({
   play: PlaySetup;
   matchSeed: number;
   playerName: string;
-} & Omit<PokerTableProps, 'setup' | 'tutorial' | 'humanDeckCode' | 'tableTag'>) {
+} & Omit<PokerTableProps, 'setup' | 'tutorial' | 'humanDeckCode' | 'tableTag' | 'shareLine'>) {
   const [built] = useState(() => buildTable(play, matchSeed, playerName));
   return (
     <PokerTable
@@ -106,6 +107,12 @@ export default function PokerMatch({
       tutorial={play.tutorial}
       humanDeckCode={built.deckCode}
       tableTag={play.tag}
+      shareLine={
+        play.tag?.startsWith('Daily')
+          ? (place, seats, hands) =>
+              `FryCards ${play.tag} · ${ordinal(place)} of ${seats} · ${hands} hands`
+          : undefined
+      }
     />
   );
 }

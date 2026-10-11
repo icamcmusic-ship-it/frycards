@@ -11,14 +11,20 @@ import { minPaidHands } from './game/poker/rewards';
 import { holdLabel, loadPending, submitResult, submitting } from './meta/pendingResult';
 import { describeSetup, loadLastSetup, saveLastSetup } from './meta/lastSetup';
 import { legalModes } from './game/poker/deck';
-import { MODES, MODE_IDS, MAX_SEATS, MIN_SEATS, type ModeId } from './game/poker/constants';
-import { POOL_BY_ID, applyCardPool } from './game/poker/cardpool';
-import { cn, newMatchSeed, withTimeout } from './lib/utils';
+import { type ModeId } from './game/poker/constants';
+import { applyCardPool } from './game/poker/cardpool';
+import { newMatchSeed, withTimeout } from './lib/utils';
 import { readCache, writeCache } from './lib/cache';
-import { DECK_LINK_PARAM, deckCodeFromSearch, stashPendingDeck } from './meta/deckcode';
+import {
+  CHALLENGE_PARAM,
+  DECK_LINK_PARAM,
+  challengeFromSearch,
+  deckCodeFromSearch,
+  stashChallengeDeck,
+  stashPendingDeck,
+} from './meta/deckcode';
 import { DeckLinkPreview } from './meta/DeckLinkPreview';
 import type { CardTemplate } from './types';
-import { DeckRow } from './lib/supabase';
 import { MetaProvider, useMeta } from './meta/MetaContext';
 import { AuthScreen } from './meta/AuthScreen';
 import { MainMenu } from './meta/MainMenu';
@@ -26,25 +32,16 @@ import { MetaScreen, Route, resolveRoute } from './meta/routes';
 import { RouterProvider, useHashRouter } from './meta/useHashRouter';
 import { isCpuLocked } from './meta/cpuAccess';
 import { ToastProvider, useToast } from './meta/toast';
-import { CurrencyBar, CurrencyToasts } from './meta/CurrencyBar';
+import { CurrencyToasts } from './meta/CurrencyBar';
 import { PoolOfflineBanner } from './meta/PoolOfflineBanner';
 import type { ShowroomSubject } from './meta/ShowroomScreen';
-import { PopButton } from './meta/ui';
-import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
 import { useMotionMode } from './meta/useMotionMode';
 import { SLAB_CSS } from './meta/slabCss';
 import { ConfirmHost } from './meta/confirm';
 const MotionRoot = React.lazy(() => import('./meta/MotionRoot'));
-import {
-  CPU_DIFFICULTIES,
-  loadCpuDifficulty,
-  saveCpuDifficulty,
-  type CpuDifficultyId,
-  type MotionMode,
-} from './meta/matchPrefs';
-import { usePersistedState } from './meta/usePersistedState';
+import { type MotionMode } from './meta/matchPrefs';
 
 const CATALOG_CACHE_KEY = 'catalog';
 /** How long a fetched card catalog is reused before the next visit re-fetches
@@ -198,224 +195,12 @@ class ErrorBoundary extends React.Component {
 }
 
 // ---------------------------------------------------------------------------
-// Play setup — table format, table size, and a freshly-rolled random deck or
-// one of the player's own saved decks
+// Play setup — lazy (src/meta/PlayScreen.tsx)
 // ---------------------------------------------------------------------------
 import type { PlaySetup } from './components/PokerMatch';
-
-function PlayScreen({
-  onStart,
-  onBack,
-  practice = false,
-}: {
-  onStart: (setup: PlaySetup) => void;
-  onBack: () => void;
-  /** Arrived from a How to Play "Try it": offer the guided first game. */
-  practice?: boolean;
-}) {
-  const { decks, guest, dataLoading } = useMeta();
-  const [mode, setMode] = usePersistedState<ModeId>('frycards:play-mode', 'standard');
-  const [seats, setSeats] = usePersistedState<number>('frycards:play-seats', MAX_SEATS);
-  const [difficulty, setDifficulty] = useState<CpuDifficultyId>(loadCpuDifficulty);
-  const m = MODES[MODE_IDS.includes(mode) ? mode : 'standard'];
-  const tableSeats = Math.max(MIN_SEATS, Math.min(MAX_SEATS, Number(seats) || MAX_SEATS));
-  const base = { mode: m.id, seats: tableSeats, difficulty };
-  const pick = (on: boolean) =>
-    cn(
-      'btn-pop heading-font text-xs px-3 py-1.5 ink-border-sm',
-      on ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]' : 'bg-[var(--c-paper)] text-[var(--c-ink)]',
-    );
-
-  return (
-    <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-x-3 gap-y-1 bg-[var(--c-ink)] px-4 py-2.5">
-        <PopButton onClick={onBack} color="yellow">
-          &lt; MENU
-        </PopButton>
-        <h1 className="heading-font text-xl text-[var(--c-yellow)]">TAKE A SEAT</h1>
-        <span className="fs-xs font-bold text-[var(--c-paper)]/60 hidden md:inline">
-          FryCards Poker · pot-limit Hold&apos;em freezeout · 2–6 seats
-        </span>
-        <CurrencyBar className="ml-auto" />
-      </div>
-      <div className="p-6 max-w-6xl mx-auto">
-        {practice && (
-          <div className="ink-border-sm bg-[var(--c-yellow)] text-[var(--c-ink)] fs-sm font-bold px-3 py-2 mb-4 max-w-xl flex flex-wrap items-center gap-3">
-            <span>
-              Guided first game: loose bots, the hand-strength helper switched on, and the coach
-              teaching one idea at a time — hand ranks, then betting, then a power.
-            </span>
-            <button
-              onClick={() =>
-                onStart({ ...base, kind: 'random', tutorial: true, difficulty: 'easy' })
-              }
-              className="btn-pop heading-font text-xs px-3 py-1.5 bg-[var(--c-ink)] text-[var(--c-yellow)] ink-border-sm"
-            >
-              START THE GUIDED GAME ▸
-            </button>
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-6 mb-6">
-          <div>
-            <h2 className="heading-font text-sm mb-1.5">FORMAT</h2>
-            <div className="flex gap-1.5">
-              {MODE_IDS.map((id) => (
-                <button key={id} onClick={() => setMode(id)} className={pick(m.id === id)}>
-                  {MODES[id].label.toUpperCase()}
-                </button>
-              ))}
-            </div>
-            <p className="fs-xs font-bold text-[var(--c-steel)] mt-1 max-w-xs">
-              {m.stackChips} chips each · blinds ×{m.blindGrowth} every {m.levelMs / 60000} min ·
-              about {Math.round(m.capMs / 60000)} min at most · decks of {m.powers} powers
-            </p>
-          </div>
-          <div>
-            <h2 className="heading-font text-sm mb-1.5">SEATS</h2>
-            <div className="flex gap-1.5">
-              {[2, 3, 4, 5, 6].map((n) => (
-                <button key={n} onClick={() => setSeats(n)} className={pick(tableSeats === n)}>
-                  {n}
-                </button>
-              ))}
-            </div>
-            <p className="fs-xs font-bold text-[var(--c-steel)] mt-1">
-              You plus {tableSeats - 1} bot{tableSeats === 2 ? '' : 's'}.
-            </p>
-          </div>
-          <div>
-            <h2 className="heading-font text-sm mb-1.5">BOTS</h2>
-            <div className="flex gap-1.5">
-              {CPU_DIFFICULTIES.map((d) => (
-                <button
-                  key={d.id}
-                  onClick={() => {
-                    setDifficulty(d.id);
-                    saveCpuDifficulty(d.id);
-                  }}
-                  className={pick(difficulty === d.id)}
-                  title={d.blurb}
-                >
-                  {d.label}
-                </button>
-              ))}
-            </div>
-            <p className="fs-xs font-bold text-[var(--c-steel)] mt-1 max-w-xs">
-              {CPU_DIFFICULTIES.find((d) => d.id === difficulty)?.blurb}. Bots only ever see their
-              own cards.
-            </p>
-          </div>
-        </div>
-
-        <h2 className="heading-font text-base mb-3 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
-          QUICK MATCH
-        </h2>
-        <div className="mb-8">
-          <button
-            onClick={() => onStart({ ...base, kind: 'random' })}
-            className="btn-pop px-5 py-3 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-sm ink-border-md shadow-hard-black hover:-translate-y-1 transition-all"
-          >
-            RANDOM DECK ▸
-          </button>
-          <p className="fs-xs font-bold text-[var(--c-steel)] mt-2">
-            Rolls a random Leader and a legal {m.label} deck — no collection needed. Every bot does
-            the same.
-          </p>
-        </div>
-        {guest ? (
-          <p className="fs-xs font-bold text-[var(--c-steel)]">
-            Create an account to build and save your own decks in the Deck Builder: a Leader, one
-            Location and {MODES.quick.powers} / {MODES.standard.powers} / {MODES.deep.powers} power
-            cards.
-          </p>
-        ) : (
-          <>
-            <h2 className="heading-font text-base mb-3 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
-              YOUR {m.label.toUpperCase()} DECKS
-            </h2>
-            {dataLoading ? (
-              <p className="fs-xs font-bold text-[var(--c-steel)] mb-8 animate-pulse">
-                Loading your decks…
-              </p>
-            ) : (
-              <DeckChoices
-                decks={decks}
-                mode={m.id}
-                onPick={(d) => onStart({ ...base, kind: 'custom', deck: d })}
-              />
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DeckChoices({
-  decks,
-  mode,
-  onPick,
-}: {
-  decks: DeckRow[];
-  mode: ModeId;
-  onPick: (d: DeckRow) => void;
-}) {
-  // Per-mode legality comes from the client's poker rules; the server's
-  // is_valid flag (poker_deck_modes) only says "legal in some mode".
-  const rows = decks.map((d) => ({ d, modes: legalModes(d.leader_id, d.card_ids) }));
-  const legal = rows.filter((r) => r.modes.includes(mode));
-  if (legal.length === 0)
-    return (
-      <p className="fs-xs font-bold text-[var(--c-steel)] mb-8">
-        No legal {MODES[mode].label} decks yet — build one in the Deck Builder: a Leader, exactly
-        one Location and {MODES[mode].powers} power cards (max {MODES[mode].maxCopies} copies of a
-        card, {MODES[mode].maxTier5} tier-5).
-        {rows.some((r) => r.modes.length > 0) &&
-          ' Some of your decks are legal in another format — switch FORMAT above.'}
-      </p>
-    );
-  return (
-    <div className="flex flex-wrap gap-4 mb-8">
-      {legal.map(({ d }) => {
-        const leader = POOL_BY_ID[d.leader_id];
-        const missing = [d.leader_id, ...d.card_ids].filter((id) => !POOL_BY_ID[id]);
-        return (
-          <button
-            key={d.id}
-            onClick={() => onPick(d)}
-            disabled={missing.length > 0}
-            title={
-              missing.length > 0
-                ? `${missing.length} card(s) in this deck aren't loaded — reload the card database`
-                : undefined
-            }
-            className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
-          >
-            <div className="px-2 py-1 bg-[var(--c-steel)] heading-font fs-xs text-[var(--c-paper)] truncate">
-              {d.name}
-            </div>
-            <div className="ink-border-sm m-1.5 overflow-hidden aspect-[16/8]">
-              <SafeImage
-                src={leader?.image}
-                boxWidth={224}
-                className="w-full h-full object-cover"
-                fallbackText={leader?.name}
-              />
-            </div>
-            <div className="p-3 pt-1">
-              <div className="heading-font text-sm leading-tight">{leader?.name}</div>
-              <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
-                {leader?.colors.join(' / ')} · {Math.max(0, d.card_ids.length - 1)} powers + a
-                Location
-              </div>
-            </div>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+const PlayScreen = React.lazy(() =>
+  import('./meta/PlayScreen').then((m) => ({ default: m.PlayScreen })),
+);
 
 // ---------------------------------------------------------------------------
 // Game (mounted per match)
@@ -755,6 +540,27 @@ function AppInner({
   const [linkedDeck, setLinkedDeck] = useState<string | null>(() =>
     deckCodeFromSearch(window.location.search),
   );
+  // A "beat this deck" link (`?vs=FRY2:…`, Q22) opens TAKE A SEAT with the
+  // deck pre-filled as a practice opponent.
+  const [challenge] = useState(() => {
+    const c = challengeFromSearch(window.location.search);
+    if (!c) return null;
+    stashChallengeDeck(c);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete(CHALLENGE_PARAM);
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    } catch {
+      /* harmless */
+    }
+    return c;
+  });
+  const challengeOpened = useRef(false);
+  useEffect(() => {
+    if (!challenge || !rulesKnown || cpuLocked || challengeOpened.current) return;
+    challengeOpened.current = true;
+    go('play');
+  }, [challenge, rulesKnown, cpuLocked, go]);
   const closeLinkedDeck = () => {
     setLinkedDeck(null);
     try {
