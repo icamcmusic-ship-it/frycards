@@ -6,7 +6,7 @@ import { useReducedMotion } from './useMotionMode';
 import { Coins, Sparkles, SkipForward, Zap } from 'lucide-react';
 import { PackPull, quicksellMany } from '../lib/supabase';
 import { CardDef } from '../game/poker/cards';
-import { POOL_BY_ID } from '../game/poker/cardpool';
+import { POOL, POOL_BY_ID } from '../game/poker/cardpool';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
 import { PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
@@ -19,6 +19,18 @@ import { SfxBurst, type Sfx } from '../components/SfxBurst';
 import { RARITIES } from '../types';
 import { fmtCredits, quicksellPrice } from './economy';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
+import { PackArt } from './pack/PackArt';
+import { packArtUrl, packColor } from './pack/packArt';
+import {
+  TEAR_COMMIT,
+  leakColor,
+  newOrDupe,
+  revealTier,
+  shakeLevel,
+  tearRelease,
+} from './pack/revealTier';
+import { FoilShimmer } from './pack/FoilShimmer';
+import { buzz, useCountUp } from './pack/useCountUp';
 
 /**
  * Full-screen pack-opening experience:
@@ -287,7 +299,7 @@ export function PackOpening({
       role="dialog"
       aria-modal="true"
       aria-label={`Opening ${packName}`}
-      className="fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto outline-none"
+      className="po-root fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-[safe_center] p-4 overflow-y-auto outline-none"
     >
       <style>{PACK_OPENING_CSS}</style>
       <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
@@ -295,6 +307,7 @@ export function PackOpening({
         <TearStage
           packName={packName}
           packImageUrl={packImageUrl}
+          pulls={pulls}
           reducedMotion={reducedMotion}
           coarse={coarse}
           // Every haul — including boxes and bulk opens — goes through the
@@ -341,6 +354,7 @@ const TAP_SLOP = 8;
 function TearStage({
   packName,
   packImageUrl,
+  pulls,
   reducedMotion,
   coarse,
   onTorn,
@@ -348,6 +362,7 @@ function TearStage({
 }: {
   packName: string;
   packImageUrl: string | null;
+  pulls: PackPull[];
   reducedMotion: boolean;
   coarse: boolean;
   onTorn: () => void;
@@ -356,12 +371,15 @@ function TearStage({
 }) {
   const [progress, setProgress] = useState(0); // 0..1 tear progress
   const [torn, setTorn] = useState(false);
+  // Released before TEAR_COMMIT: the strip springs back shut.
+  const [snapping, setSnapping] = useState(false);
   const dragging = useRef<{ startX: number; startProgress: number } | null>(null);
   // Set once a press travels past TAP_SLOP, so the click that follows a drag
   // that was let go early doesn't also count as a tap-to-open.
   const movedRef = useRef(false);
   const stripRef = useRef<HTMLDivElement>(null);
   const tornRef = useRef(false);
+  const lastBuzz = useRef(0);
   // The vertical pack/box renders aren't all the same shape (a booster pack is
   // much narrower than a box), and the strip is positioned as a percentage of
   // the pack's height — so size the frame to the art rather than cropping the
@@ -372,6 +390,14 @@ function TearStage({
     if (w > 0 && h > 0) setAspectRatio(`${w} / ${h}`);
   };
   const tearTimer = useRef<number | null>(null);
+  // D2: the haul is already drawn, so the pack can hint at it. Coarse levels
+  // only (see shakeLevel) and a seam glow for an honest Rare+ best pull.
+  const shake = reducedMotion ? 0 : shakeLevel(pulls);
+  const leak = leakColor(pulls);
+  const baseName = packName.replace(/\s*×\d+$/, '');
+  const art = [packArtUrl(baseName, 'wrapper'), packImageUrl].filter((u): u is string => !!u);
+  const stripArt = [packArtUrl(baseName, 'strip'), ...art];
+  const wrapColor = packColor({ pack_group: null, pack_tier: '', acquisition: '' });
 
   // Defense-in-depth: nothing unmounts this stage before the timer fires
   // today, but nothing guarantees that stays true — an uncleared timer would
@@ -387,12 +413,14 @@ function TearStage({
     tornRef.current = true;
     setProgress(1);
     setTorn(true);
+    if (!reducedMotion) buzz([12, 30, 24]);
     tearTimer.current = window.setTimeout(onTorn, reducedMotion ? 120 : 850);
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (tornRef.current) return;
     movedRef.current = false;
+    setSnapping(false);
     dragging.current = { startX: e.clientX, startProgress: progress };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
@@ -400,19 +428,31 @@ function TearStage({
     if (!dragging.current || tornRef.current) return;
     if (Math.abs(e.clientX - dragging.current.startX) > TAP_SLOP) movedRef.current = true;
     const width = stripRef.current?.offsetWidth || 300;
+    // D3: the strip follows the finger both ways — pull back and it closes.
     const p = Math.min(
       1,
       Math.max(
-        dragging.current.startProgress,
+        0,
         dragging.current.startProgress + (e.clientX - dragging.current.startX) / (width * 0.85),
       ),
     );
     setProgress(p);
+    // a light haptic tick every 10% of rip
+    const step = Math.floor(p * 10);
+    if (step > lastBuzz.current && !reducedMotion) buzz(8);
+    lastBuzz.current = step;
     if (p >= 1) finishTear();
   };
   const onPointerUp = () => {
+    if (!dragging.current) return;
     dragging.current = null;
-    if (!tornRef.current && progress >= 0.92) finishTear();
+    if (tornRef.current || !movedRef.current) return;
+    if (tearRelease(progress) === 'complete') finishTear();
+    else {
+      setSnapping(true);
+      setProgress(0);
+      lastBuzz.current = 0;
+    }
   };
 
   /** Tap/click anywhere on the pack. The drag stays as the bonus gesture. */
@@ -420,8 +460,13 @@ function TearStage({
     if (!movedRef.current) finishTear();
   };
 
-  const shaking = !reducedMotion && !torn && progress > 0.03 && progress < 1;
   const tapWord = coarse ? 'TAP' : 'CLICK';
+  // Idle wobble scaled by shake level; while ripping, a faster tremble.
+  const ripping = !reducedMotion && !torn && progress > 0.03;
+  const idleAnim =
+    !torn && !reducedMotion && !ripping
+      ? `po-wobble-${shake} ${[2.4, 1.6, 1.1, 0.7][shake]}s ease-in-out infinite`
+      : undefined;
 
   return (
     <div className="relative flex flex-col items-center">
@@ -437,6 +482,7 @@ function TearStage({
         role="button"
         tabIndex={0}
         aria-label={`${tapWord === 'TAP' ? 'Tap' : 'Click'} to open ${packName}`}
+        aria-keyshortcuts="Enter Space"
         onClick={onPackClick}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -444,6 +490,7 @@ function TearStage({
             finishTear();
           }
         }}
+        data-shake={shake}
         className={cn('relative select-none touch-none po-anim cursor-pointer')}
         style={{
           // Height-driven so a tall box render can't run off the bottom of the
@@ -453,11 +500,10 @@ function TearStage({
           width: 'auto',
           maxWidth: '86vw',
           aspectRatio,
-          animation: shaking
-            ? `po-shake ${Math.max(0.12, 0.3 - progress * 0.18)}s linear infinite`
-            : torn && !reducedMotion
-              ? 'none'
-              : undefined,
+          ['--leak' as string]: leak ?? 'transparent',
+          animation: ripping
+            ? `po-shake ${Math.max(0.1, 0.3 - progress * 0.18 - shake * 0.03)}s linear infinite`
+            : idleAnim,
         }}
       >
         {/* The pack body — full artwork. Once the strip is gone the top slice
@@ -476,16 +522,19 @@ function TearStage({
               clipPath: torn ? serratedPolygon(TEAR_FRAC * 100, 'below') : undefined,
             }}
           >
-            <SafeImage
-              boxWidth={480}
-              src={packImageUrl}
-              alt={packName}
-              className="w-full h-full object-cover"
-              fallbackText={packName}
-              eager
-              onLoad={onArtLoad}
-            />
+            <PackArt candidates={art} name={baseName} color={wrapColor} onLoad={onArtLoad} />
           </div>
+          {/* D2: rarity light leaking through the seam, brighter as it opens */}
+          {leak && !torn && (
+            <div
+              aria-hidden
+              className="po-leak po-anim pointer-events-none"
+              style={{
+                top: `${TEAR_FRAC * 100 - 2}%`,
+                opacity: 0.45 + progress * 0.55,
+              }}
+            />
+          )}
           {/* torn paper edge left behind where the strip came away */}
           {torn && (
             <div
@@ -500,7 +549,8 @@ function TearStage({
         </div>
 
         {/* The tear-off strip: a clipped copy of the top of the artwork, so it
-            reads as the actual top of the pack peeling off. */}
+            reads as the actual top of the pack peeling off. D3: it lifts and
+            curls with the drag and springs back if let go under 60%. */}
         <div
           ref={stripRef}
           onPointerDown={onPointerDown}
@@ -515,8 +565,10 @@ function TearStage({
             height: `${TEAR_FRAC * 100}%`,
             transform: torn
               ? undefined
-              : `translateX(${progress * 14}px) rotate(${progress * 2}deg)`,
+              : `translate(${progress * 22}px, ${-progress * 18}px) rotate(${progress * 9}deg) skewX(${-progress * 6}deg)`,
             transformOrigin: 'left center',
+            transition:
+              snapping && !reducedMotion ? 'transform 0.28s cubic-bezier(.3,1.6,.5,1)' : undefined,
             animation:
               torn && !reducedMotion
                 ? 'po-strip-fly 0.8s cubic-bezier(.4,-0.1,.7,.4) forwards'
@@ -532,14 +584,7 @@ function TearStage({
             className="absolute top-0 left-0 w-full pointer-events-none"
             style={{ height: `${100 / TEAR_FRAC}%` }}
           >
-            <SafeImage
-              boxWidth={480}
-              src={packImageUrl}
-              alt=""
-              className="w-full h-full object-cover"
-              fallbackClassName="bg-[var(--c-steel)]"
-              eager
-            />
+            <PackArt candidates={stripArt} name={baseName} color={wrapColor} alt="" />
           </div>
           {/* foil sheen over the art so the strip still reads as tear-off foil */}
           <div
@@ -551,7 +596,11 @@ function TearStage({
           />
           <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
             <span className="heading-font fs-xs text-[var(--c-ink)] tracking-widest bg-[var(--c-yellow)]/90 px-2 py-0.5 ink-border-sm">
-              {progress > 0.03 ? 'KEEP RIPPING ▸▸' : '◂ TEAR HERE ▸'}
+              {progress >= TEAR_COMMIT
+                ? 'LET GO TO RIP ▸▸'
+                : progress > 0.03
+                  ? 'KEEP RIPPING ▸▸'
+                  : '◂ TEAR HERE ▸'}
             </span>
           </div>
           {/* rip progress darkening */}
@@ -574,6 +623,11 @@ function TearStage({
         aria-valuenow={Math.round(progress * 100)}
       >
         <div className="h-full bg-[var(--c-yellow)]" style={{ width: `${progress * 100}%` }} />
+        <div
+          aria-hidden
+          className="absolute inset-y-0 w-0.5 bg-[var(--c-paper)]"
+          style={{ left: `${TEAR_COMMIT * 100}%` }}
+        />
       </div>
       <div className="mt-5 flex flex-wrap justify-center gap-3 relative">
         <PopButton color="yellow" onClick={finishTear} disabled={torn}>
@@ -625,12 +679,30 @@ function RevealStage({
   const currentShown = revealed.has(index);
   const currentDef = current ? pullToDef(current) : null;
 
+  // D5: Mythic takeover, shown over everything with a short lock before it
+  // can be dismissed (no lock under reduced motion).
+  const [takeover, setTakeover] = useState<PackPull | null>(null);
+  const [takeoverLocked, setTakeoverLocked] = useState(false);
+  useEffect(() => {
+    if (!takeoverLocked) return;
+    const t = window.setTimeout(() => setTakeoverLocked(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [takeoverLocked]);
+
   const flip = () => {
     if (currentShown || !current) return;
     setRevealed((r) => new Set(r).add(index));
     setBurstKey((k) => k + 1);
+    const t = revealTier(current);
+    if (t === 'mythic') {
+      setTakeover(current);
+      setTakeoverLocked(!reducedMotion);
+    }
+    if (!reducedMotion && (t === 'burst' || t === 'mythic' || current.serialized))
+      buzz(t === 'mythic' ? [30, 40, 60] : 20);
   };
   const next = () => {
+    if (takeover) return;
     if (index >= pulls.length - 1) onDone();
     else setIndex((i) => i + 1);
   };
@@ -641,13 +713,30 @@ function RevealStage({
   if (!current) return null;
 
   const glowColor = RARITY_HEX[current.rarity] || RARITY_HEX.Common;
+  const tier = revealTier(current);
+  // C/U flip fast; SR/UR dim the room while shown.
+  const flipSecs = tier === 'fast' ? 0.28 : 0.55;
+  const dimmed = currentShown && tier === 'burst' && !reducedMotion;
 
   return (
-    <div className="relative flex flex-col items-center">
-      <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 text-center">
+    <div
+      className="relative flex flex-col items-center"
+      data-tier={currentShown ? tier : undefined}
+    >
+      {/* D5: SR/UR dim the screen behind the card */}
+      {dimmed && <div aria-hidden key={`dim${burstKey}`} className="po-dim po-anim" />}
+      {takeover && (
+        <MythicTakeover
+          pull={takeover}
+          locked={takeoverLocked}
+          reducedMotion={reducedMotion}
+          onClose={() => setTakeover(null)}
+        />
+      )}
+      <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 text-center relative">
         {packName.toUpperCase()}
       </h2>
-      <div className="fs-xs font-mono font-bold text-[var(--c-paper)]/70 mb-5">
+      <div className="relative fs-xs font-mono font-bold text-[var(--c-paper)]/70 mb-5">
         CARD {index + 1} / {pulls.length} —{' '}
         {currentShown
           ? `${coarse ? 'TAP' : 'CLICK'} TO CONTINUE ▸`
@@ -689,15 +778,26 @@ function RevealStage({
               className="absolute inset-0 pointer-events-none z-0 po-anim"
               style={{
                 background: `radial-gradient(circle, ${glowColor}CC 0%, ${glowColor}44 40%, transparent 70%)`,
-                animation: 'po-glow-burst 0.7s ease-out forwards',
+                animation: `po-glow-burst ${tier === 'rare' ? 0.7 : 1.1}s ease-out forwards`,
+                inset: tier === 'rare' ? 0 : '-30%',
               }}
             />
           )}
+        {currentShown && tier === 'burst' && !reducedMotion && (
+          <div
+            key={`ring${burstKey}`}
+            aria-hidden
+            className="po-burst-ring po-anim"
+            style={{ ['--burst' as string]: glowColor }}
+          />
+        )}
         <div
           className="relative w-full h-full"
           style={{
             transformStyle: 'preserve-3d',
-            transition: reducedMotion ? undefined : 'transform 0.55s cubic-bezier(.3,1.2,.5,1)',
+            transition: reducedMotion
+              ? undefined
+              : `transform ${flipSecs}s cubic-bezier(.3,1.2,.5,1)`,
             transform: currentShown ? 'rotateY(180deg)' : 'rotateY(0deg)',
           }}
         >
@@ -734,6 +834,16 @@ function RevealStage({
                 }
               />
               {currentShown && isWishlisted(current.card_id, wishUid) && <WishlistHit />}
+              {currentShown && current.foil && !current.converted_to_credits && (
+                <FoilShimmer reducedMotion={reducedMotion} />
+              )}
+              {currentShown && current.serialized && (
+                <SerialStamp
+                  n={current.serial_number}
+                  cap={current.serial_cap}
+                  reducedMotion={reducedMotion}
+                />
+              )}
               {/* foil sheen sweep */}
               {currentShown && current.foil && !reducedMotion && (
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -767,7 +877,7 @@ function RevealStage({
 
       {/* rarity readout — a live region so screen readers hear each flip's
           rarity without having to re-scan the page */}
-      <div className="h-9 mt-4 flex items-center" role="status" aria-live="polite">
+      <div className="relative h-9 mt-4 flex items-center" role="status" aria-live="polite">
         {currentShown && (
           <div
             className={cn(
@@ -790,7 +900,10 @@ function RevealStage({
 
       {/* progress pips — purely visual; the CARD X / Y readout above carries
           the same information for screen readers */}
-      <div aria-hidden className="flex gap-1.5 mt-3 max-w-full flex-wrap justify-center px-4">
+      <div
+        aria-hidden
+        className="relative flex gap-1.5 mt-3 max-w-full flex-wrap justify-center px-4"
+      >
         {pulls.map((p, i) => (
           <span
             key={i}
@@ -806,7 +919,7 @@ function RevealStage({
         ))}
       </div>
 
-      <div className="flex flex-wrap justify-center gap-3 mt-6">
+      <div className="relative flex flex-wrap justify-center gap-3 mt-6">
         <PopButton color="steel" onClick={onDone}>
           <span className="flex items-center gap-1">
             <Zap className="w-3.5 h-3.5" /> REVEAL ALL
@@ -914,15 +1027,41 @@ function SummaryStage({
   }, []);
   // U43: cards new to the collection with this haul — owned no more copies
   // than this pack just gave (true before and after the collection refresh).
-  const newCount = useMemo(() => {
-    const pulled = new Map<string, number>();
-    for (const p of pulls)
-      if (!p.converted_to_credits) pulled.set(p.card_id, (pulled.get(p.card_id) ?? 0) + 1);
-    const owned = new Map((collection ?? []).map((c) => [c.card_id, c.quantity + c.foil_quantity]));
-    let n = 0;
-    for (const [id, k] of pulled) if ((owned.get(id) ?? 0) <= k) n++;
-    return n;
+  // D10: the same snapshot feeds the per-card NEW / DUPE ×N badges.
+  const nd = useMemo(
+    () =>
+      newOrDupe(
+        pulls,
+        new Map((collection ?? []).map((c) => [c.card_id, c.quantity + c.foil_quantity])),
+      ),
     // the haul's own snapshot: recount only when the pulls change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pulls],
+  );
+  const newCount = [...nd.values()].filter((v) => v.isNew).length;
+  // D11: set progress for the best pull's set, before → after this haul.
+  const setProgress = useMemo(() => {
+    const best = pulls[0]
+      ? pullToDef(pulls.reduce((a, b) => (pullScore(b) > pullScore(a) ? b : a)))
+      : null;
+    const setName = best?.set;
+    if (!setName) return null;
+    const inSet = POOL.filter((c) => c.set === setName && c.type !== 'Leader');
+    if (inSet.length === 0) return null;
+    const ids = new Set(inSet.map((c) => c.id));
+    const owned = new Set(
+      (collection ?? []).filter((c) => c.quantity + c.foil_quantity > 0).map((c) => c.card_id),
+    );
+    let have = 0;
+    for (const id of ids) if (owned.has(id)) have++;
+    let added = 0;
+    for (const [id, v] of nd) if (v.isNew && ids.has(id)) added++;
+    // the snapshot may already include this haul
+    const before = Math.max(
+      0,
+      have - [...nd].filter(([id, v]) => v.isNew && ids.has(id) && owned.has(id)).length,
+    );
+    return { setName, before, after: before + added, total: inSet.length };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pulls]);
   const [sold, setSold] = useState<Set<number>>(new Set());
@@ -970,6 +1109,8 @@ function SummaryStage({
         : quicksellPrice(p.rarity, p.foil)),
     0,
   );
+
+  const shownValue = useCountUp(haulValue, 900, reducedMotion);
 
   const quicksellClutter = async () => {
     if (sellBusy || clutterIndices.length === 0) return;
@@ -1084,15 +1225,22 @@ function SummaryStage({
           value={(best.rarity || 'Common').toUpperCase()}
           rarity={best.rarity}
         />
-        <StatTile label="HAUL VALUE" value={fmtCredits(haulValue)} />
+        <StatTile label="HAUL VALUE" value={fmtCredits(shownValue)} />
         {creditsGained > 0 && (
           <StatTile label="OVER CAP → ✦" value={fmtCredits(creditsGained)} accent="cyan" />
         )}
       </div>
 
-      {/* Spotlight */}
-      <div className="relative mb-4 shrink-0">
+      {/* Spotlight — D9: bigger, with a rarity-coloured burst behind it. */}
+      <div
+        className="relative mb-4 shrink-0 po-hero"
+        style={{ ['--burst' as string]: RARITY_HEX[best.rarity] || RARITY_HEX.Common }}
+      >
+        <div className="po-hero-burst" aria-hidden />
         <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
+        {nd.get(best.card_id)?.isNew && !best.converted_to_credits && (
+          <span className="po-new-sticker heading-font">NEW!</span>
+        )}
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
           <Sparkles className="w-3 h-3" /> {best.serialized ? 'SERIALIZED!' : 'BEST PULL'}
         </div>
@@ -1112,6 +1260,14 @@ function SummaryStage({
               best.serialized ? { number: best.serial_number!, cap: best.serial_cap! } : undefined
             }
           />
+          {best.foil && !best.converted_to_credits && <FoilShimmer reducedMotion={reducedMotion} />}
+          {best.serialized && (
+            <SerialStamp
+              n={best.serial_number}
+              cap={best.serial_cap}
+              reducedMotion={reducedMotion}
+            />
+          )}
           {/* QUICKSELL C/U can sell the best pull too — the spotlight must
               stamp it SOLD like the grid, not keep rendering it as kept. */}
           {sold.has(bestIndex) && !best.converted_to_credits && (
@@ -1139,9 +1295,40 @@ function SummaryStage({
         ))}
       </div>
 
+      {setProgress && (
+        <div className="w-full max-w-sm mb-3 px-2" aria-label="Set progress">
+          <div className="flex justify-between fs-xs font-black text-[var(--c-paper)]/80 mb-1">
+            <span>{setProgress.setName.toUpperCase()}</span>
+            <span>
+              {setProgress.before !== setProgress.after && `${setProgress.before} → `}
+              {setProgress.after}/{setProgress.total}
+            </span>
+          </div>
+          <div
+            className="h-3 ink-border-sm bg-[var(--c-paper)]/15 relative overflow-hidden"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={setProgress.total}
+            aria-valuenow={setProgress.after}
+          >
+            <div
+              className="absolute inset-y-0 left-0 bg-[var(--c-yellow)]"
+              style={{ width: `${(setProgress.before / setProgress.total) * 100}%` }}
+            />
+            <div
+              className="absolute inset-y-0 bg-[#4ADE80] po-anim po-grow"
+              style={{
+                left: `${(setProgress.before / setProgress.total) * 100}%`,
+                width: `${((setProgress.after - setProgress.before) / setProgress.total) * 100}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* The rest of the haul */}
       {groups.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-2 px-2 max-h-[34vh] overflow-y-auto mb-4">
+        <div className="flex flex-wrap justify-center gap-x-2 gap-y-4 px-2 pt-3 max-h-[34vh] overflow-y-auto mb-4">
           {groups.map((grp, gi) => {
             const allSold = grp.indices.every((i) => sold.has(i));
             const spent = grp.pull.converted_to_credits || allSold;
@@ -1159,7 +1346,11 @@ function SummaryStage({
                       : undefined
                   }
                 />
-                {isWishlisted(grp.pull.card_id, profile?.id) && <WishlistHit small />}
+                <PullBadges
+                  pull={grp.pull}
+                  nd={nd.get(grp.pull.card_id)}
+                  wish={isWishlisted(grp.pull.card_id, profile?.id)}
+                />
                 {spent && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="heading-font fs-xs bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
@@ -1263,6 +1454,75 @@ function SummaryStage({
   );
 }
 
+/** D5: stamped print-number plate for a serialized reveal. */
+function SerialStamp({
+  n,
+  cap,
+  reducedMotion,
+}: {
+  n?: number;
+  cap?: number;
+  reducedMotion: boolean;
+}) {
+  const pad = (x?: number) => String(x ?? 0).padStart(String(cap ?? 0).length, '0');
+  return (
+    <div
+      className={cn('po-serial-stamp heading-font', !reducedMotion && 'po-anim po-stamp-in')}
+      aria-label={`Serialized ${n} of ${cap}`}
+    >
+      #{pad(n)}/{cap}
+    </div>
+  );
+}
+
+/** D5: full-screen Mythic moment. CardFace plays the card's video art when
+ * it has one. Locked for 1.5s so a fast tapper can't skip past it. */
+function MythicTakeover({
+  pull,
+  locked,
+  reducedMotion,
+  onClose,
+}: {
+  pull: PackPull;
+  locked: boolean;
+  reducedMotion: boolean;
+  onClose: () => void;
+}) {
+  const def = pullToDef(pull);
+  const color = RARITY_HEX[pull.rarity] || RARITY_HEX.Mythic;
+  return (
+    <div
+      className={cn('po-takeover', !reducedMotion && 'po-anim po-takeover-in')}
+      style={{ ['--burst' as string]: color }}
+      role="alertdialog"
+      aria-label={`Mythic pull: ${def.name}`}
+      onClick={() => !locked && onClose()}
+    >
+      <div aria-hidden className="po-takeover-rays starburst-ray" />
+      <div className="relative heading-font po-takeover-kicker">MYTHIC PULL</div>
+      <div className={cn('relative', !reducedMotion && 'po-anim po-takeover-card')}>
+        <div className={rarityGlow(pull.rarity)}>
+          <CardFace
+            def={def}
+            size="full"
+            foil={pull.foil}
+            serial={
+              pull.serialized ? { number: pull.serial_number!, cap: pull.serial_cap! } : undefined
+            }
+          />
+          {pull.foil && <FoilShimmer reducedMotion={reducedMotion} />}
+        </div>
+      </div>
+      <div className="relative heading-font po-takeover-name">{def.name.toUpperCase()}</div>
+      <div className="relative mt-4">
+        <PopButton color="yellow" disabled={locked} onClick={onClose}>
+          {locked ? '…' : 'CONTINUE ▸'}
+        </PopButton>
+      </div>
+    </div>
+  );
+}
+
 /** One headline number in the summary's stat strip. */
 function StatTile({
   label,
@@ -1300,6 +1560,34 @@ function StatTile({
  * localStorage is cheap and the list can change between packs. */
 function isWishlisted(cardId: string | undefined, userId: string | undefined): boolean {
   return !!cardId && loadWishlist(userId).has(cardId);
+}
+
+/** D10: per-card badges in the haul grid. */
+function PullBadges({
+  pull,
+  nd,
+  wish,
+}: {
+  pull: PackPull;
+  nd?: { isNew: boolean; copies: number };
+  wish: boolean;
+}) {
+  const tags: { t: string; c: string }[] = [];
+  if (!pull.converted_to_credits && nd)
+    tags.push(nd.isNew ? { t: 'NEW', c: 'po-b-new' } : { t: `DUPE ×${nd.copies}`, c: 'po-b-dupe' });
+  if (pull.serialized) tags.push({ t: `#${pull.serial_number}`, c: 'po-b-serial' });
+  if (pull.foil) tags.push({ t: 'FOIL', c: 'po-b-foil' });
+  if (wish) tags.push({ t: '♥ WISH', c: 'po-b-wish' });
+  if (!tags.length) return null;
+  return (
+    <div className="po-badges" aria-label={tags.map((x) => x.t).join(', ')}>
+      {tags.map((x) => (
+        <span key={x.t} className={cn('po-badge', x.c)}>
+          {x.t}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function WishlistHit({ small }: { small?: boolean }) {

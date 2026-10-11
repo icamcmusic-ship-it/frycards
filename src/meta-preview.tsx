@@ -143,6 +143,54 @@ const pulls: PackPull[] = POOL.filter((c) => c.type !== 'Leader')
     credit_value: 0,
   }));
 
+// `&pull=sr|ur|mythic|serial` swaps in a haul whose best card is that tier,
+// for the per-rarity reveal (D5). Mythic prefers a card with video art.
+const pullVariant = params0().get('pull');
+function params0() {
+  return new URLSearchParams(location.search);
+}
+function pullOf(c: (typeof POOL)[number], extra: Partial<PackPull> = {}): PackPull {
+  return {
+    card_id: c.id,
+    name: c.name,
+    rarity: c.rarity ?? 'Common',
+    card_type: c.type,
+    image_url: c.image ?? null,
+    foil: false,
+    slot: 'chase',
+    converted_to_credits: false,
+    credit_value: 0,
+    ...extra,
+  };
+}
+const byRarity = (r: string, video = false) =>
+  POOL.filter((c) => c.type !== 'Leader' && c.rarity === r).sort(
+    (a, b) =>
+      Number(video && /\.(mp4|webm)/i.test(b.image ?? '')) -
+      Number(video && /\.(mp4|webm)/i.test(a.image ?? '')),
+  )[0];
+if (pullVariant) {
+  const base = pulls.filter((p) => p.rarity === 'Common' || p.rarity === 'Uncommon').slice(0, 5);
+  const star =
+    pullVariant === 'sr'
+      ? byRarity('Super-Rare')
+      : pullVariant === 'ur'
+        ? byRarity('Ultra-Rare')
+        : pullVariant === 'mythic'
+          ? byRarity('Mythic', true)
+          : byRarity('Ultra-Rare');
+  pulls.splice(0, pulls.length, ...base);
+  if (star)
+    pulls.push(
+      pullOf(
+        star,
+        pullVariant === 'serial'
+          ? { serialized: true, serial_number: 23, serial_cap: 100, slot: 'serialized' }
+          : { foil: pullVariant === 'sr' },
+      ),
+    );
+}
+
 // Store shelf stand-ins. The real rows come from `pack_types` / `shop_items`,
 // which need the network; these mirror the live shapes closely enough for the
 // shelf, the odds modal and the cosmetics grid to lay out at full size.
@@ -150,15 +198,17 @@ const packTypes: PackType[] = [
   {
     id: 'preview-booster',
     name: 'Volume #1 Booster Pack',
-    description: 'Eight cards, one guaranteed foil.',
+    // Live copy (2026-10-11) — contradicts its own slots; the Store now
+    // generates the blurb from slot_config instead (packodds packBlurb).
+    description: 'Six cards from Volume #1 — Guaranteed Uncommon or better.',
     card_count: 8,
-    guaranteed_rarity: 'Rare',
+    guaranteed_rarity: 'Uncommon',
     image_url: null,
     open_image_url: null,
     foil_chance: 0.0118,
     has_foil_slot: true,
-    price_credits: 499,
-    price_vouchers: 5,
+    price_credits: 599,
+    price_vouchers: 6,
     pack_tier: 'standard',
     slot_config: [
       {
@@ -180,11 +230,11 @@ const packTypes: PackType[] = [
         count: 1,
         foil_eligible: true,
         rarity_weights: {
-          Rare: 0.7705,
-          'Super-Rare': 0.13,
-          'Ultra-Rare': 0.082,
-          'Full-Art': 0.013,
-          Mythic: 0.0045,
+          Rare: 0.65,
+          'Super-Rare': 0.17,
+          'Ultra-Rare': 0.11,
+          'Full-Art': 0.05,
+          Mythic: 0.02,
         },
         guaranteed_min_rarity: 'Rare',
       },
@@ -194,13 +244,13 @@ const packTypes: PackType[] = [
         foil_eligible: true,
         foil_chance_override: 1,
         rarity_weights: {
-          Common: 0.34,
-          Uncommon: 0.36,
+          Common: 0.3,
+          Uncommon: 0.32,
           Rare: 0.22,
-          'Super-Rare': 0.055,
-          'Ultra-Rare': 0.02,
-          'Full-Art': 0.004,
-          Mythic: 0.001,
+          'Super-Rare': 0.09,
+          'Ultra-Rare': 0.04,
+          'Full-Art': 0.02,
+          Mythic: 0.01,
         },
         guaranteed_min_rarity: 'Common',
       },
@@ -251,6 +301,22 @@ const packTypes: PackType[] = [
     set_name: null,
   },
 ];
+// A limited colour pack (migration 20261012000020), leaving in ~3 days.
+packTypes.push({
+  ...packTypes[0],
+  id: 'preview-ember',
+  name: 'Ember Pack',
+  description: null,
+  price_credits: 649,
+  price_vouchers: 7,
+  pack_tier: 'limited',
+  time_limited: true,
+  pack_group: 'color_ember',
+  ...({
+    available_until: new Date(Date.now() + 3 * 86400_000 - 3600_000).toISOString(),
+    allowed_colors: ['Ember'],
+  } as object),
+});
 
 const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar'] as const).map(
   (item_type, i) => ({

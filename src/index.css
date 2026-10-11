@@ -1264,3 +1264,505 @@ html[data-scheme='dark'] .cl-new,
 html[data-scheme='dark'] .cl-tag-new {
   color: #050507;
 }
+
+/* ---------------------------------------------------------------------------
+   Pack opening + Store (STORE_AND_PACKS_PROPOSAL D2/D3/D5/D6/D9/D10, A1-A3).
+   Colours here are literal where they sit on the always-dark opening overlay
+   or on rarity colour, so light themes and INK read the same.
+   --------------------------------------------------------------------------- */
+@keyframes po-wobble-0 {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-0.6deg) translateY(-1px);
+  }
+}
+@keyframes po-wobble-1 {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-1.2deg) translateX(-2px);
+  }
+  75% {
+    transform: rotate(1.2deg) translateX(2px);
+  }
+}
+@keyframes po-wobble-2 {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(-2deg) translate(-3px, 1px);
+  }
+  40% {
+    transform: rotate(2deg) translate(3px, -1px);
+  }
+  60% {
+    transform: rotate(-1.4deg) translate(-2px, 0);
+  }
+  80% {
+    transform: rotate(1.4deg) translate(2px, 0);
+  }
+}
+@keyframes po-wobble-3 {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+  15% {
+    transform: rotate(-3deg) translate(-5px, 2px) scale(1.01);
+  }
+  30% {
+    transform: rotate(3deg) translate(5px, -2px);
+  }
+  45% {
+    transform: rotate(-2.4deg) translate(-4px, 1px) scale(1.015);
+  }
+  60% {
+    transform: rotate(2.4deg) translate(4px, -1px);
+  }
+  80% {
+    transform: rotate(-1deg) translate(-2px, 0);
+  }
+}
+.po-leak {
+  position: absolute;
+  left: -4%;
+  right: -4%;
+  height: 4%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--leak) 20%,
+    #fff 50%,
+    var(--leak) 80%,
+    transparent
+  );
+  filter: blur(3px);
+  box-shadow: 0 0 18px 6px var(--leak);
+  mix-blend-mode: screen;
+  animation: po-leak-pulse 1.4s ease-in-out infinite;
+  z-index: 5;
+}
+@keyframes po-leak-pulse {
+  0%,
+  100% {
+    filter: blur(3px) brightness(0.9);
+  }
+  50% {
+    filter: blur(4px) brightness(1.4);
+  }
+}
+.po-dim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  animation: po-fade-in 0.25s ease-out both;
+  pointer-events: none;
+}
+@keyframes po-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.po-burst-ring {
+  position: absolute;
+  inset: -40%;
+  pointer-events: none;
+  border-radius: 50%;
+  background: repeating-conic-gradient(var(--burst) 0deg 6deg, transparent 6deg 18deg);
+  mask: radial-gradient(circle, transparent 28%, #000 30%, transparent 70%);
+  -webkit-mask: radial-gradient(circle, transparent 28%, #000 30%, transparent 70%);
+  animation: po-burst-spin 1.2s ease-out forwards;
+  z-index: -1;
+}
+@keyframes po-burst-spin {
+  0% {
+    transform: scale(0.4) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.3) rotate(40deg);
+    opacity: 0;
+  }
+}
+.po-serial-stamp {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%) rotate(-8deg);
+  background: #111;
+  color: #ffd23f;
+  border: 3px solid #ffd23f;
+  box-shadow: 3px 3px 0 #000;
+  padding: 2px 10px;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  z-index: 15;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.po-stamp-in {
+  animation: po-stamp 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) 0.35s both;
+}
+@keyframes po-stamp {
+  0% {
+    transform: translateX(-50%) rotate(-8deg) scale(2.6);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(-50%) rotate(-8deg) scale(1);
+    opacity: 1;
+  }
+}
+.po-takeover {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, var(--burst) 0%, #2a0508 45%, #050507 80%);
+}
+.po-takeover-in {
+  animation: po-fade-in 0.35s ease-out both;
+}
+.po-takeover-rays {
+  position: absolute;
+  inset: -50%;
+  opacity: 0.35;
+  animation: po-rays 18s linear infinite;
+}
+@keyframes po-rays {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.po-takeover-kicker {
+  color: #ffd23f;
+  font-size: 14px;
+  letter-spacing: 0.4em;
+  margin-bottom: 10px;
+  text-shadow: 2px 2px 0 #000;
+}
+.po-takeover-card {
+  animation: po-takeover-card 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes po-takeover-card {
+  0% {
+    transform: scale(0.3) rotateY(540deg);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) rotateY(0deg);
+    opacity: 1;
+  }
+}
+.po-takeover-name {
+  margin-top: 14px;
+  color: #fff;
+  font-size: clamp(22px, 7vw, 44px);
+  line-height: 1;
+  text-align: center;
+  -webkit-text-stroke: 1.5px #000;
+  text-shadow: 4px 4px 0 #000;
+}
+.po-hero {
+  transform: scale(1.12);
+  transform-origin: top center;
+  margin-top: 14px;
+  margin-bottom: 52px;
+}
+@media (max-width: 480px) {
+  .po-hero {
+    transform: scale(1);
+    margin-bottom: 16px;
+  }
+}
+.po-hero-burst {
+  position: absolute;
+  inset: -22%;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--burst) 0%, transparent 62%);
+  opacity: 0.55;
+}
+.po-new-sticker {
+  position: absolute;
+  top: 18px;
+  right: -14px;
+  z-index: 25;
+  background: #ffd23f;
+  color: #111;
+  border: 3px solid #111;
+  box-shadow: 3px 3px 0 #111;
+  padding: 2px 8px;
+  font-size: 16px;
+  transform: rotate(12deg);
+}
+.po-badges {
+  position: absolute;
+  top: -10px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.po-badge {
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 2px 4px;
+  border: 2px solid #111;
+  white-space: nowrap;
+  color: #111;
+}
+.po-b-new {
+  background: #ffd23f;
+}
+.po-b-dupe {
+  background: #9ca3af;
+}
+.po-b-serial {
+  background: #111;
+  color: #ffd23f;
+  border-color: #ffd23f;
+}
+.po-b-foil {
+  background: linear-gradient(110deg, #c7d2fe, #fbcfe8, #a7f3d0);
+}
+.po-b-wish {
+  background: #f9a8d4;
+}
+.po-grow {
+  animation: po-grow-kf 1s ease-out 0.4s both;
+  transform-origin: left center;
+}
+@keyframes po-grow-kf {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+/* D6: holographic foil shimmer following --mx/--my (pointer or tilt). */
+.po-foil-shimmer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  mix-blend-mode: color-dodge;
+  opacity: 0.55;
+  background:
+    radial-gradient(
+      circle at var(--mx, 50%) var(--my, 30%),
+      rgba(255, 255, 255, 0.75) 0%,
+      transparent 38%
+    ),
+    linear-gradient(
+      115deg,
+      transparent 20%,
+      rgba(255, 0, 170, 0.35) calc(var(--mx, 50%) - 18%),
+      rgba(0, 220, 255, 0.35) var(--mx, 50%),
+      rgba(255, 230, 0, 0.35) calc(var(--mx, 50%) + 18%),
+      transparent 80%
+    );
+  transition: background-position 0.1s linear;
+}
+.po-foil-shimmer[data-static] {
+  opacity: 0.3;
+}
+.po-tilt-btn {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  z-index: 12;
+  background: #111;
+  color: #ffd23f;
+  border: 2px solid #ffd23f;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 6px;
+  min-height: 28px;
+}
+/* A2: CSS pack wrapper fallback — crimped foil ends, colour band, halftone. */
+.pk-wrap {
+  position: relative;
+  overflow: hidden;
+  background: var(--pk, #ffd23f);
+  container-type: inline-size;
+}
+.pk-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 34%;
+  height: 32%;
+  background: #111;
+  transform: skewY(-8deg);
+}
+.pk-halftone {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.28) 22%, transparent 24%);
+  background-size: 9px 9px;
+  mask: linear-gradient(160deg, #000 0%, transparent 55%);
+  -webkit-mask: linear-gradient(160deg, #000 0%, transparent 55%);
+}
+.pk-crimp {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 7%;
+  background: repeating-linear-gradient(90deg, #d1d5db 0 6px, #9ca3af 6px 9px);
+  border-color: #111;
+  border-style: solid;
+  border-width: 0;
+}
+.pk-crimp-top {
+  top: 0;
+  border-bottom-width: 3px;
+}
+.pk-crimp-bottom {
+  bottom: 0;
+  border-top-width: 3px;
+}
+.pk-logo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 8%;
+  font-family: Montserrat, system-ui, sans-serif;
+  font-weight: 900;
+  transform: skewY(-8deg);
+}
+.pk-brand {
+  color: #111;
+  background: #fff;
+  border: 3px solid #111;
+  padding: 0 0.4em;
+  font-size: max(10px, 9cqi);
+  letter-spacing: 0.08em;
+  box-shadow: 3px 3px 0 #111;
+}
+.pk-name {
+  margin-top: 0.3em;
+  color: var(--pk, #ffd23f);
+  font-size: max(12px, 11cqi);
+  line-height: 0.95;
+  -webkit-text-stroke: 1px #111;
+  text-shadow: 3px 3px 0 #000;
+}
+/* Store: hero, ribbons, segmented controls. */
+.st-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 150px;
+  background: #111;
+  color: #fff;
+}
+.st-hero-fallback {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(rgba(255, 210, 63, 0.35) 22%, transparent 24%) 0 0 / 10px 10px,
+    linear-gradient(120deg, #e11d2e 0%, #111 55%, #111 100%);
+}
+.st-ribbon {
+  position: absolute;
+  top: 10px;
+  right: -34px;
+  z-index: 5;
+  transform: rotate(35deg);
+  background: #e11d2e;
+  color: #fff;
+  border: 2px solid #111;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 36px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.st-ribbon-deal {
+  background: #22c55e;
+  color: #111;
+}
+.st-seg {
+  display: inline-flex;
+  border: 2px solid var(--c-ink);
+}
+.st-seg > button {
+  min-height: 36px;
+  min-width: 40px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 900;
+  background: var(--c-paper);
+  color: var(--c-ink);
+}
+.st-seg > button + button {
+  border-left: 2px solid var(--c-ink);
+}
+.st-seg > button[aria-pressed='true'] {
+  background: var(--c-ink);
+  color: var(--c-paper);
+}
+.st-seg > button:disabled {
+  opacity: 0.4;
+}
+.st-odds-bar {
+  display: flex;
+  height: 14px;
+  border: 2px solid var(--c-ink);
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion='full']) .po-anim,
+  html:not([data-motion='full']) .po-leak,
+  html:not([data-motion='full']) .po-takeover-rays {
+    animation: none !important;
+  }
+}
+html[data-motion='reduced'] .po-anim,
+html[data-motion='reduced'] .po-leak,
+html[data-motion='reduced'] .po-takeover-rays,
+html[data-motion='reduced'] .po-dim {
+  animation: none !important;
+}
+/* The opening overlay is a dark stage in every theme (like the poker
+   table): keep the classic roles inside it so paper text stays light on INK. */
+html[data-scheme='dark'] .po-root {
+  --c-ink: #1a1a1a;
+  --c-paper: #f7f7f7;
+  --c-steel: #2c3e50;
+}
+html[data-scheme='dark'] .po-root [class~='bg-[var(--c-yellow)]'],
+html[data-scheme='dark'] .po-root [class~='bg-[var(--c-yellow)]'] [class*='text-[var(--c-ink)]'] {
+  color: #1a1a1a;
+}
+html[data-scheme='dark'] .po-root [class~='bg-[var(--c-ink)]'],
+html[data-scheme='dark'] .po-root [class~='bg-[var(--c-ink)]'] [class*='text-[var(--c-paper)]'],
+html[data-scheme='dark'] .po-root [class*='bg-[var(--c-steel)]'],
+html[data-scheme='dark'] .po-root [class*='bg-[var(--c-steel)]'] [class*='text-[var(--c-paper)]'] {
+  color: #f7f7f7;
+}

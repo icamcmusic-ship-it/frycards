@@ -13,7 +13,7 @@
  *    server-side `roll_slot_rarity` function.
  */
 import { PackSlot, PackType } from '../lib/supabase';
-import { rarityTier } from './rarity';
+import { RARITY_ORDER as RARITY_LADDER, rarityTier } from './rarity';
 import { FOIL_QUICKSELL_MULTIPLIER, quicksellPrice } from './economy';
 
 export const LEGACY_SLOT_WEIGHTS: Record<string, Record<string, number>> = {
@@ -184,4 +184,84 @@ export function expectedQuicksellValue(pack: PackType): number {
     total += row.count * perCard * (1 + row.foilChance * (FOIL_QUICKSELL_MULTIPLIER - 1));
   }
   return total;
+}
+
+// ---------------------------------------------------------------------------
+// Store copy generated from the odds config (A4). The badge, blurb and the
+// "what's inside" lines are all derived from `slot_config`, so they can never
+// contradict the odds the server actually rolls (they once said "one
+// guaranteed foil", "RARE+ GUARANTEED" and, in the DB column, Uncommon).
+// ---------------------------------------------------------------------------
+
+/** Lowest rarity a slot row can produce: its floor or its lowest weight. */
+function rowFloor(row: SlotOdds): number {
+  const live = Object.entries(row.weights).filter(([, p]) => p > 0);
+  const lowest = live.length ? Math.min(...live.map(([r]) => rarityTier(r))) : 0;
+  return Math.max(lowest, row.minRarity ? rarityTier(row.minRarity) : 0);
+}
+
+/** The best rarity at least one card is guaranteed to reach, or null when
+ * every slot can be a Common. */
+export function packGuarantee(pack: PackType): string | null {
+  let best = 0;
+  for (const row of packOdds(pack)) best = Math.max(best, rowFloor(row));
+  return best > 0 ? RARITY_LADDER[best] : null;
+}
+
+/** Cards per pack as the slots actually roll them. */
+export function packCardCount(pack: PackType): number {
+  const n = packOdds(pack).reduce((s, r) => s + r.count, 0);
+  return n || pack.card_count;
+}
+
+/** Rarities above Rare that any slot can hit, high to low. */
+export function packChaseRarities(pack: PackType): string[] {
+  const set = new Set<string>();
+  for (const row of packOdds(pack))
+    for (const [r, p] of Object.entries(row.weights))
+      if (p > 0 && rarityTier(r) > rarityTier('Rare')) set.add(r);
+  return [...set].sort((a, b) => rarityTier(b) - rarityTier(a));
+}
+
+const NUM_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+const numWord = (n: number) => NUM_WORDS[n] ?? String(n);
+const listOr = (xs: string[]) =>
+  xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
+
+/** One-line pack description, generated. */
+export function packBlurb(pack: PackType & { allowed_colors?: string[] | null }): string {
+  const n = packCardCount(pack);
+  const parts: string[] = [`${n} cards`];
+  const foils = packFoilChance(pack).guaranteed;
+  if (foils > 0) parts.push(`${numWord(foils)} guaranteed foil${foils === 1 ? '' : 's'}`);
+  const g = packGuarantee(pack);
+  if (g) parts.push(`at least one ${g} or better`);
+  let s = parts.join(', ') + '.';
+  const chase = packChaseRarities(pack);
+  if (chase.length) s += ` Can hit ${listOr(chase)}.`;
+  if (pack.allowed_colors?.length) s += ` Weighted to ${listOr(pack.allowed_colors)}.`;
+  return s;
+}
+
+/** Badge text, e.g. "RARE+ GUARANTEED", or null. */
+export function packGuaranteeBadge(pack: PackType): string | null {
+  const g = packGuarantee(pack);
+  return g ? `${g.toUpperCase()}+ GUARANTEED` : null;
+}
+
+/** "What's inside" lines, one per slot row. */
+export function packContentsLines(pack: PackType): string[] {
+  return packOdds(pack).map((row) => {
+    const live = sortedWeights(row.weights)
+      .filter(([, p]) => p > 0)
+      .map(([r]) => r);
+    const floor = RARITY_LADDER[rowFloor(row)];
+    const range =
+      live.length <= 1
+        ? floor
+        : `${floor === live[0] ? live[0] : floor} to ${live[live.length - 1]}`;
+    const foil = row.foilChance >= 1 ? ' foil' : '';
+    const type = row.cardType ? ` ${row.cardType}` : '';
+    return `${row.count}×${foil}${type} ${range}`;
+  });
 }

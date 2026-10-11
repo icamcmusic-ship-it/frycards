@@ -148,3 +148,34 @@ One per Mythic card, or one generic: `mythic_<cardId>.webm` (VP9 + alpha) and an
 8. A10 + B7: a "What's inside" preview with a chase-card fan, owned-set progress and wishlist hits. (M)
 9. D8 + D6: sound hooks and foil shimmer. (S, needs C12 audio)
 10. B5: a visible pity meter. (L, server work) Alongside it: A4 copy/odds consistency and A12 re-hosting of the Midjourney URLs, which are cheap trust and breakage fixes.
+
+## Asset drop-in paths
+
+The client already looks for these files (`src/meta/pack/packArt.ts`). Upload them to the art Pages project and they appear with no code change. Until a file exists the request 404s once per session and the styled CSS wrapper (halftone, crimped ends, colour band from `pack_group`, pack name in Montserrat 900) is shown instead.
+
+`<pack_slug>` is the pack name lower-cased, with every run of non-alphanumerics turned into `_` (for example "Volume #1 Booster Pack" becomes `volume_1_booster_pack` and "Ember Pack" becomes `ember_pack`).
+
+| File | Size | Used by |
+|---|---|---|
+| `https://frycards-art.pages.dev/Packs/<pack_slug>/icon.webp` | 800x1000, transparent | Store tile, daily pack row. Falls back to `pack_types.image_url`. |
+| `https://frycards-art.pages.dev/Packs/<pack_slug>/wrapper.webp` | 770x960 | Tear stage body and the Store hero thumbnail. Falls back to `open_image_url`, then `image_url`. |
+| `https://frycards-art.pages.dev/Packs/<pack_slug>/strip.webp` | 770x960, with the top 15% being the tear strip (same canvas as the wrapper) | Tear-off strip. Falls back to the wrapper. |
+| `https://frycards-art.pages.dev/Packs/<pack_slug>/back.webp` | 770x960 | Reserved for the torn-wrapper back. |
+| `https://frycards-art.pages.dev/Store/hero_<campaign>.webp` | 2400x800 | Store hero (desktop). |
+| `https://frycards-art.pages.dev/Store/hero_<campaign>_mobile.webp` | 1080x1080 | Store hero (640px and below). |
+
+Hero `<campaign>` is the featured pack's slug (for example `hero_ember_pack.webp`), or `daily_deal` when the hero is today's deal pack.
+
+Slugs needed today: `volume_1_booster_pack`, `volume_1_booster_box`, `daily_free_pack`, `season_pass_reward_pack`, `deck_box`, `ember_pack`, `tide_pack`, `root_pack`, `gale_pack`, `light_pack`, `shadow_pack`, `void_pack`.
+
+### Daily deal and colour packs (migration `20261012000020`)
+
+- One purchasable pack a day is 15% off (`daily_pack_deals()`). It rotates at UTC midnight and is charged server-side by `open_pack`, `buy_and_open_packs` and `buy_pack_to_inventory` through `pack_effective_price`.
+- Seven colour packs (Ember, Tide, Root, Gale, Light, Shadow, Void) exist as `pack_types` rows with `is_active = false`, `time_limited = true`, `pack_group = 'color_<colour>'` and `allowed_colors = {<Colour>}`. About 75% of their cards come from that colour. To put one on sale for a week, run:
+
+  ```sql
+  update pack_types set is_active = true, available_until = now() + interval '7 days'
+  where name = 'Ember Pack';
+  ```
+
+  The Store shows a "LEAVING IN 3D" ribbon from `available_until`, and every buy RPC refuses the pack once it has passed.
