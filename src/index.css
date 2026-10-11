@@ -914,3 +914,24 @@ html[data-scheme='dark'] select:not(.poker-table *) {
   background-color: var(--c-paper);
   color: var(--c-ink);
 }
+
+/* U71: shared tab strip (ui.tsx Tabs) — one scrolling row with an edge fade
+   on whichever side has more tabs hidden. */
+.tab-strip {
+  scrollbar-width: thin;
+}
+.tab-strip[data-fade-right] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+.tab-strip[data-fade-left] {
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+.tab-strip[data-fade-left][data-fade-right] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent
+  );
+}

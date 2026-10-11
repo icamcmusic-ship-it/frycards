@@ -23,7 +23,7 @@ import {
   BountyCard,
   Profile,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
+import { MetaHeader, PopButton, Notice, Credits, Vouchers, Tabs } from './ui';
 import { cn } from '../lib/utils';
 import { RARITY_CHIP, ALL_SET_NAMES, RARITY_ORDER } from './rarity';
 import { SafeImage } from './SafeImage';
@@ -1072,9 +1072,12 @@ function PackTile({
               {busyId === pack.id ? (
                 'OPENING…'
               ) : pack.price_credits === 0 ? (
-                'FREE'
+                'OPEN · FREE'
               ) : (
-                <Credits amount={pack.price_credits} className="justify-center" />
+                // U39: a verb on the primary button, not a bare price.
+                <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
+                  BUY &amp; OPEN · <Credits amount={pack.price_credits} />
+                </span>
               )}
             </PopButton>
             {profile && profile.credits < pack.price_credits && (
@@ -1100,7 +1103,13 @@ function PackTile({
               }
               onClick={() => onBuy(pack, 'vouchers')}
             >
-              {busyId === pack.id ? 'OPENING…' : `${fmtVouchers(pack.price_vouchers)} VOUCHERS`}
+              {busyId === pack.id ? (
+                'OPENING…'
+              ) : (
+                <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
+                  OPEN · <Vouchers amount={pack.price_vouchers} />
+                </span>
+              )}
             </PopButton>
             {profile && profile.vouchers < pack.price_vouchers && (
               <div className="mt-1 text-center fs-xs font-black text-[var(--c-steel)]">
@@ -1128,7 +1137,8 @@ function PackTile({
                   'OPENING…'
                 ) : (
                   <>
-                    OPEN ×{n} (<Credits amount={pack.price_credits! * n} />)
+                    {/* U40: no padded parentheses. */}
+                    OPEN {n} · <Credits amount={pack.price_credits! * n} />
                   </>
                 )}
               </button>
@@ -1146,10 +1156,10 @@ function PackTile({
             {busyId === 'inv:' + pack.id + ':credits' ? (
               'BUYING…'
             ) : pack.price_credits === 0 ? (
-              'SAVE FOR LATER (FREE)'
+              'SAVE FOR LATER · FREE'
             ) : (
               <>
-                SAVE FOR LATER (<Credits amount={pack.price_credits} />)
+                SAVE FOR LATER · <Credits amount={pack.price_credits} />
               </>
             )}
           </button>
@@ -1161,7 +1171,13 @@ function PackTile({
             className="flex-1 min-h-10 flex items-center justify-center gap-1 fs-xs font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Backpack className="w-3 h-3" />
-            {busyId === 'inv:' + pack.id + ':vouchers' ? 'BUYING…' : 'SAVE FOR LATER (VOUCHERS)'}
+            {busyId === 'inv:' + pack.id + ':vouchers' ? (
+              'BUYING…'
+            ) : (
+              <>
+                SAVE FOR LATER · <Vouchers amount={pack.price_vouchers} />
+              </>
+            )}
           </button>
         )}
       </div>

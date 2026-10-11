@@ -247,7 +247,13 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     let cancelled = false;
     fetchGradedCards(userId)
       .then((rows) => {
-        if (!cancelled) setGraded(rows);
+        if (cancelled) return;
+        setGraded(rows);
+        // U50: slabs waiting to be revealed open on AT THE GRADERS, unless
+        // the link named a tab.
+        const now = Date.now();
+        const due = rows.some((g) => g.grade == null && new Date(g.ready_at).getTime() <= now);
+        if (due && !/^#\/grading\/./.test(window.location.hash)) setTab('limbo');
       })
       .catch(() => {})
       .finally(() => {
@@ -256,6 +262,8 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     return () => {
       cancelled = true;
     };
+    // Only on load: `setTab` is a fresh callback whenever the route changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   // 1s tick drives the limbo countdowns — only while something is pending.
@@ -511,13 +519,15 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <Tabs
             ariaLabel="Grading sections"
+            className="min-w-0 max-w-full"
             value={tab}
             onChange={setTab}
             tabs={[
               { id: 'submit', label: 'SUBMIT CARDS' },
               {
                 id: 'limbo',
-                label: `AT THE GRADERS (${pending.length})${dueCount > 0 ? ' · READY!' : ''}`,
+                label: `AT THE GRADERS (${pending.length})`,
+                badge: dueCount > 0 ? 'READY' : undefined,
               },
               { id: 'vault', label: `MY SLABS (${vault.length})` },
             ]}

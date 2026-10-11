@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/utils';
 import { AlertTriangle, Coins, Ticket, TrendingUp } from 'lucide-react';
 import { useMeta } from './MetaContext';
@@ -94,12 +94,7 @@ export function Tabs<T extends string>({
     e.preventDefault();
   };
   return (
-    <div
-      role="tablist"
-      aria-label={ariaLabel}
-      onKeyDown={onKeyDown}
-      className={cn('flex flex-wrap gap-1.5', className)}
-    >
+    <TabStrip ariaLabel={ariaLabel} onKeyDown={onKeyDown} className={className} activeKey={value}>
       {tabs.map((t) => {
         const active = t.id === value;
         return (
@@ -108,11 +103,12 @@ export function Tabs<T extends string>({
             type="button"
             role="tab"
             aria-selected={active}
+            data-active={active || undefined}
             tabIndex={active ? 0 : -1}
             disabled={t.disabled}
             onClick={() => onChange(t.id)}
             className={cn(
-              'heading-font fs-sm px-3 py-2 min-h-[36px] ink-border-sm transition-colors',
+              'relative shrink-0 whitespace-nowrap heading-font fs-sm px-3 py-2 min-h-[36px] ink-border-sm transition-colors',
               active
                 ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] shadow-hard-black-xs'
                 : 'bg-[var(--c-steel)] text-[var(--c-paper)]/80 hover:text-[var(--c-paper)]',
@@ -120,14 +116,76 @@ export function Tabs<T extends string>({
             )}
           >
             {t.label}
+            {/* U52: one corner badge, not a block that repeats the label's count. */}
             {t.badge !== undefined && t.badge !== 0 && (
-              <span className="ml-1.5 px-1.5 bg-[var(--c-red)] text-[var(--c-paper)] fs-xs">
+              <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 flex items-center justify-center rounded-full bg-[var(--c-red)] text-[var(--c-paper)] fs-xs ink-border-sm leading-none">
                 {t.badge}
               </span>
             )}
           </button>
         );
       })}
+    </TabStrip>
+  );
+}
+
+/**
+ * U71: one tab pattern everywhere — a single row that scrolls sideways with
+ * an edge fade where more tabs hide, instead of wrapping to 2–3 rows on a
+ * phone. The active tab is kept in view.
+ */
+function TabStrip({
+  ariaLabel,
+  onKeyDown,
+  className,
+  activeKey,
+  children,
+}: {
+  ariaLabel: string;
+  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  className?: string;
+  activeKey: string;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const left = el.scrollLeft > 2;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+    setEdges((e) => (e.left === left && e.right === right ? e : { left, right }));
+  }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>('[data-active]');
+    if (active && typeof active.scrollIntoView === 'function' && el.scrollWidth > el.clientWidth)
+      active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    measure();
+  }, [activeKey, measure]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+  return (
+    <div
+      ref={ref}
+      role="tablist"
+      aria-label={ariaLabel}
+      onKeyDown={onKeyDown}
+      onScroll={measure}
+      data-fade-left={edges.left || undefined}
+      data-fade-right={edges.right || undefined}
+      className={cn(
+        'tab-strip flex flex-nowrap gap-1.5 overflow-x-auto pt-2 pr-2 pb-1 -mt-2',
+        className,
+      )}
+    >
+      {children}
     </div>
   );
 }
