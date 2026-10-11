@@ -8,6 +8,11 @@
  * No reward is ever tied to chip counts — placement only. The server applies
  * the same table (`record_match_placement`, migration 20261011000002); this
  * copy drives the game-over preview.
+ *
+ * Audit S-2: bot difficulty scales the credit reward only (XP stays flat so
+ * levelling is not gated by skill). The server reads the difficulty from the
+ * match ticket (`begin_match(p_mode, p_seats, p_difficulty)`, migration
+ * 20261012000001); a ticket without one pays like Normal.
  */
 import { MODES, PLACE_FACTORS, REWARD_BASE, SEAT_REWARD_MULT, type ModeId } from './constants';
 
@@ -21,6 +26,15 @@ export function minPaidHands(seats: number): number {
   return Math.max(3 * seats, 8);
 }
 
+export type RewardDifficulty = 'easy' | 'normal' | 'hard';
+
+/** Credit multiplier per bot difficulty, in hundredths (server: 0.8 / 1 / 1.15). */
+export const DIFFICULTY_REWARD_MULT: Record<RewardDifficulty, number> = {
+  easy: 80,
+  normal: 100,
+  hard: 115,
+};
+
 export interface PlacementReward {
   credits: number;
   xp: number;
@@ -33,6 +47,8 @@ export function placementReward(
   mode: ModeId,
   /** Hands played; omit for a preview that ignores the concede rule. */
   hands?: number,
+  /** Bot difficulty recorded on the ticket; omitted pays like Normal. */
+  difficulty: RewardDifficulty = 'normal',
 ): PlacementReward {
   if (place > 1 && hands !== undefined && hands < minPaidHands(seats)) {
     return { credits: 0, xp: 0, bpXp: 0 };
@@ -42,8 +58,10 @@ export function placementReward(
   // Integer maths in hundredths keeps JS rounding identical to Postgres numeric.
   const calc = ([lo, span]: number[]) =>
     Math.round((Math.round((lo + span * f) * 100) * Math.round(mult * 1000)) / 100_000);
+  const d = DIFFICULTY_REWARD_MULT[difficulty] ?? 100;
   return {
-    credits: calc(REWARD_BASE.credits),
+    // Postgres: round(credits * 0.8 | 1 | 1.15); exact in integer hundredths.
+    credits: Math.round((calc(REWARD_BASE.credits) * d) / 100),
     xp: calc(REWARD_BASE.xp),
     bpXp: calc(REWARD_BASE.bpXp),
   };
