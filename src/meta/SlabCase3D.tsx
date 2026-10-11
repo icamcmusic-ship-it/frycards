@@ -132,21 +132,26 @@ function perimeter(w: number, h: number, r: number, facets = 4): Strip[] {
   return out;
 }
 
-const GLOW: Record<'mint' | 'mintplus' | 'gem', string> = {
+const GLOW: Record<'mint' | 'mintplus' | 'gem' | 'pristine', string> = {
   mint: 'rgba(110,200,255,0.75)',
   mintplus: 'rgba(185,139,255,0.8)',
   gem: 'rgba(240,196,25,0.9)',
+  // PRISTINE: the black-label case — a gold halo around a black shell.
+  pristine: 'rgba(232,199,106,1)',
 };
-const RING: Record<'mint' | 'mintplus' | 'gem', string> = {
+const RING: Record<'mint' | 'mintplus' | 'gem' | 'pristine', string> = {
   mint: 'conic-gradient(from var(--slab-angle), #9fd8ff, #e9f6ff, #5aa9e6, #e9f6ff, #9fd8ff)',
   mintplus:
     'conic-gradient(from var(--slab-angle), #ff7ad9, #ffd36e, #7dffb0, #6ec8ff, #b98bff, #ff7ad9)',
   gem: 'conic-gradient(from var(--slab-angle), #fff3b0, #f0c419, #8a5a00, #ffe083, #fffbe6, #f0c419, #fff3b0)',
+  pristine:
+    'conic-gradient(from var(--slab-angle), #0b0b0b, #e8c76a, #fff6d6, #0b0b0b, #b8892b, #fff6d6, #0b0b0b)',
 };
-const WALL_HOLO: Record<'mint' | 'mintplus' | 'gem', string> = {
+const WALL_HOLO: Record<'mint' | 'mintplus' | 'gem' | 'pristine', string> = {
   mint: 'linear-gradient(90deg, #5aa9e6, #e9f6ff, #9fd8ff, #3c5a73, #5aa9e6)',
   mintplus: 'linear-gradient(90deg, #ff7ad9, #ffd36e, #7dffb0, #6ec8ff, #b98bff, #ff7ad9)',
   gem: 'linear-gradient(90deg, #8a5a00, #f0c419, #fff3b0, #c48a00, #ffe083, #8a5a00)',
+  pristine: 'linear-gradient(90deg, #050505, #c9a24a, #fff1c2, #050505, #e8c76a, #050505)',
 };
 
 /** Stable 0..1 stream for placing scuffs/twinkles per slab. */
@@ -265,7 +270,7 @@ const Plate = React.memo(function Plate({ g }: { g: GradedCard }) {
 
 export function SlabCase3D({ g, yaw, pitch }: { g: GradedCard; yaw: number; pitch: number }) {
   const svc = GRADING_SERVICE_BY_ID[g.service];
-  const tier = premiumTier(g.grade);
+  const tier = premiumTier(g.grade, !!g.pristine);
   const condition = conditionOf(g.grade);
   const W = SLAB_CASE_W;
   const H = SLAB_CASE_H;
@@ -284,8 +289,8 @@ export function SlabCase3D({ g, yaw, pitch }: { g: GradedCard; yaw: number; pitc
 
   const rnd = stream(g.id + 'tw');
   const twinkles =
-    tier === 'gem' || tier === 'mintplus'
-      ? Array.from({ length: tier === 'gem' ? 5 : 3 }, (_, i) => ({
+    tier === 'gem' || tier === 'mintplus' || tier === 'pristine'
+      ? Array.from({ length: tier === 'mintplus' ? 3 : tier === 'pristine' ? 7 : 5 }, (_, i) => ({
           left: 6 + rnd() * 88,
           top: 4 + rnd() * 92,
           delay: i * 0.55,
@@ -571,7 +576,7 @@ export function SlabCase3D({ g, yaw, pitch }: { g: GradedCard; yaw: number; pitc
                 }}
               />
             )}
-            {tier === 'gem' && (s.key === 'r' || s.key === 'l') && (
+            {(tier === 'gem' || tier === 'pristine') && (s.key === 'r' || s.key === 'l') && (
               <>
                 <Twinkle left={50} top={22} delay={i * 0.4} size={10} />
                 <Twinkle left={40} top={70} delay={i * 0.4 + 1.1} size={9} />

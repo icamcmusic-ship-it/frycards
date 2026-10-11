@@ -17,6 +17,17 @@ interface ChangelogEntry {
 // stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Grading Houses (v35.5)',
+    date: 'October 2026',
+    items: [
+      'THREE HOUSES, THREE LANES. Each grading house now wins somewhere: KEEPER on cheap cards, AMG in the middle, TCA at the top. The new HOUSES & REGISTRY tab shows each one\u2019s BEST FOR range, perks, cons and the expected-value table behind them.',
+      'PRISTINE 10. TCA grades strictest (about half a point lower) but half of its direct 10s come back PRISTINE in a black-and-gold case worth \u00d740, with four visible subgrades.',
+      'AMG SET REGISTRY AND POP REPORT. AMG is now 150 per card (minimum 3, premium \u00d71.3). Its slabs fill a registry for each colour with one-time milestone bonuses and badges, and its Pop Report adds up to +10% resale on low-pop grades.',
+      'CROSSOVER. Send a Keeper slab to TCA or AMG once, at their full fee. It keeps its grade if the new one isn\u2019t higher.',
+      'LOYALTY, WEEKLY SPECIAL AND THE COLLECTOR. Every 10 cards to a house earns a perk, one house grades one colour at half price each week, and each day\u2019s collector pays +15% on quicksell for one house\u2019s slabs.',
+    ],
+  },
+  {
     version: 'Polish & Balance (v35.4)',
     date: 'October 2026',
     items: [

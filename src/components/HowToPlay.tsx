@@ -630,6 +630,10 @@ const SECTIONS: Section[] = [
         'List spare cards for a fixed price or run a timed auction with bids and a buyout (5% seller fee). Player Shops unlock at level 20.',
       ],
       [
+        'Grading Lab',
+        'Send spare cards to one of three grading houses and get them back in a slab worth more on quicksell. KEEPER (70) is cheapest and fastest, grades a little generously, and a Keeper slab can be CROSSED OVER once to TCA or AMG for their full fee \u2014 the grade never goes down. AMG (150, minimum 3 cards, bulk breaks) fills a per-colour SET REGISTRY that pays one-time milestone bonuses and badges, and its POP REPORT gives rare grades a small resale bump. TCA (400) is the strictest grader but pays the highest premium, shows subgrades, and half of its direct 10s come back PRISTINE (\u00d740). Rough guide: Keeper for cards worth under ~214 raw, AMG up to ~410, TCA above. Every 10 cards to a house earns a loyalty perk, one house grades one colour at half price each week, and each day\u2019s collector pays +15% for one house\u2019s slabs.',
+      ],
+      [
         'Friends & Trading',
         'Search players, send friend requests, and propose direct card-and-credits trades.',
       ],
