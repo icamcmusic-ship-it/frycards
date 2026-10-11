@@ -19,6 +19,7 @@ import { CATEGORY_NAMES } from '../game/poker/evaluator';
 import { KEYWORDS, KEYWORD_SPECS } from '../game/poker/keywords';
 import { COLORS } from '../game/poker/colors';
 import { LOCATION_TEMPLATES } from '../game/poker/locations';
+import { ordinal, placementReward } from '../game/poker/rewards';
 
 const render_ = (meta: Partial<MetaState>, onNavigate = vi.fn()) => {
   render(
@@ -116,7 +117,11 @@ describe('HowToPlay teaches FryCards Poker', () => {
   test('rewards are by placement, with the spec numbers', () => {
     render_({ guest: true });
     const dl = openSection(/Rewards/);
-    expect(dl.textContent).toContain('1st 100 · 2nd 76 · 3rd 61 · 4th 49 · 5th 43 · 6th 40');
+    const line = [1, 2, 3, 4, 5, 6]
+      .map((p) => `${ordinal(p)} ${placementReward(p, 6, 'standard').credits}`)
+      .join(' · ');
+    expect(line).toBe('1st 100 · 2nd 66 · 3rd 45 · 4th 28 · 5th 19 · 6th 15');
+    expect(dl.textContent).toContain(line);
     expect(dl.textContent).toMatch(/Quick ×0\.5 · Standard ×1 · Deep ×1\.5/);
   });
 
