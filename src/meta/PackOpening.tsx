@@ -9,6 +9,7 @@ import { CardDef } from '../game/poker/cards';
 import { POOL, POOL_BY_ID } from '../game/poker/cardpool';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
 import { PopButton, Notice } from './ui';
+import { Card3DInspector } from '../components/Card3DInspector';
 import { cn } from '../lib/utils';
 import { RARITY_CHIP, RARITY_HEX, rarityGlow, rarityTier } from './rarity';
 import { getCardBackImage } from './cardback';
@@ -300,10 +301,14 @@ export function PackOpening({
       role="dialog"
       aria-modal="true"
       aria-label={`Opening ${packName}`}
-      className="po-root fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-[safe_center] p-4 overflow-y-auto outline-none"
+      className={cn(
+        'po-root fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center overflow-y-auto outline-none',
+        // The summary is a scrolling page with sticky bars, edge to edge.
+        stage === 'summary' ? 'justify-start p-0' : 'justify-[safe_center] p-4',
+      )}
     >
       <style>{PACK_OPENING_CSS}</style>
-      <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
+      <div className="fixed inset-0 starburst-ray opacity-20 pointer-events-none" />
       {stage === 'pack' && (
         <TearStage
           packName={packName}
@@ -1000,23 +1005,23 @@ function SummaryStage({
   // spotlight is always shown and the rest always collapses identical pulls,
   // so a 5-card pack and a 49-card box read the same way.
   const groups = useMemo(() => {
-    const m = new Map<string, { pull: PackPull; count: number; indices: number[] }>();
+    const m = new Map<string, HaulGroup>();
     pulls.forEach((p, i) => {
       if (i === bestIndex) return; // the spotlight already shows this copy
       const key = `${p.card_id}:${p.foil}:${p.variant ?? ''}:${p.serialized ? `s${p.serial_number}` : ''}:${p.converted_to_credits}`;
-      const g = m.get(key) || { pull: p, count: 0, indices: [] };
+      const g = m.get(key) || { key, pull: p, count: 0, indices: [] };
       g.count += 1;
       g.indices.push(i);
       m.set(key, g);
     });
-    return [...m.values()].sort(
-      (a, b) =>
-        rarityRank(b.pull.rarity) - rarityRank(a.pull.rarity) ||
-        Number(!!b.pull.variant) - Number(!!a.pull.variant) ||
-        Number(b.pull.foil) - Number(a.pull.foil) ||
-        (a.pull.name || '').localeCompare(b.pull.name || ''),
-    );
+    return [...m.values()];
   }, [pulls, bestIndex]);
+  // v31 summary revamp: the haul grid can be read in pull order or by
+  // rarity (highest first, in labelled bands), and narrowed to the NEW
+  // cards, the dupes or the variants/foils.
+  const [sortMode, setSortMode] = useState<'rarity' | 'order'>('rarity');
+  const [filter, setFilter] = useState<HaulFilter>('all');
+  const [inspect, setInspect] = useState<PackPull | null>(null);
 
   // Quicksell straight from the haul — mostly for the common/uncommon
   // clutter a big box tends to dump, without a separate trip to Collection.
@@ -1214,219 +1219,318 @@ function SummaryStage({
   }
 
   const best = pulls[bestIndex];
+  const bestSpent = best.converted_to_credits || sold.has(bestIndex);
+  const bestDef = pullToDef(best);
+
+  const isNewGroup = (g: HaulGroup) =>
+    !g.pull.converted_to_credits && !!nd.get(g.pull.card_id)?.isNew;
+  const isSpecial = (g: HaulGroup) => !!g.pull.variant || g.pull.foil || !!g.pull.serialized;
+  const filterCounts: Record<HaulFilter, number> = {
+    all: groups.length,
+    new: groups.filter(isNewGroup).length,
+    dupes: groups.filter((g) => !g.pull.converted_to_credits && !isNewGroup(g)).length,
+    special: groups.filter(isSpecial).length,
+  };
+  const shown = groups.filter((g) =>
+    filter === 'new'
+      ? isNewGroup(g)
+      : filter === 'dupes'
+        ? !g.pull.converted_to_credits && !isNewGroup(g)
+        : filter === 'special'
+          ? isSpecial(g)
+          : true,
+  );
+  // Pull order is the map's insertion order; rarity mode bands the grid.
+  const bands: { label: string | null; rarity?: string; items: HaulGroup[] }[] =
+    sortMode === 'order'
+      ? [{ label: null, items: shown }]
+      : (() => {
+          const sorted = [...shown].sort(
+            (x, y) =>
+              rarityRank(y.pull.rarity) - rarityRank(x.pull.rarity) ||
+              Number(!!y.pull.variant) - Number(!!x.pull.variant) ||
+              Number(y.pull.foil) - Number(x.pull.foil) ||
+              (x.pull.name || '').localeCompare(y.pull.name || ''),
+          );
+          const out: { label: string; rarity: string; items: HaulGroup[] }[] = [];
+          for (const g of sorted) {
+            const r = g.pull.rarity || 'Common';
+            const last = out[out.length - 1];
+            if (last && last.rarity === r) last.items.push(g);
+            else out.push({ label: r.toUpperCase(), rarity: r, items: [g] });
+          }
+          return out;
+        })();
+
+  const FILTERS: { id: HaulFilter; label: string }[] = [
+    { id: 'all', label: 'ALL' },
+    { id: 'new', label: 'NEW' },
+    { id: 'dupes', label: 'DUPES' },
+    { id: 'special', label: 'VARIANTS & FOILS' },
+  ];
 
   return (
-    <div className="relative flex flex-col items-center w-full max-w-5xl max-h-full">
-      <h2 className="heading-font text-2xl text-[var(--c-yellow)] text-center">
-        {packName.toUpperCase()}
-      </h2>
+    <div className="po-sum relative w-full flex flex-col min-h-full">
+      {/* Sticky compact header: what this was and what it's worth. */}
+      <header className="po-sum-head">
+        <div className="min-w-0">
+          <h2 className="heading-font text-[var(--c-yellow)] text-lg sm:text-2xl leading-none truncate">
+            {packName.toUpperCase()}
+          </h2>
+          <p className="fs-xs font-black tracking-wider text-[var(--c-paper)]/75 mt-1">
+            {pulls.length} CARD{pulls.length === 1 ? '' : 'S'}
+            {newCount > 0 && <span className="text-[var(--c-yellow)]"> · {newCount} NEW</span>}
+            {foilCount > 0 && <> · {foilCount} FOIL ✦</>}
+            {variantCount > 0 && <> · {variantCount} VARIANT ◆</>}
+          </p>
+        </div>
+        <div className="text-right shrink-0" aria-label={`Haul value ${fmtCredits(haulValue)}`}>
+          <div className="fs-xs font-black tracking-widest text-[var(--c-paper)]/70">
+            HAUL VALUE
+          </div>
+          <div className="heading-font text-xl sm:text-2xl leading-none text-[var(--c-yellow)]">
+            ✦ {fmtCredits(shownValue)}
+          </div>
+        </div>
+      </header>
       {/* U72: a comic burst for a big pull. */}
       <SfxBurst sfx={bigPull} />
 
-      {/* Headline numbers, read left to right: how much, how shiny, how much
-          it's worth. Previously the only summary was a row of rarity chips
-          plus a paragraph of small print. */}
-      <div className="flex flex-wrap justify-center gap-2 mt-3 mb-4">
-        <StatTile label="CARDS" value={String(pulls.length)} />
-        {foilCount > 0 && <StatTile label="FOILS ✦" value={String(foilCount)} accent="yellow" />}
-        {variantCount > 0 && (
-          <StatTile label="VARIANTS ◆" value={String(variantCount)} accent="yellow" />
-        )}
-        {newCount > 0 && <StatTile label="NEW" value={`×${newCount}`} accent="yellow" />}
-        <StatTile
-          label="TOP PULL"
-          value={(best.rarity || 'Common').toUpperCase()}
-          rarity={best.rarity}
-        />
-        <StatTile label="HAUL VALUE" value={fmtCredits(shownValue)} />
-        {creditsGained > 0 && (
-          <StatTile label="OVER CAP → ✦" value={fmtCredits(creditsGained)} accent="cyan" />
-        )}
-      </div>
-
-      {/* Spotlight — D9: bigger, with a rarity-coloured burst behind it. */}
-      <div
-        className="relative mb-4 shrink-0 po-hero"
-        style={{ ['--burst' as string]: RARITY_HEX[best.rarity] || RARITY_HEX.Common }}
-      >
-        <div className="po-hero-burst" aria-hidden />
-        <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
-        {nd.get(best.card_id)?.isNew && !best.converted_to_credits && (
-          <span className="po-new-sticker heading-font">NEW!</span>
-        )}
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
-          <Sparkles className="w-3 h-3" /> {best.serialized ? 'SERIALIZED!' : 'BEST PULL'}
-        </div>
-        <div
-          className={cn(
-            'relative po-anim',
-            !best.converted_to_credits && !sold.has(bestIndex) && rarityGlow(best.rarity),
-          )}
-          style={{ animation: reducedMotion ? undefined : 'po-card-out 0.35s ease-out' }}
-        >
-          <CardFace
-            def={pullToDef(best)}
-            size="full"
-            foil={best.foil}
-            variant={asVariant(best.variant)}
-            dimmed={best.converted_to_credits || sold.has(bestIndex)}
-            serial={
-              best.serialized ? { number: best.serial_number!, cap: best.serial_cap! } : undefined
-            }
-          />
-          {best.foil && !best.converted_to_credits && <FoilShimmer reducedMotion={reducedMotion} />}
-          {best.serialized && (
-            <SerialStamp
-              n={best.serial_number}
-              cap={best.serial_cap}
-              reducedMotion={reducedMotion}
-            />
-          )}
-          {/* QUICKSELL C/U can sell the best pull too — the spotlight must
-              stamp it SOLD like the grid, not keep rendering it as kept. */}
-          {sold.has(bestIndex) && !best.converted_to_credits && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="heading-font fs-xs bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
-                SOLD
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Rarity breakdown */}
-      <div className="flex flex-wrap justify-center gap-1.5 mb-3">
-        {rarityCounts.map(([r, n]) => (
-          <span
-            key={r}
-            className={cn(
-              'fs-xs font-black px-2 py-0.5 ink-border-sm',
-              RARITY_CHIP[r] || RARITY_CHIP.Common,
-            )}
-          >
-            {(r || 'Common').toUpperCase()} ×{n}
-          </span>
-        ))}
-      </div>
-
-      {setProgress && (
-        <div className="w-full max-w-sm mb-3 px-2" aria-label="Set progress">
-          <div className="flex justify-between fs-xs font-black text-[var(--c-paper)]/80 mb-1">
-            <span>{setProgress.setName.toUpperCase()}</span>
-            <span>
-              {setProgress.before !== setProgress.after && `${setProgress.before} → `}
-              {setProgress.after}/{setProgress.total}
-            </span>
-          </div>
+      <div className="po-sum-body">
+        {/* Best pull hero beside the haul's stats (stacked on phones). */}
+        <section className="po-sum-top" aria-label="Best pull">
           <div
-            className="h-3 ink-border-sm bg-[var(--c-paper)]/15 relative overflow-hidden"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={setProgress.total}
-            aria-valuenow={setProgress.after}
+            className="po-sum-hero"
+            style={{ ['--burst' as string]: RARITY_HEX[best.rarity] || RARITY_HEX.Common }}
           >
-            <div
-              className="absolute inset-y-0 left-0 bg-[var(--c-yellow)]"
-              style={{ width: `${(setProgress.before / setProgress.total) * 100}%` }}
-            />
-            <div
-              className="absolute inset-y-0 bg-[#4ADE80] po-anim po-grow"
-              style={{
-                left: `${(setProgress.before / setProgress.total) * 100}%`,
-                width: `${((setProgress.after - setProgress.before) / setProgress.total) * 100}%`,
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* The rest of the haul */}
-      {groups.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-x-2 gap-y-4 px-2 pt-3 max-h-[34vh] overflow-y-auto mb-4">
-          {groups.map((grp, gi) => {
-            const allSold = grp.indices.every((i) => sold.has(i));
-            const spent = grp.pull.converted_to_credits || allSold;
-            return (
-              <div key={gi} className="relative">
+            <div className="po-hero-burst" aria-hidden />
+            <div className="po-sum-hero-card">
+              <button
+                type="button"
+                className="po-cell-hit"
+                onClick={() => setInspect(best)}
+                aria-label={`Inspect best pull: ${bestDef.name}, ${best.rarity || 'Common'}${best.foil ? ', foil' : ''}`}
+              />
+              {nd.get(best.card_id)?.isNew && !best.converted_to_credits && (
+                <span className="po-new-sticker heading-font">NEW!</span>
+              )}
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
+                <Sparkles className="w-3 h-3" /> {best.serialized ? 'SERIALIZED!' : 'BEST PULL'}
+              </span>
+              <span
+                inert
+                className={cn('relative block po-anim', !bestSpent && rarityGlow(best.rarity))}
+                style={{ animation: reducedMotion ? undefined : 'po-card-out 0.35s ease-out' }}
+              >
                 <CardFace
-                  def={pullToDef(grp.pull)}
-                  size="compact"
-                  foil={grp.pull.foil}
-                  variant={asVariant(grp.pull.variant)}
-                  count={grp.count > 1 ? grp.count : undefined}
-                  dimmed={spent}
+                  def={bestDef}
+                  size="full"
+                  foil={best.foil}
+                  variant={asVariant(best.variant)}
+                  dimmed={bestSpent}
                   serial={
-                    grp.pull.serialized
-                      ? { number: grp.pull.serial_number!, cap: grp.pull.serial_cap! }
+                    best.serialized
+                      ? { number: best.serial_number!, cap: best.serial_cap! }
                       : undefined
                   }
                 />
-                <PullBadges
-                  pull={grp.pull}
-                  nd={nd.get(grp.pull.card_id)}
-                  wish={isWishlisted(grp.pull.card_id, profile?.id)}
-                />
-                {spent && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                {best.foil && !best.converted_to_credits && (
+                  <FoilShimmer reducedMotion={reducedMotion} />
+                )}
+                {best.serialized && (
+                  <SerialStamp
+                    n={best.serial_number}
+                    cap={best.serial_cap}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+                {/* QUICKSELL C/U can sell the best pull too — the spotlight
+                    must stamp it SOLD like the grid. */}
+                {sold.has(bestIndex) && !best.converted_to_credits && (
+                  <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="heading-font fs-xs bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
-                      {allSold && !grp.pull.converted_to_credits
-                        ? 'SOLD'
-                        : `+${fmtCredits(grp.pull.credit_value * grp.count)}`}
+                      SOLD
                     </span>
-                  </div>
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+
+          <div className="po-sum-info">
+            <div>
+              <div className="fs-xs font-black tracking-widest text-[var(--c-paper)]/70">
+                TOP PULL
+              </div>
+              <div
+                className="heading-font text-2xl sm:text-3xl leading-none"
+                style={{ color: RARITY_HEX[best.rarity] || RARITY_HEX.Common }}
+              >
+                {(best.rarity || 'Common').toUpperCase()}
+              </div>
+              <div className="heading-font text-[var(--c-paper)] text-base sm:text-lg leading-tight mt-1">
+                {bestDef.name.toUpperCase()}
+              </div>
+              <PullBadges
+                pull={best}
+                nd={nd.get(best.card_id)}
+                wish={isWishlisted(best.card_id, profile?.id)}
+                inline
+              />
+            </div>
+
+            {(creditsGained > 0 || variantCount > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {variantCount > 0 && (
+                  <StatTile label="VARIANTS ◆" value={String(variantCount)} accent="yellow" />
+                )}
+                {creditsGained > 0 && (
+                  <StatTile label="OVER CAP → ✦" value={fmtCredits(creditsGained)} accent="cyan" />
                 )}
               </div>
-            );
-          })}
-        </div>
-      )}
+            )}
 
-      {convertedCount > 0 && (
-        <p className="fs-xs font-bold text-[#67E8F9] mb-3 text-center max-w-md">
-          {convertedCount} pull{convertedCount === 1 ? '' : 's'}{' '}
-          {convertedCount === 1 ? 'was' : 'were'} past your copy cap, so{' '}
-          {convertedCount === 1 ? 'it was' : 'they were'} paid out as ✦ {fmtCredits(creditsGained)}{' '}
-          credits instead of a copy you couldn't play.
-        </p>
-      )}
+            {/* Rarity breakdown */}
+            <div className="flex flex-wrap gap-1.5" aria-label="Rarity breakdown">
+              {rarityCounts.map(([r, n]) => (
+                <span
+                  key={r}
+                  className={cn(
+                    'fs-xs font-black px-2 py-0.5 ink-border-sm',
+                    RARITY_CHIP[r] || RARITY_CHIP.Common,
+                  )}
+                >
+                  {(r || 'Common').toUpperCase()} ×{n}
+                </span>
+              ))}
+            </div>
 
-      {recap.packs > 1 && recap.best && (
-        <div
-          className="ink-border-sm bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 mb-3 text-center max-w-md"
-          aria-label="Session recap"
-        >
-          <div className="heading-font fs-xs text-[var(--c-yellow)] mb-0.5">
-            SESSION RECAP · {recap.packs} PACKS · {recap.cards} CARDS
+            {setProgress && (
+              <div className="w-full max-w-sm" aria-label="Set progress">
+                <div className="flex justify-between fs-xs font-black text-[var(--c-paper)]/80 mb-1">
+                  <span>{setProgress.setName.toUpperCase()}</span>
+                  <span>
+                    {setProgress.before !== setProgress.after && `${setProgress.before} → `}
+                    {setProgress.after}/{setProgress.total}
+                  </span>
+                </div>
+                <div
+                  className="h-3 ink-border-sm bg-[var(--c-paper)]/15 relative overflow-hidden"
+                  role="progressbar"
+                  aria-label={`${setProgress.setName} set progress`}
+                  aria-valuemin={0}
+                  aria-valuemax={setProgress.total}
+                  aria-valuenow={setProgress.after}
+                >
+                  <div
+                    className="absolute inset-y-0 left-0 bg-[var(--c-yellow)]"
+                    style={{ width: `${(setProgress.before / setProgress.total) * 100}%` }}
+                  />
+                  <div
+                    className="absolute inset-y-0 bg-[#4ADE80] po-anim po-grow"
+                    style={{
+                      left: `${(setProgress.before / setProgress.total) * 100}%`,
+                      width: `${((setProgress.after - setProgress.before) / setProgress.total) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {convertedCount > 0 && (
+              <p className="fs-xs font-bold text-[#67E8F9] max-w-md">
+                {convertedCount} pull{convertedCount === 1 ? '' : 's'}{' '}
+                {convertedCount === 1 ? 'was' : 'were'} past your copy cap, so{' '}
+                {convertedCount === 1 ? 'it was' : 'they were'} paid out as ✦{' '}
+                {fmtCredits(creditsGained)} credits instead of a copy you couldn't play.
+              </p>
+            )}
+
+            {recap.packs > 1 && recap.best && (
+              <div
+                className="ink-border-sm bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 max-w-md"
+                aria-label="Session recap"
+              >
+                <div className="heading-font fs-xs text-[var(--c-yellow)] mb-0.5">
+                  SESSION RECAP · {recap.packs} PACKS · {recap.cards} CARDS
+                </div>
+                <div className="fs-sm font-bold">
+                  Best pull{' '}
+                  <span style={{ color: RARITY_HEX[recap.best.rarity] || RARITY_HEX.Common }}>
+                    {recap.best.name || (recap.best.rarity || 'Common').toUpperCase()}
+                    {recap.best.foil ? ' ✦' : ''}
+                  </span>
+                  {' · '}
+                  {fmtCredits(recap.keptValue)} quicksell value kept
+                </div>
+              </div>
+            )}
           </div>
-          <div className="fs-sm font-bold">
-            Best pull{' '}
-            <span style={{ color: RARITY_HEX[recap.best.rarity] || RARITY_HEX.Common }}>
-              {recap.best.name || (recap.best.rarity || 'Common').toUpperCase()}
-              {recap.best.foil ? ' ✦' : ''}
-            </span>
-            {' · '}
-            {fmtCredits(recap.keptValue)} quicksell value kept
+        </section>
+
+        {/* The rest of the haul — big cards, and the page scrolls. */}
+        {groups.length > 0 && (
+          <section aria-label="The rest of the haul" className="mt-6">
+            <div className="po-sum-tools">
+              <div className="po-seg" role="group" aria-label="Sort cards">
+                {(
+                  [
+                    ['rarity', 'BY RARITY'],
+                    ['order', 'PULL ORDER'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={sortMode === id}
+                    className={cn('po-seg-btn heading-font', sortMode === id && 'is-on')}
+                    onClick={() => setSortMode(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter cards">
+                {FILTERS.filter((f) => f.id === 'all' || filterCounts[f.id] > 0).map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-pressed={filter === f.id}
+                    className={cn('po-chip heading-font', filter === f.id && 'is-on')}
+                    onClick={() => setFilter(f.id)}
+                  >
+                    {f.label} <span className="opacity-70">{filterCounts[f.id]}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <HaulGrid
+              bands={bands}
+              nd={nd}
+              sold={sold}
+              wishOf={(id) => isWishlisted(id, profile?.id)}
+              onInspect={(g) => setInspect(g.pull)}
+            />
+            {shown.length === 0 && (
+              <p className="fs-sm font-bold text-[var(--c-paper)]/70 text-center py-8">
+                Nothing in this haul matches that filter.
+              </p>
+            )}
+          </section>
+        )}
+
+        {(sellError || nextError || sellNotice) && (
+          <div className="flex flex-col items-center gap-2 mt-4">
+            {sellError && <Notice text={sellError} />}
+            {nextError && <Notice text={nextError} />}
+            {sellNotice && <Notice text={sellNotice} kind="success" />}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {sellError && (
-        <div className="mb-3">
-          <Notice text={sellError} />
-        </div>
-      )}
-      {nextError && (
-        <div className="mb-3">
-          <Notice text={nextError} />
-        </div>
-      )}
-      {sellNotice && (
-        <div className="mb-3">
-          <Notice text={sellNotice} kind="success" />
-        </div>
-      )}
-
-      <div className="flex flex-wrap justify-center gap-3">
+      {/* Sticky action bar. */}
+      <footer className="po-sum-foot">
         {clutterIndices.length > 0 && (
           <PopButton color="steel" disabled={sellBusy} onClick={quicksellClutter}>
             <span className="flex items-center gap-1">
@@ -1435,20 +1539,6 @@ function SummaryStage({
                 ? 'SELLING…'
                 : `QUICKSELL ${clutterIndices.length} C/U — ${fmtCredits(clutterValue)}`}
             </span>
-          </PopButton>
-        )}
-        {onOpenNext ? (
-          <>
-            <PopButton color="yellow" disabled={sellBusy || nextBusy} onClick={onOpenNext}>
-              {nextBusy ? 'OPENING…' : (nextLabel ?? 'OPEN NEXT PACK ▸')}
-            </PopButton>
-            <PopButton color="steel" disabled={sellBusy || nextBusy} onClick={onDone}>
-              DONE ✓
-            </PopButton>
-          </>
-        ) : (
-          <PopButton color="yellow" disabled={sellBusy} onClick={onDone}>
-            DONE ✓
           </PopButton>
         )}
         {router && (
@@ -1463,8 +1553,172 @@ function SummaryStage({
             TO COLLECTION ▸
           </PopButton>
         )}
-      </div>
-      <div className="h-4 shrink-0" />
+        {onOpenNext ? (
+          <>
+            <PopButton color="steel" disabled={sellBusy || nextBusy} onClick={onDone}>
+              DONE ✓
+            </PopButton>
+            <PopButton color="yellow" disabled={sellBusy || nextBusy} onClick={onOpenNext}>
+              {nextBusy ? 'OPENING…' : (nextLabel ?? 'OPEN NEXT PACK ▸')}
+            </PopButton>
+          </>
+        ) : (
+          <PopButton color="yellow" disabled={sellBusy} onClick={onDone}>
+            DONE ✓
+          </PopButton>
+        )}
+      </footer>
+
+      {inspect && (
+        <Card3DInspector
+          def={pullToDef(inspect)}
+          foil={inspect.foil}
+          variant={asVariant(inspect.variant)}
+          serial={
+            inspect.serialized
+              ? { number: inspect.serial_number!, cap: inspect.serial_cap! }
+              : undefined
+          }
+          meta={[
+            ...(inspect.variant
+              ? [{ label: 'Variant', value: `◆ ${variantName(asVariant(inspect.variant)!)}` }]
+              : []),
+            { label: 'Rarity', value: inspect.rarity || 'Common' },
+            { label: 'Set', value: pullToDef(inspect).set || '—' },
+            {
+              label: 'This pull',
+              value: inspect.converted_to_credits
+                ? `Over cap → ✦ ${fmtCredits(inspect.credit_value)}`
+                : nd.get(inspect.card_id)?.isNew
+                  ? 'NEW to your collection'
+                  : `Dupe — ${nd.get(inspect.card_id)?.copies ?? 1} owned`,
+            },
+          ]}
+          onClose={() => setInspect(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+type HaulGroup = { key: string; pull: PackPull; count: number; indices: number[] };
+type HaulFilter = 'all' | 'new' | 'dupes' | 'special';
+
+/**
+ * The haul grid. Cards are rendered at a fixed CardFace size and scaled to
+ * fill the column, so a phone gets two large cards a row and a desktop a
+ * full-width grid. One ResizeObserver for the whole grid; cells use
+ * content-visibility so a 49-card box only paints what is on screen.
+ */
+function HaulGrid({
+  bands,
+  nd,
+  sold,
+  wishOf,
+  onInspect,
+}: {
+  bands: { label: string | null; rarity?: string; items: HaulGroup[] }[];
+  nd: Map<string, { isNew: boolean; copies: number }>;
+  sold: Set<number>;
+  wishOf: (cardId: string) => boolean;
+  onInspect: (g: HaulGroup) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(() =>
+    typeof window === 'undefined' ? 360 : Math.min(window.innerWidth - 32, 1400),
+  );
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.clientWidth || width);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => {
+      if (e.contentRect.width > 0) setWidth(e.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const wide = width >= 640;
+  const gap = wide ? 18 : 12;
+  const minCol = wide ? 180 : 150;
+  const cols = Math.max(2, Math.floor((width + gap) / (minCol + gap)));
+  const colW = (width - gap * (cols - 1)) / cols;
+  const base: 'full' | 'standard' = colW >= 180 ? 'full' : 'standard';
+  const scale = colW / CARD_SIZES[base].w;
+  const colH = CARD_SIZES[base].h * scale;
+  const gridStyle = {
+    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+    columnGap: gap,
+    rowGap: gap + 4,
+  };
+
+  return (
+    <div ref={ref} className="w-full">
+      {bands.map((band) => (
+        <div key={band.label ?? 'all'} className="mb-6">
+          {band.label && (
+            <h3
+              className="po-band heading-font"
+              style={{ ['--band' as string]: RARITY_HEX[band.rarity ?? ''] || RARITY_HEX.Common }}
+            >
+              {band.label}{' '}
+              <span className="opacity-70">×{band.items.reduce((s, g) => s + g.count, 0)}</span>
+            </h3>
+          )}
+          <div className="grid pt-1" style={gridStyle}>
+            {band.items.map((grp) => {
+              const def = pullToDef(grp.pull);
+              const allSold = grp.indices.every((i) => sold.has(i));
+              const spent = grp.pull.converted_to_credits || allSold;
+              const info = nd.get(grp.pull.card_id);
+              return (
+                <div key={grp.key} className="po-cell" style={{ height: colH + 12 }}>
+                  <span
+                    inert
+                    className="po-cell-card"
+                    style={{
+                      width: CARD_SIZES[base].w,
+                      height: CARD_SIZES[base].h,
+                      transform: `scale(${scale})`,
+                    }}
+                  >
+                    <CardFace
+                      def={def}
+                      size={base}
+                      foil={grp.pull.foil}
+                      variant={asVariant(grp.pull.variant)}
+                      count={grp.count > 1 ? grp.count : undefined}
+                      dimmed={spent}
+                      serial={
+                        grp.pull.serialized
+                          ? { number: grp.pull.serial_number!, cap: grp.pull.serial_cap! }
+                          : undefined
+                      }
+                    />
+                  </span>
+                  <PullBadges pull={grp.pull} nd={info} wish={wishOf(grp.pull.card_id)} />
+                  {spent && (
+                    <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <span className="heading-font text-sm bg-[var(--c-ink)] text-[#67E8F9] px-2 py-1 ink-border-sm">
+                        {allSold && !grp.pull.converted_to_credits
+                          ? 'SOLD'
+                          : `+${fmtCredits(grp.pull.credit_value * grp.count)}`}
+                      </span>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="po-cell-hit"
+                    onClick={() => onInspect(grp)}
+                    aria-label={`${def.name}, ${grp.pull.rarity || 'Common'}${grp.count > 1 ? `, ×${grp.count}` : ''}${grp.pull.foil ? ', foil' : ''}${info && !grp.pull.converted_to_credits ? (info.isNew ? ', new' : ', dupe') : ''}${spent ? (allSold && !grp.pull.converted_to_credits ? ', sold' : ', paid out as credits') : ''}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1583,10 +1837,13 @@ function PullBadges({
   pull,
   nd,
   wish,
+  inline,
 }: {
   pull: PackPull;
   nd?: { isNew: boolean; copies: number };
   wish: boolean;
+  /** In normal flow (the hero's info column) rather than over a card. */
+  inline?: boolean;
 }) {
   const tags: { t: string; c: string }[] = [];
   if (!pull.converted_to_credits && nd)
@@ -1598,7 +1855,10 @@ function PullBadges({
   if (wish) tags.push({ t: '♥ WISH', c: 'po-b-wish' });
   if (!tags.length) return null;
   return (
-    <div className="po-badges" aria-label={tags.map((x) => x.t).join(', ')}>
+    <div
+      className={cn('po-badges', inline && 'po-badges-inline')}
+      aria-label={tags.map((x) => x.t).join(', ')}
+    >
       {tags.map((x) => (
         <span key={x.t} className={cn('po-badge', x.c)}>
           {x.t}

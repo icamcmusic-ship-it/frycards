@@ -71,13 +71,28 @@ function Band({
  * auditing anything that depends on a card's own content: the v7.5 flavor-text
  * overlap only reproduced on the cards whose rules text happened to be long
  * enough to push the flavor block down onto the stat plate. Used by the
- * layout audit in `scripts/audit-cardface.ts`.
+ * layout audit in `scripts/audit-cardface.ts`. `&foil=1` prints them all foil.
  */
-function AllOfRarity({ rarity, size }: { rarity: string; size: CardSize }) {
-  const cards = POOL.filter((c) => c.rarity === rarity);
+function AllOfRarity({
+  rarity,
+  size,
+  foil,
+  fixtureType,
+}: {
+  rarity: string;
+  size: CardSize;
+  foil?: boolean;
+  fixtureType?: string | null;
+}) {
+  // `&fixture=<type>`: a preview fixture — the first card of that type,
+  // reprinted at this rarity (for a rarity the pool has no card of that type at).
+  const fixture = fixtureType ? POOL.find((c) => c.type === fixtureType) : undefined;
+  const cards = fixture
+    ? [{ ...fixture, rarity } as CardDef]
+    : POOL.filter((c) => c.rarity === rarity);
   return (
     <div style={{ background: '#20242c', padding: 16 }}>
-      <Band title={`${rarity} — all ${cards.length}`} cards={cards} size={size} />
+      <Band title={`${rarity} — all ${cards.length}`} cards={cards} size={size} foil={foil} />
     </div>
   );
 }
@@ -133,8 +148,12 @@ function Gallery() {
 }
 
 /** ?slabs=1 — one slab per grade band: damage at 5–7.5, premium cases at 9+. */
-function Slabs() {
-  const def = POOL.find((c) => c.rarity === 'Rare' && c.type === 'Unit') ?? POOL[0];
+/** `?slabs=1` slabs a Rare Unit; `?slabs=<rarity>` slabs a card of that rarity. */
+function Slabs({ rarity }: { rarity: string }) {
+  const def =
+    POOL.find((c) => c.rarity === rarity && c.type === 'Unit') ??
+    POOL.find((c) => c.rarity === rarity) ??
+    POOL[0];
   const grades = [5, 6, 7, 8, 9, 9.5, 10];
   return (
     <div style={{ background: '#222', padding: 16, display: 'flex', flexWrap: 'wrap', gap: 18 }}>
@@ -165,9 +184,14 @@ const sizeParam = params.get('size');
 const allSize: CardSize = sizeParam && sizeParam in CARD_SIZES ? (sizeParam as CardSize) : 'full';
 createRoot(document.getElementById('root')!).render(
   params.get('slabs') ? (
-    <Slabs />
+    <Slabs rarity={params.get('slabs') === '1' ? 'Rare' : params.get('slabs')!} />
   ) : allRarity ? (
-    <AllOfRarity rarity={allRarity} size={allSize} />
+    <AllOfRarity
+      rarity={allRarity}
+      size={allSize}
+      foil={params.get('foil') === '1'}
+      fixtureType={params.get('fixture')}
+    />
   ) : (
     <Gallery />
   ),

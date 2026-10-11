@@ -584,6 +584,20 @@ export interface ShopCustomer {
   kind: 'buy' | 'trade';
   persona: string;
   mood: string;
+  /** Persona system (20261013000100) — dialogue is client-side, keyed on these. */
+  persona_id?: string | null;
+  mood_score?: number;
+  rounds?: number;
+  patience?: number;
+  last_event?: string;
+  seed?: number;
+  event_log?: { e: string; v?: number }[];
+  regular?: boolean;
+  visits?: number;
+  trade_cash?: number;
+  bundle_listing_id?: string | null;
+  bundle_price?: number | null;
+  bundle_cards?: { card_id: string; quantity?: number; foil?: boolean; variant?: string }[] | null;
   offer_credits: number | null;
   offer_card_id: string | null;
   offer_foil: boolean;
@@ -599,8 +613,11 @@ export interface ShopFloorState {
   customers: ShopCustomer[];
   served_24h: number;
   next_at: string | null;
+  regulars?: number;
   recent: {
     persona: string;
+    persona_id?: string | null;
+    seed?: number;
     kind: 'buy' | 'trade';
     status: 'accepted' | 'declined' | 'left' | 'expired';
     final_credits: number | null;
@@ -623,11 +640,13 @@ export async function fetchShopFloor(): Promise<{
 
 export async function respondShopCustomer(
   id: string,
-  action: 'accept' | 'decline' | 'counter',
+  action: 'accept' | 'decline' | 'counter' | 'final',
   counter?: number,
 ): Promise<{
   data: {
-    result: 'sold' | 'declined' | 'left' | 'final_offer';
+    result: 'sold' | 'declined' | 'left' | 'final_offer' | 'countered';
+    event?: string;
+    mood_score?: number;
     credits?: number;
     offer?: number;
     card_id?: string | null;

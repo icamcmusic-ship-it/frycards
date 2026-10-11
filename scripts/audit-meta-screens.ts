@@ -93,6 +93,9 @@ const ALL_SCREENS = [
   'social',
   'store',
   'market',
+  // The SELL desk: picker, price guide and active-listings panel sit behind
+  // the tab, so the bare entry never measured them.
+  'market@sell',
   'shops',
   'battlepass',
   'achievements',
@@ -161,6 +164,7 @@ const PRELUDE: Record<string, string[]> = {
   'pack@summary': ['JUST TEAR IT OPEN FOR ME', 'REVEAL ALL'],
   'grading@limbo': ['AT THE GRADERS'],
   'grading@vault': ['MY SLABS'],
+  'market@sell': ['SELL A CARD'],
   'decks@editor': ['EDIT'],
   // The empty editor is a different layout from the full one: no leader, no
   // curve, an empty deck list and a pool grid with nothing dimmed.
@@ -311,6 +315,28 @@ const SCREEN_SIG = `(() => {
 })()`;
 const screenSig = (page: import('playwright').Page) =>
   page.evaluate(SCREEN_SIG).catch(() => '') as Promise<string>;
+
+/**
+ * Wait until the screen stops changing under its own power before tagging
+ * candidates. v32: `grading` opens on SUBMIT and then, when its mount-time
+ * fetch finds a slab due, switches itself to AT THE GRADERS (U50). On a
+ * loaded box that fetch landed after the walk's fixed 1.1s wait, so the walk
+ * tagged the SUBMIT form, the screen swapped it out, and 220 detached
+ * controls were reported as "Tab never reaches it" — a measurement of a
+ * screen that no longer existed. Network idle covers the dev server's module
+ * loads; three equal signatures 250ms apart cover the state update after.
+ */
+async function settleScreen(page: import('playwright').Page) {
+  await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
+  let prev = await screenSig(page);
+  let same = 0;
+  for (let i = 0; i < 40 && same < 2; i++) {
+    await page.waitForTimeout(250);
+    const sig = await screenSig(page);
+    same = sig === prev ? same + 1 : 0;
+    prev = sig;
+  }
+}
 
 /**
  * Walk an entry's PRELUDE into the state being measured, and say so when it
@@ -634,8 +660,15 @@ async function check(screen: string, width: number, path: number[] = [], expect 
             let y1 = cy + h / 2;
             for (let a = el.parentElement; a; a = a.parentElement) {
               const st2 = getComputedStyle(a);
-              const clipX = st2.overflowX !== 'visible';
-              const clipY = st2.overflowY !== 'visible';
+              // A SCROLL container (auto/scroll) is not a clip on the target:
+              // scrolling brings the control fully into view, so a chip that
+              // merely sits part-way past the scrollport's edge at the moment
+              // of measurement (the pack summary scrolled to the card just
+              // inspected) is not an undersized target. Only a hidden/clip
+              // overflow cuts the hit area for good.
+              const clips = (v: string) => v === 'hidden' || v === 'clip';
+              const clipX = clips(st2.overflowX);
+              const clipY = clips(st2.overflowY);
               if (!clipX && !clipY) continue;
               const ar = a.getBoundingClientRect();
               if (clipX) {
@@ -867,6 +900,7 @@ async function keyboard(screen: string) {
   await page.waitForTimeout(700);
   await runPrelude(page, screen, 1280, `${screen} prelude (keyboard)`);
   await page.waitForTimeout(400);
+  await settleScreen(page);
 
   // Tag every candidate so a Tab landing can be identified by index rather
   // than by a selector re-derived per press (which would not survive a screen

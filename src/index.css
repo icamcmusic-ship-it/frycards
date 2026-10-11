@@ -352,22 +352,6 @@ html[data-motion='reduced'] .foil-shimmer::after {
 .rarity-pulse {
   animation: rarity-pulse-kf 2.4s ease-in-out infinite;
 }
-@keyframes mythic-border-kf {
-  0%,
-  100% {
-    box-shadow:
-      0 0 18px 4px rgba(225, 29, 46, 0.55),
-      0 0 40px 12px rgba(255, 179, 0, 0.35);
-  }
-  50% {
-    box-shadow:
-      0 0 30px 8px rgba(255, 179, 0, 0.75),
-      0 0 60px 20px rgba(225, 29, 46, 0.55);
-  }
-}
-.mythic-frame {
-  animation: mythic-border-kf 2.6s ease-in-out infinite;
-}
 @keyframes mythic-bg-kf {
   0% {
     background-position: 0% 50%;
@@ -392,94 +376,6 @@ html[data-motion='reduced'] .foil-shimmer::after {
   );
   background-size: 300% 300%;
   animation: mythic-bg-kf 6s ease-in-out infinite;
-}
-
-/* Ultra-Rare: a lighter, gold-only pulsing frame — visibly stronger than the
-   static Rare/Super-Rare glow at every card size (not just `full`), but not
-   as intense as the two-tone Mythic frame. See rarity.ts's `isMythic`-style
-   `ultra` flag in CardFaceV4.tsx. */
-@keyframes ultra-border-kf {
-  0%,
-  100% {
-    box-shadow:
-      0 0 14px 3px rgba(212, 175, 55, 0.55),
-      0 0 28px 8px rgba(212, 175, 55, 0.3);
-  }
-  50% {
-    box-shadow:
-      0 0 22px 6px rgba(255, 215, 90, 0.8),
-      0 0 42px 14px rgba(212, 175, 55, 0.45);
-  }
-}
-.ultra-frame {
-  animation: ultra-border-kf 2.8s ease-in-out infinite;
-}
-
-/* v4.6 Ultra-Rare "Gilded Relic" template — a brushed gold-leaf name banner
-   (animated slow shimmer, reusing mythic-bg-kf's background-position drift)
-   plus a twinkling gold-dust layer over the whole face. Distinct at a glance
-   from both Super-Rare (static purple tint) and Mythic (red/ember inferno). */
-.ultra-banner {
-  background: linear-gradient(110deg, #8a6d1f, #d4af37, #ffe9a3, #f3cf5d, #d4af37, #8a6d1f);
-  background-size: 250% 100%;
-  animation: mythic-bg-kf 7s ease-in-out infinite;
-}
-@keyframes ultra-sparkle-kf {
-  0%,
-  100% {
-    opacity: 0.25;
-  }
-  35% {
-    opacity: 0.75;
-  }
-  65% {
-    opacity: 0.45;
-  }
-}
-.ultra-sparkle {
-  background-image:
-    radial-gradient(circle 1.5px at 12% 22%, rgba(255, 233, 163, 0.95) 40%, transparent 60%),
-    radial-gradient(circle 1px at 78% 14%, rgba(255, 215, 90, 0.9) 40%, transparent 60%),
-    radial-gradient(circle 1.5px at 88% 55%, rgba(255, 233, 163, 0.8) 40%, transparent 60%),
-    radial-gradient(circle 1px at 30% 68%, rgba(255, 215, 90, 0.85) 40%, transparent 60%),
-    radial-gradient(circle 1.5px at 58% 84%, rgba(255, 233, 163, 0.9) 40%, transparent 60%),
-    radial-gradient(circle 1px at 8% 90%, rgba(255, 215, 90, 0.8) 40%, transparent 60%),
-    radial-gradient(circle 1px at 45% 38%, rgba(255, 245, 200, 0.85) 40%, transparent 60%);
-  animation: ultra-sparkle-kf 2.6s ease-in-out infinite;
-  mix-blend-mode: screen;
-}
-
-/* v4.6 Mythic "Living Inferno" template — a layer of embers rising off the
-   card face (two drifting radial-gradient dot fields at different speeds),
-   on top of the existing animated red/gold gradient banner + pulsing frame. */
-@keyframes mythic-embers-kf {
-  0% {
-    background-position:
-      0% 110%,
-      50% 130%;
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 0.8;
-  }
-  100% {
-    background-position:
-      0% -30%,
-      50% -60%;
-    opacity: 0.35;
-  }
-}
-.mythic-embers {
-  background-image:
-    radial-gradient(circle 1.5px at 18% 80%, rgba(255, 179, 0, 0.9) 40%, transparent 65%),
-    radial-gradient(circle 2px at 72% 60%, rgba(225, 29, 46, 0.85) 40%, transparent 65%);
-  background-size:
-    100% 55%,
-    100% 70%;
-  background-repeat: repeat-y;
-  animation: mythic-embers-kf 4.5s linear infinite;
-  mix-blend-mode: screen;
-  filter: blur(0.3px);
 }
 
 /* Alt-Art "Prism Ink" template (v7.0) — a separately-illustrated alternate
@@ -631,12 +527,7 @@ html[data-motion='reduced'] .foil-shimmer::after {
   html:not([data-motion='full']) .foil-shimmer::after,
   html:not([data-motion='full']) .rarity-sheen,
   html:not([data-motion='full']) .rarity-pulse,
-  html:not([data-motion='full']) .mythic-frame,
   html:not([data-motion='full']) .mythic-bg,
-  html:not([data-motion='full']) .mythic-embers,
-  html:not([data-motion='full']) .ultra-frame,
-  html:not([data-motion='full']) .ultra-banner,
-  html:not([data-motion='full']) .ultra-sparkle,
   html:not([data-motion='full']) .aa-frame,
   html:not([data-motion='full']) .aa-holo,
   html:not([data-motion='full']) .serialized-frame,
@@ -648,12 +539,7 @@ html[data-motion='reduced'] .foil-shimmer::after {
 html[data-motion='reduced'] .foil-shimmer::after,
 html[data-motion='reduced'] .rarity-sheen,
 html[data-motion='reduced'] .rarity-pulse,
-html[data-motion='reduced'] .mythic-frame,
 html[data-motion='reduced'] .mythic-bg,
-html[data-motion='reduced'] .mythic-embers,
-html[data-motion='reduced'] .ultra-frame,
-html[data-motion='reduced'] .ultra-banner,
-html[data-motion='reduced'] .ultra-sparkle,
 html[data-motion='reduced'] .aa-frame,
 html[data-motion='reduced'] .aa-holo,
 html[data-motion='reduced'] .serialized-frame,
@@ -1552,6 +1438,177 @@ html[data-scheme='dark'] .cl-tag-new {
 .po-b-variant {
   background: #1a1a1a;
   color: #fde047;
+}
+/* v31 pack summary: a scrolling page with sticky bars and a big-card grid. */
+.po-sum-head,
+.po-sum-foot {
+  position: sticky;
+  z-index: 30;
+  width: 100%;
+  background: var(--c-ink);
+  padding: 10px max(16px, calc((100% - 1400px) / 2));
+}
+.po-sum-head {
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 3px solid var(--c-yellow);
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+.po-sum-foot {
+  bottom: 0;
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  border-top: 3px solid var(--c-yellow);
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+.po-sum-body {
+  width: 100%;
+  max-width: 1432px;
+  padding: 24px 16px 16px;
+  margin: 0 auto;
+}
+.po-sum-top {
+  display: grid;
+  gap: 20px;
+  justify-items: center;
+}
+@media (min-width: 768px) {
+  .po-sum-top {
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: start;
+    align-items: center;
+    gap: 40px;
+    padding: 0 16px;
+  }
+}
+.po-sum-hero {
+  position: relative;
+  padding: 18px 16px 8px;
+}
+.po-sum-hero-card {
+  position: relative;
+  display: block;
+  cursor: zoom-in;
+}
+@media (min-width: 1024px) {
+  .po-sum-hero-card {
+    transform: scale(1.15);
+    transform-origin: center;
+    margin: 26px 18px;
+  }
+}
+.po-sum-info {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 560px;
+}
+@media (max-width: 767px) {
+  .po-sum-info {
+    align-items: center;
+    text-align: center;
+  }
+}
+.po-sum-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 2px solid rgba(247, 247, 247, 0.15);
+}
+.po-seg {
+  display: inline-flex;
+  border: 2px solid #111;
+  box-shadow: 2px 2px 0 #111;
+}
+.po-seg-btn,
+.po-chip {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: 12px;
+  background: #2c3e50;
+  color: #f7f7f7;
+}
+.po-seg-btn + .po-seg-btn {
+  border-left: 2px solid #111;
+}
+.po-chip {
+  border: 2px solid #111;
+  box-shadow: 2px 2px 0 #111;
+}
+.po-seg-btn.is-on,
+.po-chip.is-on {
+  background: var(--c-yellow);
+  color: #111;
+}
+.po-band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  color: var(--band);
+  margin-top: 14px;
+}
+.po-band::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  background: var(--band);
+  opacity: 0.4;
+}
+.po-cell {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.po-cell-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  width: 100%;
+  cursor: zoom-in;
+}
+.po-cell-card {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  display: block;
+  transform-origin: top left;
+  /* Off-screen cards in a 49-card box skip layout and paint. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 196px;
+}
+.po-cell .po-badges {
+  top: 0;
+}
+.po-cell .po-badges,
+.po-badges-inline {
+  gap: 4px;
+}
+.po-cell .po-badge,
+.po-badges-inline .po-badge {
+  font-size: 11px;
+  padding: 3px 6px;
+}
+.po-badges-inline {
+  position: static;
+  justify-content: inherit;
+  margin-top: 8px;
+}
+@media (max-width: 767px) {
+  .po-badges-inline {
+    justify-content: center;
+  }
 }
 .po-grow {
   animation: po-grow-kf 1s ease-out 0.4s both;

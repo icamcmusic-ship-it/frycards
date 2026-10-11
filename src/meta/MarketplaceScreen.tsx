@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { asVariant, type CardVariant, type OwnedVariant, VARIANT_META } from './variants';
-import { clampWholeText, parseWhole } from './wholeField';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { asVariant, VARIANT_META } from './variants';
 import { useRouteTab, useRouter } from './useHashRouter';
 import { FilterSelect } from './FilterSelect';
 import { askConfirm } from './confirm';
@@ -11,7 +10,6 @@ import {
   MARKET_LIST_LIMIT,
   fetchMyMarketActivity,
   fetchPublicProfiles,
-  createListing,
   cancelListing,
   buyListing,
   placeBid,
@@ -28,10 +26,25 @@ import { POOL_BY_ID } from '../game/poker/cardpool';
 import { CardDef } from '../game/poker/cards';
 import { CardFace } from '../components/CardFaceV4';
 import { RARITY_CHIP, RARITY_ORDER } from './rarity';
-import { quicksellPrice, fmtCredits } from './economy';
+import { fmtCredits } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
-import { sellableSplit } from './sellable';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
+import { SellPanel } from './sell/SellPanel';
+import { BID_STYLE_LABEL, initials, resolvePersona } from './buyers/personas';
+
+/** CPU auction bidder: persona badge + name, with archetype and bid style on hover. */
+function CpuBidderTag({ name }: { name: string }) {
+  const p = resolvePersona(null, name);
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 align-middle"
+      title={p ? `${p.archetype} · ${BID_STYLE_LABEL[p.bidStyle]}` : 'CPU bidder'}
+    >
+      <span aria-hidden>{p?.badge ?? initials(name)}</span>
+      {name} (CPU{p ? ` · ${BID_STYLE_LABEL[p.bidStyle].toLowerCase()}` : ''}) leads
+    </span>
+  );
+}
 
 const TABS = ['browse', 'mine', 'sell'] as const;
 type Tab = (typeof TABS)[number];
@@ -380,9 +393,10 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                   <span className="fs-xs font-bold text-[var(--c-steel)]">
                     {l.bid_count ?? 0} bid{(l.bid_count ?? 0) === 1 ? '' : 's'}
                     {highBidder ? ' · YOU LEAD' : ''}
-                    {l.cpu_leading && l.cpu_bidder_name
-                      ? ` · ${l.cpu_bidder_name} (CPU) leads`
-                      : ''}
+                    {l.cpu_leading && l.cpu_bidder_name ? ' · ' : ''}
+                    {l.cpu_leading && l.cpu_bidder_name && (
+                      <CpuBidderTag name={l.cpu_bidder_name} />
+                    )}
                   </span>
                 </>
               ) : (
@@ -732,18 +746,23 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             </>,
           )
         ) : (
-          <SellForm
+          <SellPanel
+            userId={userId}
             collection={collection}
-            decksLocked={decks}
+            decks={decks}
             serializedCards={serializedCards}
             cardVariants={cardVariants ?? []}
-            busy={busy}
-            onSubmit={(opts) =>
-              run(
-                () => createListing(opts),
-                opts.type === 'auction' ? 'Auction created!' : 'Listing created!',
-              ).then((ok) => ok && setTab('mine'))
-            }
+            myListings={myActivity}
+            cancelListing={cancelListing}
+            onChanged={async () => {
+              refreshProfile();
+              refreshCollection();
+              await reload();
+            }}
+            onViewListing={(id) => {
+              setSelectedId(id);
+              setTab('mine');
+            }}
           />
         )}
       </div>
@@ -835,401 +854,6 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             </div>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sell form: pick an owned card, choose fixed price or auction.
-// ---------------------------------------------------------------------------
-function SellForm({
-  collection: rawCollection,
-  decksLocked,
-  busy,
-  serializedCards,
-  cardVariants,
-  onSubmit,
-}: {
-  /** Variant copies: listed on their own (create_variant_listing), and kept
-   * out of the plain spare counts. */
-  cardVariants: OwnedVariant[];
-  collection: { card_id: string; quantity: number; foil_quantity: number }[];
-  decksLocked: { card_ids: string[] }[];
-  /** Owned Serialized prints — never listable, so that many NORMAL copies
-   * are reserved out of the sell math (they live inside `quantity`). */
-  serializedCards: { card_id: string }[];
-  busy: boolean;
-  onSubmit: (opts: {
-    cardId: string;
-    foil: boolean;
-    quantity: number;
-    type: 'fixed' | 'auction';
-    price: number;
-    buyout: number | null;
-    hours: number;
-    variant?: CardVariant | null;
-  }) => void;
-}) {
-  const [cardId, setCardId] = useState('');
-  const [foil, setFoil] = useState(false);
-  /** '' = plain copies; otherwise `${variant}|${foil ? 1 : 0}`. */
-  const [copyKind, setCopyKind] = useState('');
-  const variantsByCard = useMemo(() => {
-    const m = new Map<string, OwnedVariant[]>();
-    for (const v of cardVariants) {
-      if (v.quantity <= 0) continue;
-      m.set(v.card_id, [...(m.get(v.card_id) ?? []), v]);
-    }
-    return m;
-  }, [cardVariants]);
-  // Plain copies only: variant copies sell through their own picker below.
-  const collection = useMemo(
-    () =>
-      rawCollection.map((c) => {
-        const vs = variantsByCard.get(c.card_id) ?? [];
-        const vq = vs.filter((v) => !v.foil).reduce((n, v) => n + v.quantity, 0);
-        const vf = vs.filter((v) => v.foil).reduce((n, v) => n + v.quantity, 0);
-        return {
-          ...c,
-          quantity: Math.max(0, c.quantity - vq),
-          foil_quantity: Math.max(0, c.foil_quantity - vf),
-          total: c.quantity + c.foil_quantity,
-        };
-      }),
-    [rawCollection, variantsByCard],
-  );
-  // Raw text, parsed below and clamped on blur (B8).
-  const [qtyText, setQtyText] = useState('1');
-  const [type, setType] = useState<'fixed' | 'auction'>('fixed');
-  const [priceText, setPriceText] = useState('100');
-  const [buyout, setBuyout] = useState<number | ''>('');
-  const [hours, setHours] = useState(24);
-  const [search, setSearch] = useState('');
-
-  const locked = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const d of decksLocked) for (const id of d.card_ids ?? []) m.set(id, (m.get(id) || 0) + 1);
-    return m;
-  }, [decksLocked]);
-
-  // Serialized prints count inside `quantity` but can never be listed
-  // (create_listing rejects them server-side) — reserve them like
-  // CollectionScreen's sell UI does.
-  const serializedReserved = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const s of serializedCards) m.set(s.card_id, (m.get(s.card_id) || 0) + 1);
-    return m;
-  }, [serializedCards]);
-
-  const sellable = useMemo(
-    () =>
-      collection
-        .filter((c) => {
-          const def = POOL_BY_ID[c.card_id];
-          if (!def || def.type === 'Leader') return false;
-          // Same per-variant math as maxQty below: deck locks consume normal
-          // copies first (spilling into foil), and the serialized reservation
-          // only holds back normal copies. A flat sum here double-counted
-          // locks + serialized against the same physical copies and hid
-          // cards whose foil was genuinely listable.
-          return (
-            sellableSplit(
-              { q: c.quantity, f: c.foil_quantity },
-              locked.get(c.card_id) || 0,
-              serializedReserved.get(c.card_id) || 0,
-            ).total > 0 || (variantsByCard.get(c.card_id)?.length ?? 0) > 0
-          );
-        })
-        .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
-        .filter((c) => !search || c.def.name.toLowerCase().includes(search.toLowerCase())),
-    [collection, locked, serializedReserved, search, variantsByCard],
-  );
-
-  // Look the selected card up in the full collection, not the search-filtered
-  // `sellable` list — otherwise typing in the search box mid-flow silently
-  // deselected the card and collapsed the price/quantity form.
-  const selectedEntry = collection.find((c) => c.card_id === cardId);
-  const selected =
-    selectedEntry && POOL_BY_ID[cardId]
-      ? { ...selectedEntry, def: POOL_BY_ID[cardId]! }
-      : undefined;
-  // Deck locks and Serialized prints are two independent checks (B4).
-  const spare = sellableSplit(
-    selected ? { q: selected.quantity, f: selected.foil_quantity } : undefined,
-    locked.get(cardId) || 0,
-    serializedReserved.get(cardId) || 0,
-  );
-  const selVariants = variantsByCard.get(cardId) ?? [];
-  const selVariant = copyKind
-    ? selVariants.find((v) => `${v.variant}|${v.foil ? 1 : 0}` === copyKind)
-    : undefined;
-  // A variant lot: its own copies, but deck locks still count every copy.
-  const variantListable = selVariant
-    ? Math.max(0, Math.min(selVariant.quantity, (selected?.total ?? 0) - (locked.get(cardId) || 0)))
-    : 0;
-  const listFoil = selVariant ? selVariant.foil : foil;
-  const listable = selVariant ? variantListable : foil ? spare.foil : spare.normal;
-  // create_listing caps a single listing at 20 copies and a price of 1,000,000
-  // credits; the form must offer only what the RPC will accept rather than
-  // inviting a value that comes back as a bare "Invalid quantity/price" error.
-  const LISTING_MAX_QTY = 20;
-  const LISTING_MAX_PRICE = 1_000_000;
-  const maxQty = Math.min(LISTING_MAX_QTY, listable);
-  const quantity = parseWhole(qtyText, 1, Math.max(1, maxQty)) ?? 0;
-  const price = parseWhole(priceText, 1, LISTING_MAX_PRICE) ?? 0;
-  const suggested = selected
-    ? quicksellPrice(selected.def.rarity, listFoil, selVariant?.variant ?? null)
-    : 0;
-
-  // Buyout only applies to auctions — a stale buyout value left over from
-  // auction mode must neither block a fixed-price listing's validation nor
-  // get sent along with it.
-  const effectiveBuyout = type === 'auction' && buyout !== '' ? buyout : null;
-  const valid =
-    selected &&
-    quantity >= 1 &&
-    quantity <= maxQty &&
-    price >= 1 &&
-    price <= LISTING_MAX_PRICE &&
-    (effectiveBuyout === null || effectiveBuyout > price);
-
-  const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
-
-  return (
-    <div className="max-w-2xl">
-      <div className="heading-font text-xs mb-1">1 · PICK A CARD</div>
-      <input
-        className={cn(select, 'w-56 max-w-full mb-2 placeholder:text-[var(--c-steel)]/50')}
-        placeholder="Search your collection…"
-        aria-label="Search your collection"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      <div className="flex flex-wrap gap-1 max-h-56 overflow-y-auto ink-border-sm p-2 bg-[var(--c-paper)] mb-4">
-        {sellable.map((c) => (
-          <button
-            key={c.card_id}
-            onClick={() => {
-              // Default to whichever variant actually has spare quantity —
-              // always resetting to normal left the qty input at max=0 with
-              // no explanation whenever every normal copy was deck-locked
-              // and only foils were free.
-              const s = sellableSplit(
-                { q: c.quantity, f: c.foil_quantity },
-                locked.get(c.card_id) || 0,
-                serializedReserved.get(c.card_id) || 0,
-              );
-              const sellableNormal = s.normal;
-              setCardId(c.card_id);
-              setFoil(sellableNormal <= 0 && s.foil > 0);
-              // Only variants left? Start on the first variant lot.
-              const vs = variantsByCard.get(c.card_id) ?? [];
-              setCopyKind(s.total <= 0 && vs[0] ? `${vs[0].variant}|${vs[0].foil ? 1 : 0}` : '');
-              setQtyText('1');
-            }}
-            className={cn(
-              // min-h keeps these dense chips tappable on a phone.
-              'fs-xs font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
-              RARITY_CHIP[c.def.rarity || 'Common'] || RARITY_CHIP.Common,
-              cardId === c.card_id && 'outline outline-2 outline-[var(--c-ink)]',
-            )}
-          >
-            {c.def.name} ×{c.quantity}
-            {c.foil_quantity > 0 ? ` ✦${c.foil_quantity}` : ''}
-            {(variantsByCard.get(c.card_id)?.length ?? 0) > 0 ? ' ◆' : ''}
-          </button>
-        ))}
-        {sellable.length === 0 && (
-          <span className="fs-xs font-bold text-[var(--c-steel)]">
-            No spare cards to sell (deck-locked copies can't be listed).
-          </span>
-        )}
-      </div>
-
-      {selected && (
-        <>
-          <div className="flex gap-4 mb-4 items-start flex-wrap">
-            <CardFace
-              def={selected.def}
-              size="compact"
-              foil={listFoil}
-              variant={selVariant?.variant ?? null}
-            />
-            <div className="flex flex-col gap-2">
-              {selVariants.length > 0 && (
-                <label className="flex items-center gap-2 text-xs font-bold">
-                  Copies
-                  <select
-                    className={select}
-                    value={copyKind}
-                    aria-label="Which copies to list"
-                    onChange={(e) => {
-                      setCopyKind(e.target.value);
-                      setQtyText('1');
-                    }}
-                  >
-                    <option value="">Plain</option>
-                    {selVariants.map((v) => (
-                      <option
-                        key={`${v.variant}|${v.foil}`}
-                        value={`${v.variant}|${v.foil ? 1 : 0}`}
-                      >
-                        ◆ {VARIANT_META[v.variant].name}
-                        {v.foil ? ' ✦' : ''} ×{v.quantity}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {!selVariant && selected.foil_quantity > 0 && (
-                <label className="flex items-center gap-2 text-xs font-bold">
-                  <input
-                    type="checkbox"
-                    checked={foil}
-                    onChange={(e) => {
-                      setFoil(e.target.checked);
-                      setQtyText('1');
-                    }}
-                  />
-                  List foil copies ✦
-                </label>
-              )}
-              <label className="flex items-center gap-2 text-xs font-bold">
-                Quantity
-                <input
-                  type="number"
-                  min={1}
-                  max={maxQty}
-                  value={qtyText}
-                  onChange={(e) => setQtyText(e.target.value)}
-                  onBlur={() => setQtyText(clampWholeText(qtyText, 1, Math.max(1, maxQty)))}
-                  className="w-16 px-2 py-1 ink-border-sm"
-                />
-                <span className="fs-xs text-[var(--c-steel)]">of {maxQty} spare</span>
-              </label>
-              <div className="fs-xs font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
-                Quicksell value: <Credits amount={suggested} /> each — price above that to profit.
-              </div>
-            </div>
-          </div>
-
-          <div className="heading-font text-xs mb-1">2 · CHOOSE HOW TO SELL</div>
-          <Tabs<'fixed' | 'auction'>
-            ariaLabel="Sale type"
-            className="mb-3"
-            value={type}
-            onChange={setType}
-            tabs={[
-              { id: 'fixed', label: 'FIXED PRICE' },
-              { id: 'auction', label: 'AUCTION' },
-            ]}
-          />
-
-          {type === 'auction' && (
-            <p className="fs-xs font-bold text-[var(--c-steel)] mb-2 max-w-xl">
-              {selected && (
-                <span className="block text-[var(--c-ink)] mb-1">
-                  CPU range for this lot: usually{' '}
-                  {fmtCredits(Math.round(suggested * quantity * 0.85))}–
-                  {fmtCredits(Math.round(suggested * quantity * 1.25))} cr
-                  {price > suggested * quantity
-                    ? ' — your starting bid is above quicksell, so CPU collectors will skip it.'
-                    : '.'}
-                </span>
-              )}
-              CPU collectors bid on auctions too. Each one values your card around its quicksell
-              price — usually up to +25%, sometimes far less, now and then far more — so a low
-              starting bid can be lowballed, and a lucky one can sell well above quicksell. Their
-              winning bids count toward the card's market price.
-            </p>
-          )}
-          <div className="flex flex-wrap gap-4 mb-4">
-            <label className="flex items-center gap-2 text-xs font-bold">
-              {type === 'fixed' ? 'Price' : 'Starting bid'}
-              <input
-                type="number"
-                min={1}
-                value={priceText}
-                onChange={(e) => setPriceText(e.target.value)}
-                onBlur={() => setPriceText(clampWholeText(priceText, 1, LISTING_MAX_PRICE))}
-                className="w-24 px-2 py-1 ink-border-sm"
-              />
-              <span className="fs-xs text-[var(--c-steel)] inline-flex items-center gap-0.5">
-                = <Credits amount={price} />
-              </span>
-            </label>
-            {type === 'auction' && (
-              <label className="flex items-center gap-2 text-xs font-bold">
-                Buyout (optional)
-                <input
-                  type="number"
-                  min={0}
-                  value={buyout === '' ? '' : buyout}
-                  onChange={(e) =>
-                    setBuyout(
-                      e.target.value === ''
-                        ? ''
-                        : Math.max(0, Math.round(Number(e.target.value) || 0)),
-                    )
-                  }
-                  className="w-24 px-2 py-1 ink-border-sm"
-                />
-                {buyout !== '' && (
-                  <span className="fs-xs text-[var(--c-steel)] inline-flex items-center gap-0.5">
-                    = <Credits amount={buyout} />
-                  </span>
-                )}
-              </label>
-            )}
-            {/* create_listing only honors a duration for auctions; a fixed
-                listing always runs 14 days. Showing the picker on fixed sales
-                let the seller believe they'd chosen "6 hours" while the card
-                sat escrowed for two weeks. */}
-            {type === 'auction' ? (
-              <label className="flex items-center gap-2 text-xs font-bold">
-                Duration
-                <select
-                  className={select}
-                  value={hours}
-                  onChange={(e) => setHours(Number(e.target.value))}
-                >
-                  <option value={6}>6 hours</option>
-                  <option value={12}>12 hours</option>
-                  <option value={24}>24 hours</option>
-                  <option value={48}>2 days</option>
-                  <option value={168}>7 days</option>
-                </select>
-              </label>
-            ) : (
-              <span className="flex items-center gap-1 fs-xs font-bold text-[var(--c-steel)]">
-                Fixed listings run 14 days.
-              </span>
-            )}
-          </div>
-
-          <PopButton
-            color="yellow"
-            disabled={!valid || busy}
-            onClick={() =>
-              onSubmit({
-                cardId,
-                foil: listFoil,
-                variant: selVariant?.variant ?? null,
-                quantity,
-                type,
-                price,
-                buyout: effectiveBuyout,
-                hours,
-              })
-            }
-          >
-            {busy ? 'LISTING…' : type === 'fixed' ? 'LIST FOR SALE ▸' : 'START AUCTION ▸'}
-          </PopButton>
-          <div className="fs-xs font-bold text-[var(--c-steel)] mt-2">
-            Listed cards leave your collection until sold, cancelled, or expired.
-          </div>
-        </>
       )}
     </div>
   );

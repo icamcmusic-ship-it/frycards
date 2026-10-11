@@ -9,7 +9,7 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
-### v35.6 — Card variants
+### v35.6 — Card variants, nine card backs, one showcase (PR #174)
 
 - **Card variants**: a cosmetic version of a card, rolled per pack card
   independently of foil. **Shattered** (any colour, 1 in 150 cards, value
@@ -25,20 +25,55 @@ recent entries. This file is the archive; that screen is not.
   `frycards-art.pages.dev/Overlays/<variant>.webp` replaces it automatically
   (see `src/meta/variants.ts`).
 - Achievements: Something Different, Glass Half Full, Elemental Binder.
-
-### v35.4 — One showcase, full-screen showroom, nine new card backs
-
 - **Nine new card backs** in the Store: Salt & Stack, Doodle Deep and
   Glimmerroot (299), Breach, Ignited Palm and Shh Protocol (499), Hothead
   Protocol and Hot Hand Ace (799 or 8 vouchers), Hellfry (1,199 or 12
   vouchers).
 - **Slabs pin to your main showcase**: graded slabs and cards now share the
-  one profile showcase (6 slots) instead of a separate graded row.
+  one profile showcase (6 slots) instead of a separate GRADED SHOWCASE row;
+  existing slab pins move across.
 - **Upload your card art**: Player Showcase submissions take the art file
   itself (drag-drop or pick, up to 8 MB, with a 5:7 crop preview and upload
   progress); pasting a link still works.
 - **3D Showroom fullscreen** fills the whole screen instead of leaving the
   bottom half black.
+
+### v35.5 — Grading houses, slab market, a new Store (PR #173)
+
+- **Three grading houses, three lanes**: KEEPER (70) for cheap cards, AMG
+  (150, was 180; minimum 3 cards, bulk breaks) in the middle, TCA (400) at
+  the top. A HOUSES & REGISTRY tab shows each house's BEST FOR range, perks,
+  cons and the expected-value table behind them.
+- **PRISTINE 10**: TCA grades strictest, but half of its direct 10s come back
+  PRISTINE in a black-and-gold case (x40) with four visible subgrades.
+- **AMG Set Registry and Pop Report**: per-colour registries with one-time
+  milestone bonuses and badges; low-pop grades resell for up to +10%.
+- **Crossover**: a Keeper slab can be sent once to TCA or AMG at their full
+  fee and never drops a grade.
+- **Loyalty, weekly special, daily collector**: a perk every 10 cards to a
+  house, one house grading one colour at half price each week, and +15%
+  quicksell for one house's slabs each day.
+- **Slabs on the Marketplace and in player shops**: fixed price or auction,
+  held in escrow, the buyer receives the slab; CPU collectors and Shop Floor
+  customers each favour one house.
+- **Grade insurance** at +25% of the fee (was +10%): a grade under 7 refunds
+  the base fee, the premium is kept. **Trade-ins**: five sub-7 slabs buy one
+  free grading. New slab achievements and missions.
+- **Pack opening**: reveal tiers by rarity (fast commons, SR/UR dim and
+  burst, full-screen Mythic, serialized stamp), shake before a big pull, a
+  tear that follows the pointer, haptics, foil shimmer on pointer or tilt,
+  and a summary with NEW / DUPE / SERIAL / FOIL / WISH badges, counting haul
+  value and set progress. All follow the Motion setting. The summary is no
+  longer clipped above the fold on phones.
+- **Store**: hero, featured row and shelf; one BUY & OPEN per pack with a
+  currency toggle and x1 / x5 / x10; SAVE FOR LATER; a WHAT'S INSIDE preview
+  (chase cards, odds, owned, wishlist). One pack a day is 15% off, charged
+  server-side, and seven limited colour packs are ready to run for a week.
+- **Patch notes redesign**: release heroes, category filters, NEW! stickers,
+  before/after numbers and TRY IT deep links.
+- **Faster load**: lazy screens preload on idle and on menu hover/focus, and
+  the bundled fallback catalog only loads when network and cache both fail.
+  Eager JS 228.7 -> 181 kB gzip.
 
 ### v35.3 — The 2026-10-11 audit round (PR #171)
 

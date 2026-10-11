@@ -534,7 +534,108 @@ const BINGO = {
   blackout_vouchers: 3,
 };
 
+const SOON = new Date(Date.UTC(2100, 0, 1)).toISOString();
+const floorCustomer = (i: number, extra: Record<string, unknown>) => ({
+  id: `preview-customer-${i}`,
+  kind: 'buy',
+  mood: 'browsing',
+  mood_score: 50,
+  rounds: 0,
+  patience: 2,
+  last_event: 'arrive',
+  seed: 1000 + i * 77,
+  event_log: [],
+  regular: false,
+  visits: 1,
+  offer_credits: 420,
+  offer_card_id: null,
+  offer_foil: false,
+  trade_cash: 0,
+  haggled: false,
+  expires_at: SOON,
+  listing_id: SHOP_LISTINGS[0].id,
+  listing_price: SHOP_LISTINGS[0].price,
+  listing_cards: SHOP_LISTINGS[0].cards,
+  listing_type: 'individual',
+  bundle_listing_id: null,
+  bundle_price: null,
+  bundle_cards: null,
+  ...extra,
+});
+// Shop Floor (20261013000100): one of each offer shape — a haggle in
+// progress, a regular's bundle offer and a trade-plus-cash.
+const SHOP_FLOOR = {
+  served_24h: 5,
+  next_at: SOON,
+  regulars: 2,
+  customers: [
+    floorCustomer(0, {
+      persona: 'Collector Vex',
+      persona_id: 'tightfist',
+      patience: 3,
+      rounds: 1,
+      mood_score: 47,
+      offer_credits: 445,
+      last_event: 'meet_middle',
+      event_log: [
+        { e: 'offer', v: 400 },
+        { e: 'counter', v: 520 },
+        { e: 'meet_middle', v: 445 },
+      ],
+      listing_cards: [{ card_id: cardAt(0).id, quantity: 1, foil: true }],
+    }),
+    floorCustomer(1, {
+      persona: 'Ember Annie',
+      persona_id: 'loyal_ember',
+      regular: true,
+      visits: 4,
+      mood_score: 78,
+      offer_credits: 1150,
+      last_event: 'bundle',
+      listing_id: SHOP_LISTINGS[2].id,
+      listing_price: SHOP_LISTINGS[2].price,
+      listing_cards: SHOP_LISTINGS[2].cards,
+      bundle_listing_id: SHOP_LISTINGS[0].id,
+      bundle_price: SHOP_LISTINGS[0].price,
+      bundle_cards: SHOP_LISTINGS[0].cards,
+    }),
+    floorCustomer(2, {
+      persona: 'Rookie Dax',
+      persona_id: 'kid',
+      kind: 'trade',
+      patience: 1,
+      mood_score: 61,
+      offer_credits: null,
+      offer_card_id: cardAt(31).id,
+      trade_cash: 90,
+    }),
+  ],
+  recent: [
+    {
+      persona: 'Baron Sable',
+      persona_id: 'whale',
+      kind: 'buy',
+      status: 'accepted',
+      final_credits: 1800,
+      offer_card_id: null,
+      seed: 5,
+      resolved_at: T0,
+    },
+    {
+      persona: 'Pip the Flipper',
+      persona_id: 'flipper',
+      kind: 'buy',
+      status: 'left',
+      final_credits: null,
+      offer_card_id: null,
+      seed: 6,
+      resolved_at: T0,
+    },
+  ],
+};
+
 const RPCS: Record<string, unknown> = {
+  get_shop_customers: SHOP_FLOOR,
   daily_pack_deals: [
     {
       pack_id: 'preview-booster',
@@ -627,6 +728,13 @@ const RPCS: Record<string, unknown> = {
   },
   get_listable_inventory: LISTABLE,
   get_card_market_value: { sales: 12, avg_price: 850 },
+  // Sell desk price guide: one row per requested lot (the client reads by index).
+  get_sell_price_guide: Array.from({ length: 40 }, (_, i) => ({
+    market: 180 + i * 35,
+    recent: [0, 1, 2].map((k) => ({ price: 160 + i * 35 + k * 12, at: T0 })),
+    lowest_active: i % 3 === 2 ? null : 200 + i * 30,
+    active_count: i % 3 === 2 ? 0 : 1 + (i % 4),
+  })),
   card_blended_reference: 815,
   get_daily_bounties: Array.from({ length: 6 }, (_, i) => {
     const c = cardAt(i * 19);

@@ -174,7 +174,27 @@ const byRarity = (r: string, video = false) =>
       Number(video && /\.(mp4|webm)/i.test(b.image ?? '')) -
       Number(video && /\.(mp4|webm)/i.test(a.image ?? '')),
   )[0];
-if (pullVariant) {
+if (pullVariant === 'box') {
+  // A 49-card box: the pool cycled, with a few foils, dupes, a variant and a
+  // serialized chase, so the summary's grid, filters and sort have real work.
+  const cards = POOL.filter((c) => c.type !== 'Leader');
+  const box: PackPull[] = Array.from({ length: 49 }, (_, i) =>
+    pullOf(cards[(i * 7) % Math.min(cards.length, 40)], {
+      foil: i % 9 === 4,
+      slot: `slot-${i + 1}`,
+      ...(i === 17 ? { variant: 'shattered' } : {}),
+    }),
+  );
+  const chase = byRarity('Ultra-Rare') ?? byRarity('Super-Rare');
+  if (chase)
+    box[30] = pullOf(chase, {
+      serialized: true,
+      serial_number: 7,
+      serial_cap: 50,
+      slot: 'serialized',
+    });
+  pulls.splice(0, pulls.length, ...box);
+} else if (pullVariant) {
   const base = pulls.filter((p) => p.rarity === 'Common' || p.rarity === 'Uncommon').slice(0, 5);
   const star =
     pullVariant === 'sr'
@@ -433,7 +453,12 @@ function variantCards() {
   const fits = POOL.filter(
     (c) => c.type !== 'Leader' && (!colour || (c.colors ?? []).includes(colour as never)),
   );
-  const framed = fits.find((c) => c.rarity === 'Rare' || c.rarity === 'Super-Rare') ?? fits[0];
+  // `&rarity=` picks the framed card's rarity (default Rare / Super-Rare).
+  const want = params.get('rarity');
+  const framed =
+    (want && fits.find((c) => c.rarity === want)) ||
+    fits.find((c) => c.rarity === 'Rare' || c.rarity === 'Super-Rare') ||
+    fits[0];
   const bleed =
     fits.find((c) => c.rarity === 'Full-Art' || c.rarity === 'Alt-Art') ?? fits[1] ?? fits[0];
   return [framed, bleed].filter(Boolean);
