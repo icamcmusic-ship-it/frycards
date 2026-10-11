@@ -31,11 +31,13 @@ import {
   MODE_IDS,
   NERVE,
   PLACE_FACTORS,
+  REWARD_BASE,
+  SEAT_REWARD_MULT,
   SECOND_COST_TIER,
   STACK_CAP_SHARE,
 } from '../game/poker/constants';
 import { LOCATION_TEMPLATES } from '../game/poker/locations';
-import { ordinal, placementReward } from '../game/poker/rewards';
+import { minPaidHands, ordinal, placementReward } from '../game/poker/rewards';
 import { COLOR_PIP } from '../meta/colors';
 import { rewardFloorMs } from '../meta/matchPrefs';
 
@@ -156,10 +158,22 @@ function rewardRows(): Row[] {
         '. XP and battle-pass XP scale the same way.',
     ],
     [
+      'Table size',
+      `Smaller tables are shorter, so they pay less per place: ${Object.entries(SEAT_REWARD_MULT)
+        .map(([n, x]) => `${n} seats ×${x}`)
+        .join(
+          ' · ',
+        )}. Each place pays ${REWARD_BASE.credits[0]} + ${REWARD_BASE.credits[1]} × its share, then the multipliers.`,
+    ],
+    [
+      'Short matches',
+      `Winning the table always pays. Any other finish — conceding included — pays nothing until the match has lasted ${[2, 4, 6].map((n) => `${minPaidHands(n)} hands at ${n} seats`).join(', ')} (3 hands a seat, at least 8).`,
+    ],
+    [
       'Minimum length',
       // The server floor scales with the table size (A20): quote heads-up and
       // six seats, rounded up to whole minutes, rather than the 6-seat base.
-      `A match must run long enough to pay out — from heads-up to six seats: ${MODE_IDS.map((m) => `${MODES[m].label} ${fmtFloor(rewardFloorMs(MODES[m].minMatchMs, 2))}–${fmtFloor(rewardFloorMs(MODES[m].minMatchMs, 6))}`).join(', ')}. Finish faster (say on INSTANT bots) and the table holds your result until the time is up, then pays it.`,
+      `A match must run long enough to pay out — from heads-up to six seats: ${MODE_IDS.map((m) => `${MODES[m].label} ${fmtFloor(rewardFloorMs(MODES[m].minMatchMs, 2))}–${fmtFloor(rewardFloorMs(MODES[m].minMatchMs, 6))}`).join(', ')}. Finish faster (say on INSTANT bots) and the table holds your result until the time is up, then pays it — even if you leave the table or reload.`,
     ],
   ];
 }

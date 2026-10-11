@@ -82,7 +82,7 @@ import {
 import { CATEGORY_NAMES, cardLabel, describeHand } from '../game/poker/evaluator';
 import { KEYWORD_SPECS, keywordLabel } from '../game/poker/keywords';
 import { LOCATION_TEMPLATES, ruleText } from '../game/poker/locations';
-import { ordinal, placementReward } from '../game/poker/rewards';
+import { minPaidHands, ordinal, placementReward } from '../game/poker/rewards';
 import { runBots } from '../game/poker/sim';
 import { isHidden, viewFor } from '../game/poker/view';
 import type { MatchResult, MatchStats } from '../lib/supabase';
@@ -898,8 +898,18 @@ export function PokerTable({
     // The bots wait while the confirm is up, so the place shown is the place
     // sent (A16).
     setConfirming(true);
+    const now = matchRef.current;
+    const openPlace = now.seats.filter((x) => !x.busted).length;
+    const n = now.seats.length;
+    const pay = placementReward(openPlace, n, now.mode, now.handNo);
+    const need = minPaidHands(n);
+    const payLine = unrewarded
+      ? 'This is a practice table: nothing is paid either way.'
+      : pay.credits > 0
+        ? `${ordinal(openPlace)} place pays ${pay.credits} credits.`
+        : `${ordinal(openPlace)} pays nothing yet: a finish below 1st pays only after ${need} hands (this is hand ${now.handNo}).`;
     const ok = await askConfirm(
-      'Concede? You leave the table and take the lowest place still open.',
+      `Concede? You leave the table and take ${ordinal(openPlace)} place, the lowest still open. ${payLine}`,
     ).finally(() => setConfirming(false));
     if (!ok) return;
     const m = matchRef.current;
@@ -3087,7 +3097,7 @@ function GameOver({
         return rest;
       })()
     : live;
-  const preview = placementReward(place, match.seats.length, match.mode);
+  const preview = placementReward(place, match.seats.length, match.mode, match.handNo);
   const [nowTs, setNowTs] = useState(0);
   useEffect(() => {
     if (heldUntil === null) return;
@@ -3163,8 +3173,9 @@ function GameOver({
           <div className="text-center text-xs font-bold text-[var(--c-red)]">{rewardError}</div>
         ) : (
           <div className="text-center fs-xs font-bold text-[var(--c-steel)]">
-            {ordinal(place)} place pays {preview.credits} credits with an account. Rewards follow
-            placement only — never chips.
+            {preview.credits > 0
+              ? `${ordinal(place)} place pays ${preview.credits} credits with an account. Rewards follow placement only — never chips.`
+              : `A finish below 1st pays only after ${minPaidHands(match.seats.length)} hands — this match lasted ${match.handNo}.`}
           </div>
         )}
         <div className="flex gap-2 justify-center">
