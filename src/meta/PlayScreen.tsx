@@ -37,12 +37,15 @@ import { DeckMeta } from './DeckMeta';
 const POOL_MAP = () => new Map(POOL.map((c) => [c.id, c]));
 
 /** A deck code as a pseudo deck row (no id: it is never saved). */
-function rowFromCode(code: string): { row: DeckRow; mode: ModeId } | { error: string } {
+function rowFromCode(
+  code: string,
+): { row: DeckRow; mode: ModeId; format?: FormatId } | { error: string } {
   const d = decodeDeckCode(code, POOL_MAP());
   if ('error' in d) return d;
   const leader = POOL_BY_ID[d.leaderId];
   return {
     mode: d.mode,
+    format: d.format,
     row: {
       id: `code:${fnv(code.trim())}`,
       name: `${leader?.name ?? 'Deck'} (code)`,
@@ -389,7 +392,13 @@ function PracticeTable({
     if (code.trim()) {
       const r = rowFromCode(code);
       if ('error' in r) return setErr(`Your deck: ${r.error}`);
-      me = { ...base, mode: r.mode, kind: 'custom', deck: r.row };
+      me = {
+        ...base,
+        mode: r.mode,
+        ...(r.format ? { format: r.format } : {}),
+        kind: 'custom',
+        deck: r.row,
+      };
     } else me = { ...base, kind: 'random' };
     const ghosts: NonNullable<PlaySetup['ghosts']> = [];
     for (const line of vs.split(/\s+/).filter(Boolean)) {

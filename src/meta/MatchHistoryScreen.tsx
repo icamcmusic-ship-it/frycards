@@ -276,6 +276,14 @@ export function MatchHistoryScreen({
                         : ` · retired game${r.turns ? ` · ${r.turns} turns` : ''}`}{' '}
                       · seed {r.seed}
                       {r.tag ? ` · ${r.tag}` : ''}
+                      {r.firstOfDay && (
+                        <span
+                          className="ml-1 px-1 ink-border-sm bg-[var(--c-yellow)] text-[var(--c-ink)] font-black"
+                          title="Your first Daily Table attempt of the day — the one that counts"
+                        >
+                          FIRST ATTEMPT
+                        </span>
+                      )}
                     </div>
                     {r.recap && (
                       <div className="fs-xs font-bold text-[var(--c-steel)]">

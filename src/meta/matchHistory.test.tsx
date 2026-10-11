@@ -105,3 +105,15 @@ describe('summarizeMatchHistory', () => {
     expect(text).toContain('FRY2:a');
   });
 });
+
+describe('Daily Table first attempt (Q15)', () => {
+  test('marks only the first record of a Daily tag', async () => {
+    const { isFirstDailyAttempt } = await import('./matchHistory');
+    expect(isFirstDailyAttempt('Daily 2026-10-11', [])).toBe(true);
+    expect(isFirstDailyAttempt('Daily 2026-10-11', [{ tag: 'Daily 2026-10-11' } as never])).toBe(
+      false,
+    );
+    expect(isFirstDailyAttempt('Replay', [])).toBe(false);
+    expect(isFirstDailyAttempt(undefined, [])).toBe(false);
+  });
+});

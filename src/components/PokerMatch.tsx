@@ -58,7 +58,12 @@ export function buildTable(
   } else {
     deck = deckDefFromCustom(setup.deck.leader_id, setup.deck.card_ids, setup.deck.name);
     try {
-      deckCode = encodeDeckCode(setup.deck.leader_id, setup.deck.card_ids, setup.mode);
+      deckCode = encodeDeckCode(
+        setup.deck.leader_id,
+        setup.deck.card_ids,
+        setup.mode,
+        setup.format,
+      );
     } catch {
       deckCode = undefined;
     }
