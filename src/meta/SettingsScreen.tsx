@@ -11,8 +11,7 @@ import {
   Waves,
 } from 'lucide-react';
 import { SYSTEM_THEMES, THEMES, type ThemeChoice } from './themes';
-import { PopButton, Notice } from './ui';
-import { CurrencyBar } from './CurrencyBar';
+import { PopButton, Notice, MetaHeader } from './ui';
 import { useMeta } from './MetaContext';
 import { resetAccount, setHideSerializedAnnouncements } from '../lib/supabase';
 import {
@@ -202,19 +201,9 @@ export function SettingsScreen({
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      {/* flex-wrap + min-w-0, the same idiom as the privacy row below: at the
-          browser's 200% font size on a 375px phone this row measured 388px
-          wide in CI (the `text-xl` heading is rem-based and doubles), pushing
-          the whole screen sideways. Letting the row break and the heading
-          shrink costs nothing at normal size and is the v29 fix for exactly
-          this shape. */}
-      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
-        <PopButton onClick={onBack} color="yellow">
-          &lt; MENU
-        </PopButton>
-        <h1 className="heading-font text-xl text-[var(--c-yellow)] min-w-0">SETTINGS</h1>
-        <CurrencyBar className="ml-auto" />
-      </div>
+      {/* U62: the shared header, so the wallet sits where every other screen
+          puts it. */}
+      <MetaHeader title="SETTINGS" onBack={onBack} />
 
       <div className="p-6 max-w-4xl mx-auto">
         {/* Color Theme Section: a single row of swatches (11 full-width cards

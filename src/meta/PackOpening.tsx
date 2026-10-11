@@ -15,6 +15,8 @@ import { getCardBackImage } from './cardback';
 import { SafeImage } from './SafeImage';
 import { useMeta } from './MetaContext';
 import { useRouter } from './useHashRouter';
+import { SfxBurst, type Sfx } from '../components/SfxBurst';
+import { RARITIES } from '../types';
 import { fmtCredits, quicksellPrice } from './economy';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
@@ -899,6 +901,17 @@ function SummaryStage({
   // clutter a big box tends to dump, without a separate trip to Collection.
   const { refreshCollection, refreshProfile, profile, collection } = useMeta();
   const router = useRouter();
+  const [bigPull, setBigPull] = useState<Sfx | null>(() =>
+    pulls.some(
+      (p) => p.serialized || RARITIES.indexOf(p.rarity as never) >= RARITIES.indexOf('Ultra-Rare'),
+    )
+      ? { id: 1, text: pulls.some((p) => p.serialized) ? 'SERIALIZED!' : 'BIG PULL!' }
+      : null,
+  );
+  useEffect(() => {
+    const t = window.setTimeout(() => setBigPull(null), 700);
+    return () => window.clearTimeout(t);
+  }, []);
   // U43: cards new to the collection with this haul — owned no more copies
   // than this pack just gave (true before and after the collection refresh).
   const newCount = useMemo(() => {
@@ -1056,6 +1069,8 @@ function SummaryStage({
       <h2 className="heading-font text-2xl text-[var(--c-yellow)] text-center">
         {packName.toUpperCase()}
       </h2>
+      {/* U72: a comic burst for a big pull. */}
+      <SfxBurst sfx={bigPull} />
 
       {/* Headline numbers, read left to right: how much, how shiny, how much
           it's worth. Previously the only summary was a row of rarity chips

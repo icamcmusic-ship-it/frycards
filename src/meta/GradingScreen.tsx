@@ -44,9 +44,19 @@ import {
   Sparkles,
   Ticket,
   X,
+  Hourglass,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { MetaHeader, PopButton, Notice, Credits, Vouchers, ProgressBar, Tabs } from './ui';
+import {
+  MetaHeader,
+  PopButton,
+  Notice,
+  Credits,
+  Vouchers,
+  ProgressBar,
+  Tabs,
+  EmptyState,
+} from './ui';
 import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
 import { CardFace } from '../components/CardFaceV4';
@@ -820,9 +830,11 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
             {gradedLoading ? (
               <p className="text-xs font-bold text-[var(--c-steel)]">Loading…</p>
             ) : pending.length === 0 ? (
-              <p className="text-xs font-bold text-[var(--c-steel)]">
-                Nothing at the graders. Submit some cards!
-              </p>
+              <EmptyState
+                icon={<Hourglass className="w-7 h-7" aria-hidden />}
+                text="Nothing at the graders."
+                action={{ label: 'SUBMIT CARDS ▸', onClick: () => setTab('submit') }}
+              />
             ) : (
               <div className="flex flex-wrap gap-3">
                 {pending.map((g) => (

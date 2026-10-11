@@ -4,7 +4,7 @@ import type { DeckRow } from '../lib/supabase';
 import { POOL } from '../game/poker/cardpool';
 import { decodeDeckCode } from './deckcode';
 import { loadCpuDifficulty, type CpuDifficultyId } from './matchPrefs';
-import { MetaHeader, PopButton, Notice } from './ui';
+import { MetaHeader, PopButton, Notice, EmptyState } from './ui';
 import {
   MatchRecord,
   formatMatchReport,
@@ -124,18 +124,16 @@ export function MatchHistoryScreen({
 
         {records.length === 0 ? (
           // U66: an empty state with a way forward, and the device-local note said plainly.
-          <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-6 flex flex-col items-center gap-3 text-center">
-            <History className="w-8 h-8 text-[var(--c-steel)]" aria-hidden />
-            <div className="font-bold">No matches yet. Finish a match and it shows up here.</div>
-            <div className="fs-xs font-bold text-[var(--c-steel)]">
-              History is kept on this device only — it won't follow you to another browser.
-            </div>
-            {router && !cpuLocked && (
-              <PopButton color="yellow" onClick={() => router.navigate('play')}>
-                PLAY A MATCH ▸
-              </PopButton>
-            )}
-          </div>
+          <EmptyState
+            icon={<History className="w-8 h-8" aria-hidden />}
+            text="No matches yet. Finish a match and it shows up here."
+            sub="History is kept on this device only — it won't follow you to another browser."
+            action={
+              router && !cpuLocked
+                ? { label: 'PLAY A MATCH ▸', onClick: () => router.navigate('play') }
+                : undefined
+            }
+          />
         ) : (
           <>
             <div className="flex flex-wrap gap-3 mb-4">

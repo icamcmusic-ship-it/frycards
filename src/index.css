@@ -994,3 +994,56 @@ html[data-scheme='dark'] select:not(.poker-table *) {
 html[data-motion='reduced'] .pot-bump {
   animation: none;
 }
+/* U72: comic SFX bursts (SfxBurst.tsx). */
+.sfx-star {
+  clip-path: polygon(
+    50% 0%,
+    61% 18%,
+    82% 6%,
+    78% 28%,
+    100% 32%,
+    84% 50%,
+    100% 68%,
+    78% 72%,
+    82% 94%,
+    61% 82%,
+    50% 100%,
+    39% 82%,
+    18% 94%,
+    22% 72%,
+    0% 68%,
+    16% 50%,
+    0% 32%,
+    22% 28%,
+    18% 6%,
+    39% 18%
+  );
+  filter: drop-shadow(3px 3px 0 var(--c-ink));
+  padding: 1.6rem 2.4rem;
+  font-weight: 900;
+}
+@keyframes sfx-pop-kf {
+  0% {
+    transform: translateX(-50%) rotate(var(--sfx-tilt, 4deg)) scale(0.3);
+    opacity: 0;
+  }
+  25% {
+    transform: translateX(-50%) rotate(var(--sfx-tilt, 4deg)) scale(1.12);
+    opacity: 1;
+  }
+  75% {
+    transform: translateX(-50%) rotate(var(--sfx-tilt, 4deg)) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) rotate(var(--sfx-tilt, 4deg)) scale(1);
+    opacity: 0;
+  }
+}
+.sfx-burst {
+  transform: translateX(-50%) rotate(var(--sfx-tilt, 4deg));
+  animation: sfx-pop-kf 0.6s ease-out both;
+}
+html[data-motion='reduced'] .sfx-burst {
+  animation: none;
+}

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { askConfirm } from './confirm';
 import { ShowcaseSlabsRow } from './SlabDetailModal';
-import { Pencil, Check, Search, ShieldAlert } from 'lucide-react';
+import { Pencil, Check, Search, ShieldAlert, Star } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   equipCosmetic,
@@ -21,6 +21,7 @@ import {
   ProgressBar,
   levelProgress,
   UnavailableShowcaseTile,
+  EmptyState,
 } from './ui';
 import { RoleBadge } from './RoleBadge';
 import { fmtCredits } from './economy';
@@ -286,9 +287,13 @@ export function ProfileScreen({
             )}
           </div>
           {(profile.showcase_cards || []).length === 0 ? (
-            <p className="text-[11px] font-bold text-[var(--c-steel)] py-2">
-              Pin up to 6 cards from your Collection to show off here.
-            </p>
+            <EmptyState
+              icon={<Star className="w-7 h-7" aria-hidden />}
+              text="Pin up to 6 cards from your Collection to show off here."
+              action={
+                onManageShowcase ? { label: 'ADD CARDS ▸', onClick: onManageShowcase } : undefined
+              }
+            />
           ) : (
             <div className="flex flex-wrap gap-3">
               {(profile.showcase_cards || []).map((id) => {

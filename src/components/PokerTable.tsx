@@ -125,6 +125,7 @@ import { loadMatchHistory, placeOf, recordMatch } from '../meta/matchHistory';
 import { askConfirm } from '../meta/confirm';
 import { useReducedMotion } from '../meta/useMotionMode';
 import { ChipFlights } from './ChipFlights';
+import { SfxBurst, type Sfx } from './SfxBurst';
 import { CardFace } from './CardFaceV4';
 import { Card3DInspector } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
@@ -548,6 +549,18 @@ export function PokerTable({
   const [raiseSel, setRaiseTo] = useState(0);
   const [bankMs, setBankMs] = useState(() => TIMER_PRESETS[loadTimerMode()].bankMs);
   const [bubbles, setBubbles] = useState<Record<number, Bubble>>({});
+  // U72: one comic burst at a time for the big moments.
+  const [sfx, setSfx] = useState<Sfx | null>(null);
+  const sfxSeq = useRef(0);
+  const burst = useCallback((text: string, tone?: Sfx['tone']) => {
+    sfxSeq.current += 1;
+    setSfx({ id: sfxSeq.current, text, tone });
+  }, []);
+  useEffect(() => {
+    if (!sfx) return;
+    const t = window.setTimeout(() => setSfx((x) => (x?.id === sfx.id ? null : x)), 700);
+    return () => window.clearTimeout(t);
+  }, [sfx]);
   const narrow = useIsNarrow();
   const feltRef = useRef<HTMLDivElement>(null);
   const [felt, setFelt] = useState({ w: 0, h: 0 });
@@ -610,7 +623,11 @@ export function PokerTable({
       if (b && 'seat' in action && typeof action.seat === 'number') {
         const seat = action.seat;
         setBubbles((bs) => ({ ...bs, [seat]: b }));
+        if (b.kind === 'allin') burst('ALL IN!', 'red');
       }
+      // U72: a hand that reaches showdown.
+      if (next.hand?.done && !prev.hand?.done && next.hand.result && !next.hand.result.uncontested)
+        burst('SHOWDOWN!');
       return true;
     } catch (e) {
       if (e instanceof IllegalAction) {
@@ -619,7 +636,7 @@ export function PokerTable({
       }
       throw e;
     }
-  }, []);
+  }, [burst]);
 
   const [spot, setSpot] = useState<Spot | null>(null);
 
@@ -899,8 +916,9 @@ export function PokerTable({
           at: Date.now(),
           hold: latest.target === HUMAN && pauseOnTarget && !busted,
         });
+      if (latest.seat !== HUMAN && latest.target === HUMAN) burst('AT YOU!', 'red');
     }
-  }, [view, pauseOnTarget, busted]);
+  }, [view, pauseOnTarget, busted, burst]);
   const [inspectFromSpot, setInspectFromSpot] = useState(false);
   useEffect(() => {
     // Held spots wait for a tap; an open inspector holds any spot.
@@ -1387,6 +1405,8 @@ export function PokerTable({
                   </span>
                 );
               })}
+
+            <SfxBurst sfx={sfx} />
 
             {/* U7: bets slide into the pot, the pot slides to the winner(s). */}
             {h && (

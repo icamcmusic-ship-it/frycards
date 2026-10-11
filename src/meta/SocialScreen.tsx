@@ -25,7 +25,7 @@ import {
   CardsLeaderboardEntry,
   subscribeTable,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
+import { MetaHeader, PopButton, Notice, Credits, Tabs, EmptyState } from './ui';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/poker/cardpool';
 import { sellableSplit } from './sellable';
@@ -751,12 +751,14 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     </div>
                   )}
                   {!loading && friendProfiles.length === 0 && (
-                    <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
-                      <p className="mb-2">No friends yet — find a player and send a request.</p>
-                      <PopButton color="yellow" onClick={() => searchRef.current?.focus()}>
-                        FIND PLAYERS ▸
-                      </PopButton>
-                    </div>
+                    <EmptyState
+                      icon={<Users className="w-7 h-7" aria-hidden />}
+                      text="No friends yet — find a player and send a request."
+                      action={{
+                        label: 'FIND PLAYERS ▸',
+                        onClick: () => searchRef.current?.focus(),
+                      }}
+                    />
                   )}
                 </div>
 
