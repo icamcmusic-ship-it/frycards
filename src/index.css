@@ -1047,3 +1047,16 @@ html[data-motion='reduced'] .pot-bump {
 html[data-motion='reduced'] .sfx-burst {
   animation: none;
 }
+/* U75: halftone dots on the felt's rim and the result banner, tying the table
+   to the paper-comic meta screens. */
+.felt-halftone {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.13) 22%, transparent 24%);
+  background-size: 7px 7px;
+  -webkit-mask-image: radial-gradient(ellipse at center, transparent 58%, #000 82%);
+  mask-image: radial-gradient(ellipse at center, transparent 58%, #000 82%);
+  pointer-events: none;
+}
+.banner-halftone {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 22%, transparent 24%);
+  background-size: 6px 6px;
+}

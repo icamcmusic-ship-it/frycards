@@ -392,6 +392,8 @@ function Felt({ def, reduced }: { def: CardDef | null; reduced: boolean }) {
             'radial-gradient(ellipse at center, rgba(8,40,30,0.35) 0%, rgba(4,20,16,0.75) 70%, rgba(0,0,0,0.9) 100%)',
         }}
       />
+      {/* U75: the menu's halftone, faint, on the felt's rim — one comic world. */}
+      <div className="felt-halftone absolute inset-0" />
     </div>
   );
 }
@@ -2075,6 +2077,16 @@ function SeatPopover({
         This hand: cast {castsBy} · targeted {castsAt} ·{' '}
         {h?.units.filter((u) => u.seat === seat).length ?? 0} unit(s) out
       </div>
+      {/* U9: which units, by name. */}
+      {!!h?.units.some((u) => u.seat === seat) && (
+        <div className="text-[var(--c-steel)] truncate">
+          Units:{' '}
+          {h.units
+            .filter((u) => u.seat === seat)
+            .map((u) => u.def.name)
+            .join(', ')}
+        </div>
+      )}
       <ul className="mt-1 max-h-32 overflow-y-auto list-disc pl-4">
         {lines.length ? lines.map((l, k) => <li key={k}>{l}</li>) : <li>Nothing yet.</li>}
       </ul>
@@ -3178,7 +3190,7 @@ function HandResultBanner({
   // follows the name, not the seat index — never "alice win".
   const nameOf = (i: number) => (i === HUMAN ? 'You' : match.seats[i].name);
   return (
-    <div className="bg-black/85 ink-border-sm rounded px-3 py-1.5 text-center max-w-[420px]">
+    <div className="banner-halftone bg-black/85 ink-border-sm rounded px-3 py-1.5 text-center max-w-[420px]">
       {r.pots.map((p, i) => {
         const solo = p.winners.length === 1;
         const you = solo && p.winners[0] === HUMAN;
