@@ -318,8 +318,8 @@ packTypes.push({
   } as object),
 });
 
-const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar'] as const).map(
-  (item_type, i) => ({
+const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar'] as const)
+  .map((item_type, i) => ({
     id: `preview-cosmetic-${i}`,
     name: `Preview ${item_type.replace('_', ' ')}`,
     description: 'A stand-in cosmetic for the offline harness.',
@@ -334,8 +334,34 @@ const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar']
     aspect_ratio: item_type === 'profile_banner' ? '16/5' : '1/1',
     author: 'Preview',
     is_limited: false,
-  }),
-);
+  }))
+  .concat(
+    // The 2026-10-13 card backs, served from the copies bundled under
+    // public/cardbacks/ (their Cloudflare URL is blocked offline).
+    (
+      [
+        ['Salt & Stack', 'salt-and-stack', 299, 'Common'],
+        ['Breach', 'breach', 499, 'Rare'],
+        ['Hothead Protocol', 'hothead-protocol', 799, 'Super-Rare'],
+        ['Hellfry', 'hellfry', 1199, 'Ultra-Rare'],
+      ] as const
+    ).map(([name, slug, cost, rarity]) => ({
+      id: `preview-back-${slug}`,
+      name,
+      description: 'Preview card back.',
+      item_type: 'card_back',
+      image_url: `https://frycards-showcase.pages.dev/CardBacks/${slug}.webp`,
+      cost_credits: cost,
+      cost_vouchers: null,
+      rarity,
+      has_foil_variant: false,
+      foil_cost_multiplier: 1,
+      is_season_pass_exclusive: false,
+      aspect_ratio: 'portrait',
+      author: 'FryBandit',
+      is_limited: false,
+    })),
+  );
 
 // v19: these three were all stubbed `[]`, and every panel gated on them was
 // therefore measured as an empty state and nothing else — the Store's
@@ -344,7 +370,7 @@ const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar']
 // numbered-print plates. The audit's whole job is measuring populated layouts
 // at phone width; three of them had no population to measure.
 const inventory = packTypes.map((p, i) => ({ pack_type_id: p.id, quantity: 1 + i * 2 }));
-const cosmetics = shopItems.map((s, i) => ({ shop_item_id: s.id, is_foil: i === 0 }));
+const cosmetics = shopItems.slice(0, 3).map((s, i) => ({ shop_item_id: s.id, is_foil: i === 0 }));
 const serializedCards = POOL.filter((c) => c.type !== 'Leader')
   .slice(0, 4)
   .map((c, i) => ({

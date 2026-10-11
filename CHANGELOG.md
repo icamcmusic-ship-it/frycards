@@ -9,6 +9,17 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v35.4 — One showcase, full-screen showroom, nine new card backs
+
+- **Nine new card backs** in the Store: Salt & Stack, Doodle Deep and
+  Glimmerroot (299), Breach, Ignited Palm and Shh Protocol (499), Hothead
+  Protocol and Hot Hand Ace (799 or 8 vouchers), Hellfry (1,199 or 12
+  vouchers).
+- **Slabs pin to your main showcase**: graded slabs and cards now share the
+  one profile showcase (6 slots) instead of a separate graded row.
+- **3D Showroom fullscreen** fills the whole screen instead of leaving the
+  bottom half black.
+
 ### v35.3 — The 2026-10-11 audit round (PR #171)
 
 - **Match bugs fixed** (audit §1 A1–A25): no inspector on hover, no
