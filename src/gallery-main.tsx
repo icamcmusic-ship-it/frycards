@@ -73,8 +73,23 @@ function Band({
  * enough to push the flavor block down onto the stat plate. Used by the
  * layout audit in `scripts/audit-cardface.ts`. `&foil=1` prints them all foil.
  */
-function AllOfRarity({ rarity, size, foil }: { rarity: string; size: CardSize; foil?: boolean }) {
-  const cards = POOL.filter((c) => c.rarity === rarity);
+function AllOfRarity({
+  rarity,
+  size,
+  foil,
+  fixtureType,
+}: {
+  rarity: string;
+  size: CardSize;
+  foil?: boolean;
+  fixtureType?: string | null;
+}) {
+  // `&fixture=<type>`: a preview fixture — the first card of that type,
+  // reprinted at this rarity (for a rarity the pool has no card of that type at).
+  const fixture = fixtureType ? POOL.find((c) => c.type === fixtureType) : undefined;
+  const cards = fixture
+    ? [{ ...fixture, rarity } as CardDef]
+    : POOL.filter((c) => c.rarity === rarity);
   return (
     <div style={{ background: '#20242c', padding: 16 }}>
       <Band title={`${rarity} — all ${cards.length}`} cards={cards} size={size} foil={foil} />
@@ -171,7 +186,12 @@ createRoot(document.getElementById('root')!).render(
   params.get('slabs') ? (
     <Slabs rarity={params.get('slabs') === '1' ? 'Rare' : params.get('slabs')!} />
   ) : allRarity ? (
-    <AllOfRarity rarity={allRarity} size={allSize} foil={params.get('foil') === '1'} />
+    <AllOfRarity
+      rarity={allRarity}
+      size={allSize}
+      foil={params.get('foil') === '1'}
+      fixtureType={params.get('fixture')}
+    />
   ) : (
     <Gallery />
   ),
