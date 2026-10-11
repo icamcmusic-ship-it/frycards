@@ -6,6 +6,7 @@ import {
   beginMatch,
   MatchResult,
   MatchResultStatus,
+  type MatchStats,
 } from './lib/supabase';
 import { legalModes } from './game/poker/deck';
 import { MODES, MODE_IDS, MAX_SEATS, MIN_SEATS, type ModeId } from './game/poker/constants';
@@ -50,6 +51,14 @@ const CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** One reward round-trip gets this long before it counts as a failed attempt. */
 const RECORD_ATTEMPT_MS = 20_000;
+/** "m:ss" until `until` (ms epoch). */
+function holdLabel(until: number): string {
+  const sec = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+
+/** Longest a `too_early` result is held for a retry (the Deep 6-seat floor is 20 min). */
+const MAX_HOLD_MS = 21 * 60 * 1000;
 
 const NO_REWARD_REASON: Record<MatchResultStatus, string> = {
   too_early: 'No reward: the match ended too quickly to count.',
@@ -57,6 +66,7 @@ const NO_REWARD_REASON: Record<MatchResultStatus, string> = {
   duplicate: 'This match was already recorded — check your credits.',
   invalid: 'No reward for this match (it was not recognised by the server).',
   capped: "No reward: you've reached today's payout limit. It resets within 24 hours.",
+  too_short: 'No reward: a match has to last a few hands before a finish below 1st pays.',
 };
 
 /**
@@ -416,6 +426,14 @@ export function Game({
   // While the result call is in flight both of the above stay null — this
   // flag lets the game-over screen show a "saving…" line instead of a gap.
   const [rewardPending, setRewardPending] = useState(false);
+  // When the server asked us to wait (`too_early`), the time the reward pays.
+  const [rewardHoldUntil, setRewardHoldUntil] = useState<number | null>(null);
+  const [, setHoldTick] = useState(0);
+  useEffect(() => {
+    if (rewardHoldUntil === null) return;
+    const id = window.setInterval(() => setHoldTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [rewardHoldUntil]);
 
   // One SERVER-MINTED ticket per mounted match, requested as the match starts.
   // Retries reuse it, so the server still tells "same match, reply got lost"
@@ -425,12 +443,15 @@ export function Game({
   // session on refocus and token refresh, and re-minting mid-match replaced
   // the ticket.
   const ticketUserId = session?.user?.id;
+  // The ticket records the table's mode and seats (A21); the server pays on those.
+  const setupMode = setup.mode;
+  const setupSeats = setup.seats;
   useEffect(() => {
     if (!ticketUserId) return; // guests never earn a reward, so never mint a ticket
     let cancelled = false;
     let timer: number | undefined;
     const mint = (retriesLeft: number) => {
-      beginMatch().then(({ matchId, error }) => {
+      beginMatch(setupMode, setupSeats).then(({ matchId, error }) => {
         if (cancelled) return;
         if (matchId) {
           matchIdRef.current = matchId;
@@ -447,23 +468,46 @@ export function Game({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [ticketUserId]);
+  }, [ticketUserId, setupMode, setupSeats]);
 
   // The reward is paid by finishing place — never by chips. Retry a couple of
   // times before telling the player their reward didn't sync.
-  const onResult = async (r: { place: number; seats: number; mode: ModeId }) => {
+  const onResult = async (r: {
+    place: number;
+    seats: number;
+    mode: ModeId;
+    /** Hands the match lasted (the server's concede rule, audit F-5). */
+    hands?: number;
+    /** The human seat's tally for poker missions (see MatchStats). */
+    stats?: MatchStats;
+  }) => {
     if (!session) return;
     setRewardPending(true);
+    let holdUsed = false;
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise((res) => setTimeout(res, 1500));
         // Bounded: a request that stalls instead of failing would otherwise
         // hold rewardPending (and with it REMATCH / BACK TO MENU) forever.
-        const { data, error, status } = await withTimeout(
-          recordMatchPlacement(r.place, r.seats, r.mode, matchIdRef.current ?? undefined),
+        const { data, error, status, retryable, retryAfterMs } = await withTimeout(
+          recordMatchPlacement(r.place, r.seats, r.mode, matchIdRef.current ?? undefined, {
+            stats: r.stats,
+            hands: r.hands,
+          }),
           RECORD_ATTEMPT_MS,
-          { data: null, error: 'timed out', status: null },
+          { data: null, error: 'timed out', status: null, retryable: false, retryAfterMs: null },
         );
+        if (retryable && retryAfterMs !== null && retryAfterMs <= MAX_HOLD_MS && !holdUsed) {
+          // The match beat the server's minimum length in wall time (SKIP TO
+          // RESULT, fast bots). The ticket stays valid: hold the result (and
+          // with it REMATCH / BACK) until it pays, then send it again.
+          holdUsed = true;
+          setRewardHoldUntil(Date.now() + retryAfterMs);
+          await new Promise((res) => setTimeout(res, retryAfterMs + 1000));
+          setRewardHoldUntil(null);
+          attempt = -1;
+          continue;
+        }
         if (status) {
           setRewardError(NO_REWARD_REASON[status]);
           return;
@@ -497,14 +541,22 @@ export function Game({
 
   // Leaving while the result is still being recorded is not allowed: a
   // REMATCH mints a new ticket, and begin_match deletes the unredeemed one
-  // this retry loop is still trying to cash.
-  const whenSaved = (action: () => void) => () => {
-    if (rewardPending) {
-      toast('Saving your reward… one moment.');
-      return;
-    }
-    action();
-  };
+  // this retry loop is still trying to cash. While a `too_early` result is
+  // held, BACK is fine (the retry still runs and nothing mints a new ticket),
+  // but REMATCH would void the ticket.
+  const whenSaved =
+    (action: () => void, allowDuringHold = false) =>
+    () => {
+      if (rewardPending && !(allowDuringHold && rewardHoldUntil !== null)) {
+        toast(
+          rewardHoldUntil !== null
+            ? `Your reward credits in ${holdLabel(rewardHoldUntil)} — rematch after that.`
+            : 'Saving your reward… one moment.',
+        );
+        return;
+      }
+      action();
+    };
 
   return (
     <div className="relative w-full h-screen supports-[height:100dvh]:h-dvh">
@@ -513,14 +565,16 @@ export function Game({
           role="status"
           className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs px-3 py-1 heading-font fs-sm animate-pulse"
         >
-          Saving your reward…
+          {rewardHoldUntil !== null
+            ? `Reward credits in ${holdLabel(rewardHoldUntil)}`
+            : 'Saving your reward…'}
         </div>
       )}
       <PokerMatch
         play={setup}
         matchSeed={matchSeed}
         playerName={profile?.username || 'You'}
-        onExit={whenSaved(onExit)}
+        onExit={whenSaved(onExit, true)}
         onRematch={whenSaved(onRematch)}
         onResult={onResult}
         reward={reward}

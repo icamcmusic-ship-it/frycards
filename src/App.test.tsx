@@ -102,8 +102,16 @@ describe('M8: leaving while the reward is being recorded', () => {
     expect(onRematch).not.toHaveBeenCalled();
     expect(onExit).not.toHaveBeenCalled();
     expect(mocks.beginMatch).toHaveBeenCalledTimes(1);
+    // The ticket records the table's mode and seats (A21).
+    expect(mocks.beginMatch).toHaveBeenCalledWith('quick', 3);
     // Paid by place, with the table size and mode.
-    expect(mocks.recordMatchPlacement).toHaveBeenCalledWith(2, 6, 'standard', 'ticket-1');
+    expect(mocks.recordMatchPlacement).toHaveBeenCalledWith(
+      2,
+      6,
+      'standard',
+      'ticket-1',
+      expect.anything(),
+    );
 
     await act(async () => {
       saving.resolve({ data: { credits_awarded: 100 }, error: null, status: null });

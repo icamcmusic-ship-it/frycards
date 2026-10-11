@@ -533,80 +533,146 @@ export async function respondShopCustomer(
 
 /**
  * Mint a server-side ticket for a match that is starting NOW, and hold onto
- * the id it returns — `recordMatchResult` will not pay out without it.
+ * the id it returns — `recordMatchPlacement` will not pay out without it.
  *
- * The match id used to be a client-generated UUID, which made the whole
- * economy client-asserted: the idempotency receipt stopped one match being
- * paid twice, but a loop rolling fresh UUIDs with `won: true` was free money,
- * and the publishable key ships in the bundle. The server now issues the id,
- * timestamps it, and refuses to redeem one that is too young, too old,
- * already spent, or not the caller's. An account holds one open ticket at a
- * time, so payouts are at least the minimum match length apart. The win/loss
- * flag is still client-asserted. The real close is
- * server-authoritative matches (the PvP spike); this is the half of it that
- * does not need an engine on the server.
+ * The server issues the id, timestamps it, and records the table's MODE and
+ * SEAT COUNT (RULEBOOK §13): redemption pays and floors on those, not on what
+ * the result call claims. An account holds one open ticket at a time (a new
+ * one voids the old). CPU matches are Creator-only server-side too, matching
+ * `isCpuLocked` (src/meta/cpuAccess.ts).
  */
-export async function beginMatch(): Promise<{ matchId: string | null; error: string | null }> {
-  const { data, error } = await supabase.rpc('begin_match');
-  const id = (data as { match_id?: string } | null)?.match_id ?? null;
-  return { matchId: id, error: rpcError(error) };
+export interface MatchTicket {
+  matchId: string;
+  /** Server time the ticket started (ISO). */
+  startedAt: string;
+  /** Seconds the match must last before it can be redeemed (null if mode/seats were not sent). */
+  floorSeconds: number | null;
 }
 
-export async function recordMatchResult(
-  won: boolean,
-  /** The server-minted ticket from `beginMatch()`. Retries reuse it: the
-   * ticket is claimed atomically, so a retry after a lost reply returns null
-   * data rather than paying twice. Omitting it is now an error server-side. */
-  matchId?: string,
-): Promise<{ data: MatchResult | null; error: string | null; status: MatchResultStatus | null }> {
-  const { data, error } = await supabase.rpc('record_match_result', {
-    p_won: won,
-    p_match_id: matchId ?? null,
-  });
-  // The server answers `{ status }` instead of a reward when the ticket is not
-  // payable; older deployments answer a bare null.
-  const status = (data as { status?: MatchResultStatus } | null)?.status ?? null;
-  return {
-    data: status ? null : (data as MatchResult) || null,
-    error: rpcError(error),
-    status,
-  };
+export async function beginMatch(
+  mode?: 'quick' | 'standard' | 'deep',
+  seats?: number,
+): Promise<{ matchId: string | null; ticket: MatchTicket | null; error: string | null }> {
+  const { data, error } = await supabase.rpc(
+    'begin_match',
+    mode && seats ? { p_mode: mode, p_seats: seats } : {},
+  );
+  const d = data as {
+    match_id?: string;
+    started_at?: string;
+    floor_seconds?: number | null;
+  } | null;
+  const ticket: MatchTicket | null = d?.match_id
+    ? {
+        matchId: d.match_id,
+        startedAt: d.started_at ?? new Date().toISOString(),
+        floorSeconds: d.floor_seconds ?? null,
+      }
+    : null;
+  return { matchId: ticket?.matchId ?? null, ticket, error: rpcError(error) };
 }
 
 /**
- * FryCards Poker result: the player's finishing PLACE at a `seats`-sized table
- * in `mode` (Design Spec v0.1, "Rewards"). The server pays by placement —
- * round((40 + 60 × place factor) × mode multiplier) — and checks the ticket
- * against the mode's minimum match length (`record_match_placement`, migration
- * 20261009000000). Placement is client-reported, as the win flag was; the
- * ticket, its expiry and the daily caps bound the farming risk.
+ * Per-match poker stats for missions and achievements (audit §5 c.2), tallied
+ * by the engine for the HUMAN seat and sent with the result. Every field is
+ * optional; unknown fields are ignored. The server clamps each value per
+ * match and tracks them only on a full-rate (untapered) payout:
  *
- * Until that migration is applied to the live project the RPC does not exist,
- * so this falls back to the old win/loss call (1st place = a win) and rewards
- * keep flowing either way.
+ * - `hands_won`, `showdown_wins`, `strong_showdowns` (two pair or better),
+ *   `win_pair` (won a showdown with exactly one pair), `bluff_wins` (won
+ *   uncontested without a made hand), `leader_uses`: count per match, each
+ *   ≤ hands played and ≤ 40 / 80 / 120 (quick / standard / deep).
+ * - `powers_cast`: power cards resolved (not snuffed/fizzled, Leader casts
+ *   excluded), ≤ 2 × that cap.
+ * - `made_straight`, `made_flush`, `made_full_house`: pots won with that
+ *   category, ≤ 6 each; `made_quads`, `made_straight_flush` ≤ 1.
+ * - `big_pots` (a pot of ≥ 20 big blinds), `big_pots_50` (≥ 50 BB), ≤ 5 each.
+ * - `seats_busted`: seats this player knocked out, ≤ seats − 1.
+ * - `triple_bust`: 1 if this player busted 3+ seats in one hand (counts only at 4+ seats).
+ * - `short_stack`: true if this player started a hand with ≤ 1 big blind
+ *   (pays `short_stack_win` only on a win).
+ * - `kw`: keyword names resolved (card powers and Leader abilities), any
+ *   order, duplicates fine; names outside the keyword list are ignored.
+ * - `leader`: the Leader card id the player used (counts on a win, once per
+ *   distinct owned Leader).
+ *
+ * Server-only (never sent): deep_wins, full_table_wins, podium_finishes, long_games.
+ */
+export interface MatchStats {
+  hands_won?: number;
+  showdown_wins?: number;
+  strong_showdowns?: number;
+  win_pair?: number;
+  made_straight?: number;
+  made_flush?: number;
+  made_full_house?: number;
+  made_quads?: number;
+  made_straight_flush?: number;
+  bluff_wins?: number;
+  big_pots?: number;
+  big_pots_50?: number;
+  seats_busted?: number;
+  triple_bust?: number;
+  short_stack?: boolean;
+  powers_cast?: number;
+  leader_uses?: number;
+  kw?: string[];
+  leader?: string;
+}
+
+/** The outcome of one `recordMatchPlacement` call. */
+export interface MatchPlacementResult {
+  data: MatchResult | null;
+  error: string | null;
+  status: MatchResultStatus | null;
+  /** True when the SAME ticket will pay if sent again later (only `too_early`). */
+  retryable: boolean;
+  /** For `too_early`: wait this long, then send the same result again. */
+  retryAfterMs: number | null;
+}
+
+/**
+ * FryCards Poker result: the player's finishing PLACE. The server pays by
+ * placement — round((15 + 85 × place factor) × mode × seat multiplier), see
+ * src/game/poker/rewards.ts — using the ticket's mode and seats. `seats` and
+ * `mode` are still sent for tickets minted by older clients.
+ *
+ * `hands` is the number of hands the match lasted: a non-winning finish
+ * before max(3 × seats, 8) hands pays nothing (`too_short`). `stats` feeds
+ * the poker missions and achievements (see MatchStats).
+ *
+ * `too_early` is not final: the ticket is kept and pays after
+ * `retryAfterMs`. Do not mint a new ticket (REMATCH) before then, or this one
+ * is voided.
  */
 export async function recordMatchPlacement(
   place: number,
   seats: number,
   mode: 'quick' | 'standard' | 'deep',
   matchId?: string,
-): Promise<{ data: MatchResult | null; error: string | null; status: MatchResultStatus | null }> {
+  extra: { stats?: MatchStats; hands?: number } = {},
+): Promise<MatchPlacementResult> {
   const { data, error } = await supabase.rpc('record_match_placement', {
     p_match_id: matchId ?? null,
     p_place: place,
     p_seats: seats,
     p_mode: mode,
+    p_stats: extra.stats ?? null,
+    p_hands: extra.hands ?? null,
   });
-  const missing =
-    !!error &&
-    ((error as { code?: string }).code === 'PGRST202' ||
-      /could not find the function|does not exist/i.test(error.message));
-  if (missing) return recordMatchResult(place === 1, matchId);
-  const status = (data as { status?: MatchResultStatus } | null)?.status ?? null;
+  const d = data as {
+    status?: MatchResultStatus;
+    retryable?: boolean;
+    retry_after?: number;
+  } | null;
+  const status = d?.status ?? null;
+  const retryable = status === 'too_early' && d?.retryable !== false;
   return {
     data: status ? null : (data as MatchResult) || null,
     error: rpcError(error),
     status,
+    retryable,
+    retryAfterMs: retryable ? Math.max(1, d?.retry_after ?? 60) * 1000 : null,
   };
 }
 
@@ -652,8 +718,11 @@ export interface QuicksellResult {
 // Levels, battle pass, achievements, missions, inventory
 // ---------------------------------------------------------------------------
 /** Why the server declined to pay a match: the ticket was redeemed already, is
- * too young or too old, does not exist, or today's payout limit was reached. */
-export type MatchResultStatus = 'duplicate' | 'too_early' | 'expired' | 'invalid' | 'capped';
+ * too young (retryable — see `retryAfterMs`) or too old, does not exist or was
+ * replaced, today's payout limit was reached, or a non-winning finish came
+ * before the minimum hand count (`too_short`). */
+export type MatchResultStatus =
+  'duplicate' | 'too_early' | 'expired' | 'invalid' | 'capped' | 'too_short';
 
 export interface MatchResult {
   reward: number;
@@ -667,6 +736,14 @@ export interface MatchResult {
   level_credits_bonus: number;
   level_vouchers_bonus: number;
   bp_xp_gained: number;
+  /** Wallet after the payout (servers from 2026-10-11). */
+  vouchers?: number;
+  /** The place, seats and mode the server paid on (the ticket's). */
+  place?: number;
+  seats?: number;
+  mode?: 'quick' | 'standard' | 'deep';
+  /** True when the daily taper reduced this payout (no stats were counted). */
+  reduced?: boolean;
 }
 
 export interface Season {

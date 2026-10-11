@@ -252,7 +252,13 @@ export const PLACE_FACTORS: Record<number, number[]> = {
   5: [1, 0.6, 0.3, 0.1, 0],
   6: [1, 0.6, 0.35, 0.15, 0.05, 0],
 };
-export const REWARD_BASE = { credits: [40, 60], xp: [25, 35], bpXp: [20, 30] };
+/** [last place, win − last place] before the mode and seat multipliers
+ * (audit F-5: last place used to pay 40 % of a win, so idling to the server
+ * floor and conceding out-earned playing). Mirrored in record_match_placement. */
+export const REWARD_BASE = { credits: [15, 85], xp: [10, 50], bpXp: [8, 42] };
+/** Table-size multiplier: a heads-up match is far shorter than a six-seat one,
+ * so this roughly evens out reward per minute. Mirrored server-side. */
+export const SEAT_REWARD_MULT: Record<number, number> = { 2: 0.55, 3: 0.7, 4: 0.8, 5: 0.9, 6: 1 };
 
 // ---------------------------------------------------------------------------
 // Keyword weights for the card generator (relative chance a card of the right
