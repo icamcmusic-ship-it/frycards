@@ -52,7 +52,7 @@ import { cn } from '../lib/utils';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/poker/cardpool';
 import { sellableSplit } from './sellable';
-import { fmtCredits, fmtVouchers } from './economy';
+import { fmtCredits, fmtVouchers, quicksellPrice } from './economy';
 import { GradedSlab } from './GradedSlab';
 import type { ShowroomSubject } from './ShowroomScreen';
 import {
@@ -321,11 +321,13 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     // Most valuable first: grading a Common is a hobby, grading a Mythic is the
     // mini-game, and the old alphabetical sort buried every card worth the fee
     // behind three hundred that are not.
+    // U49: by net gain over quicksell (the fee is the same for every card).
+    const gain = (x: { cardId: string; foil: boolean }) =>
+      expectedSlabValue(POOL_BY_ID[x.cardId].rarity, x.foil, service) -
+      quicksellPrice(POOL_BY_ID[x.cardId].rarity, x.foil);
     out.sort(
       (a, b) =>
-        expectedSlabValue(POOL_BY_ID[b.cardId].rarity, b.foil, service) -
-          expectedSlabValue(POOL_BY_ID[a.cardId].rarity, a.foil, service) ||
-        POOL_BY_ID[a.cardId].name.localeCompare(POOL_BY_ID[b.cardId].name),
+        gain(b) - gain(a) || POOL_BY_ID[a.cardId].name.localeCompare(POOL_BY_ID[b.cardId].name),
     );
     return out;
   }, [collection, decks, serializedCards, service]);
@@ -581,7 +583,8 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                 </PopButton>
               )}
               <span className="fs-xs font-bold text-[var(--c-steel)]">
-                Sorted by what the slab is worth at {GRADING_SERVICE_BY_ID[service].short}.
+                Sorted by what a slab at {GRADING_SERVICE_BY_ID[service].short} gains over
+                quicksell.
               </span>
             </div>
             {dataLoading ? (
@@ -629,7 +632,28 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                         {inBasket > 0 ? `${inBasket} of ${s.spare}` : `${s.spare} spare`}
                         {s.foil ? ' foil' : ''}
                         <br />
-                        slab ≈ {fmtCredits(expectedSlabValue(def.rarity, s.foil, service))}
+                        {/* U49: the slab value against what grading costs (the fee
+                            plus the card's own quicksell), so it supports a choice. */}
+                        {(() => {
+                          const slab = expectedSlabValue(def.rarity, s.foil, service);
+                          const fee = gradingUnitFee(service, speed, Math.max(1, basketCount));
+                          const net = slab - fee - quicksellPrice(def.rarity, s.foil);
+                          return (
+                            <>
+                              fee {fmtCredits(fee)} → ≈{fmtCredits(slab)}
+                              <br />
+                              <span
+                                className={cn(
+                                  'font-black',
+                                  net >= 0 ? 'text-[var(--c-ink)]' : 'text-[var(--c-red)]',
+                                )}
+                              >
+                                {net >= 0 ? '+' : '−'}
+                                {fmtCredits(Math.abs(net))} vs quicksell
+                              </span>
+                            </>
+                          );
+                        })()}
                       </span>
                       {inBasket > 0 && (
                         <div className="flex items-center justify-center gap-1">
