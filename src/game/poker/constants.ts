@@ -284,11 +284,20 @@ export const KEYWORD_WEIGHT: Record<string, number> = {
   Peek: 2,
   Reveal: 1.3,
   Mark: 1.3,
-  Burn: 1.5,
-  Kindle: 1.5,
+  // Audit 2026-10-11 C-1: Void's identity (Burn, Snuff, Lock, Entropic) and
+  // Light's Call Out (the only answer to Feint) printed on 0–3 cards each.
+  Burn: 3,
+  Snuff: 4,
+  'Call Out': 3,
+  Lock: 2,
+  Entropic: 2,
+  // C-2: Kindle flooded Ember (28–30 of 233 powers); Straddle and Tax take
+  // up the slack.
+  Kindle: 0.9,
+  Straddle: 1.3,
+  Tax: 1.3,
   Siphon: 1.2,
   Bulwark: 0.8,
-  Snuff: 1.2,
   // Audit 2026-10-11 keywords: never rolled (that would reprint the pool);
   // they print only on the hand-set cards in cardpool.ts.
   Overbet: 0,

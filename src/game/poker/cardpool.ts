@@ -102,6 +102,10 @@ export const REPRINTS: Record<string, CardOverrides> = {
   // Last Stand (Root): a comeback Kindle and a comeback Bloom.
   runeforge_smith: { effect: { kw: 'Kindle' }, mods: [{ kw: 'Last Stand' }] },
   anemone_weaver: { effect: { kw: 'Bloom' }, mods: [{ kw: 'Last Stand' }] },
+  // Snuff (Void, C-1): Events only and ★2+, so the hash still never rolls
+  // it with 8 Void Events in the pool. Two vanilla ★1 Void Events carry it.
+  flesh_to_bone: { tier: 2, effect: { kw: 'Snuff' }, mods: [] },
+  hammerhead_silhouette: { tier: 2, effect: { kw: 'Snuff' }, mods: [] },
 };
 
 // ---------------------------------------------------------------------------
@@ -136,7 +140,9 @@ function colorsOf(c: CardTemplate): Color[] {
 // rarity — a Mythic is more often 3+ than a Common, but not always.
 // ---------------------------------------------------------------------------
 const TIER_PYRAMID = [35, 28, 20, 12, 5];
-const RARITY_BIAS = 0.1;
+/** Audit F-7: 0.1 gave Full-Art cards a 52 % chance of ★4–5 against 14 % for
+ * Commons, so every ★5 slot went to high rarities. */
+const RARITY_BIAS = 0.04;
 
 export function rollTier(seed: string, rarity?: string): number {
   const rt = RARITY_TIER[rarity ?? 'Common'] ?? 0;
@@ -166,7 +172,7 @@ const MIN_TIER: Partial<Record<EffectKeyword, number>> = {
   Pass: 2,
   Rerun: 2,
   Mimic: 2,
-  Snuff: 3,
+  Snuff: 2,
   Lock: 2,
   Entropic: 3,
   Bounty: 2,
