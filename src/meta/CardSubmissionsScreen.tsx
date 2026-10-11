@@ -39,9 +39,15 @@ import {
   slugifyCardId,
   validateSubmission,
 } from './submissions';
+import { CardEditorPanel } from './CardEditorPanel';
+import { buildEditedPayload } from './cardEditor';
+import { GENERATED_CARDS } from '../game/generated-cards';
 import {
   CardSubmission,
   CardSubmissionForReview,
+  fetchLiveTemplatesForEditor,
+  retrySubmissionArt,
+  updateCard,
   ShowcaseStats,
   bulkAddCards,
   fetchMySubmissions,
@@ -869,6 +875,7 @@ function ReviewCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [full, setFull] = useState(false);
 
   // The card's identity, and the card as the hash generates it — the
   // baseline the override editor diffs against, and what gets printed when
@@ -1072,14 +1079,46 @@ function ReviewCard({
             <input className={input} value={note} onChange={(e) => setNote(e.target.value)} />
           </label>
 
-          <OverrideEditor
-            identity={identity}
-            generated={generated}
-            form={form}
-            setForm={setForm}
-            problems={problems}
-            changed={changed}
-          />
+          <PopButton color="steel" onClick={() => setFull((f) => !f)} ariaPressed={full}>
+            <span className="flex items-center gap-1">
+              <Sliders className="w-3.5 h-3.5" />{' '}
+              {full ? 'QUICK OVERRIDES' : 'FULL EDITOR (MANUAL)'}
+            </span>
+          </PopButton>
+          {full ? (
+            <CardEditorPanel
+              initial={{ ...identity, id: cardId, overrides: undefined }}
+              idEditable
+              saveLabel="APPROVE WITH THESE MECHANICS"
+              onSave={async (t) => {
+                const p = buildEditedPayload(t);
+                const { error: err } = await reviewSubmission({
+                  id: sub.id,
+                  action: 'approve',
+                  note: note.trim() || null,
+                  cardId: p.id,
+                  rarity: p.rarity,
+                  name: p.name,
+                  type: p.card_type,
+                  flavor: p.flavor_text,
+                  imageUrl: p.image_url,
+                  mechanics: p.mechanics,
+                  overrides: (p.overrides as Record<string, unknown>) ?? null,
+                });
+                if (!err) await onDone();
+                return err;
+              }}
+            />
+          ) : (
+            <OverrideEditor
+              identity={identity}
+              generated={generated}
+              form={form}
+              setForm={setForm}
+              problems={problems}
+              changed={changed}
+            />
+          )}
 
           <div className="fs-xs font-bold text-[var(--c-steel)] break-words">
             Printing: {printSummary(preview)} · {preview.text || 'no rules text'}
@@ -1227,9 +1266,152 @@ function ReviewQueue() {
                 {r.approved_rarity ? ` · printed ${r.approved_rarity}` : ''}
                 {r.review_note ? ` · “${r.review_note}”` : ''}
               </span>
+              {r.status === 'approved' && <ArtPipelineChip sub={r} onRetry={reload} />}
             </div>
           ),
         )
+      )}
+    </div>
+  );
+}
+
+/** approved -> ART PENDING -> ON CLOUDFLARE (or FAILED, with a retry). The
+ * state is written by the scheduled showcase-art Action; this only reads it
+ * with the queue, so it costs no extra requests. */
+const ART_CHIP: Record<string, { text: string; cls: string }> = {
+  pending: { text: 'ART PENDING', cls: 'bg-[var(--c-yellow)] text-[var(--c-ink)]' },
+  published: { text: 'ON CLOUDFLARE', cls: 'bg-[#22C55E] text-[#052E12]' },
+  failed: { text: 'ART FAILED', cls: 'bg-[var(--c-red)] text-[var(--c-paper)]' },
+};
+
+function ArtPipelineChip({
+  sub,
+  onRetry,
+}: {
+  sub: CardSubmissionForReview;
+  onRetry: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const chip = ART_CHIP[sub.art_status ?? ''] ?? {
+    text: 'ART: ORIGINAL LINK',
+    cls: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+  };
+  const retry = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    const e = await retrySubmissionArt(sub.id);
+    setBusy(false);
+    if (e) setErr(e);
+    else await onRetry();
+  };
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      <span
+        className={cn('heading-font fs-xs px-1.5 py-0.5 ink-border-sm', chip.cls)}
+        title={sub.art_error ?? sub.art_url ?? undefined}
+      >
+        {chip.text}
+      </span>
+      {sub.art_status === 'published' && sub.art_url && (
+        <a
+          href={sub.art_url}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="fs-xs font-bold underline text-[var(--c-steel)]"
+        >
+          view ↗
+        </a>
+      )}
+      {sub.art_status === 'failed' && (
+        <>
+          <span className="fs-xs font-bold text-[var(--c-red)] max-w-[220px] truncate">
+            {sub.art_error}
+          </span>
+          <PopButton color="steel" disabled={busy} onClick={retry}>
+            {busy ? 'RETRYING…' : 'RETRY UPLOAD'}
+          </PopButton>
+        </>
+      )}
+      {err && <span className="fs-xs font-bold text-[var(--c-red)]">{err}</span>}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Creator: edit any live card
+// ---------------------------------------------------------------------------
+const BUNDLED_IDS = new Set(GENERATED_CARDS.map((c) => c.id));
+
+export function LiveCardEditor() {
+  const [cards, setCards] = useState<CardTemplate[] | null>(null);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [picked, setPicked] = useState<CardTemplate | null>(null);
+
+  const load = useCallback(async () => {
+    setError('');
+    const t = await fetchLiveTemplatesForEditor();
+    if (!t) setError('Could not load the live catalog — check your connection and try again.');
+    else setCards(t);
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!cards || !q) return [];
+    return cards.filter((c) => c.id.includes(q) || c.name.toLowerCase().includes(q)).slice(0, 20);
+  }, [cards, query]);
+
+  const save = async (t: CardTemplate) => {
+    const { error: err } = await updateCard({ ...buildEditedPayload(t) });
+    if (!err) {
+      setCards((cs) => cs?.map((c) => (c.id === t.id ? t : c)) ?? cs);
+      setPicked(t);
+    }
+    return err;
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="fs-xs font-bold text-[var(--c-steel)]">
+        Edit any live card. Saved changes reach players on their next load (the catalog version
+        changes, so cached catalogs refetch). Fields left on “keep rolled” follow the hash.
+      </p>
+      {error && <Notice text={error} />}
+      <input
+        className={input}
+        placeholder={cards ? `Search ${cards.length} cards by name or id…` : 'Loading…'}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {matches.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {matches.map((c) => (
+            <PopButton
+              key={c.id}
+              color={picked?.id === c.id ? 'black' : 'steel'}
+              onClick={() => setPicked(c)}
+            >
+              {c.name}
+            </PopButton>
+          ))}
+        </div>
+      )}
+      {picked && (
+        <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-3">
+          <CardEditorPanel
+            key={picked.id + JSON.stringify(picked.overrides ?? {}) + picked.rarity}
+            initial={picked}
+            bundled={BUNDLED_IDS.has(picked.id)}
+            saveLabel="SAVE CARD"
+            onSave={save}
+            onReset={() => save({ ...picked, overrides: undefined })}
+          />
+        </div>
       )}
     </div>
   );
@@ -1430,7 +1612,7 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
   const { session, guest, setGuest, profile } = useMeta();
   const userId = session?.user?.id;
   const isCreator = profile?.role === 'creator';
-  const [tab, setTab] = useState<'submit' | 'review' | 'bulk'>('submit');
+  const [tab, setTab] = useState<'submit' | 'review' | 'bulk' | 'cards'>('submit');
   const [mine, setMine] = useState<CardSubmission[]>([]);
   const [stats, setStats] = useState<ShowcaseStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1474,7 +1656,7 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
       <MetaHeader title={SHOWCASE_SET.toUpperCase()} onBack={onBack} />
       <div className="p-4 sm:p-5 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs<'submit' | 'review' | 'bulk'>
+          <Tabs<'submit' | 'review' | 'bulk' | 'cards'>
             ariaLabel="Card submissions"
             value={tab}
             onChange={setTab}
@@ -1484,6 +1666,7 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
                 ? [
                     { id: 'review' as const, label: 'REVIEW QUEUE' },
                     { id: 'bulk' as const, label: 'BULK ADD' },
+                    { id: 'cards' as const, label: 'CARD EDITOR' },
                   ]
                 : []),
             ]}
@@ -1542,6 +1725,7 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
 
         {tab === 'review' && isCreator && <ReviewQueue />}
         {tab === 'bulk' && isCreator && <BulkAddPanel />}
+        {tab === 'cards' && isCreator && <LiveCardEditor />}
       </div>
     </div>
   );

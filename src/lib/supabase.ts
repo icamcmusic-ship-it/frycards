@@ -2436,7 +2436,15 @@ export interface CardSubmission {
   approved_rarity: string | null;
   created_at: string;
   reviewed_at: string | null;
+  /** Showcase art pipeline (migration 20261012000004): null until approved,
+   * then pending -> published (on Cloudflare Pages) or failed. */
+  art_status?: ArtPipelineStatus | null;
+  art_url?: string | null;
+  art_error?: string | null;
+  art_updated_at?: string | null;
 }
+
+export type ArtPipelineStatus = 'pending' | 'published' | 'failed';
 
 /** A submission as the Creator's review queue sees it — same row plus who
  * sent it, which RLS alone can't join (profiles are self-readable only). */
@@ -2518,7 +2526,7 @@ export async function fetchSubmissionsForReview(
   status: SubmissionStatus | null = null,
   limit = 200,
 ): Promise<CardSubmissionForReview[]> {
-  const { data, error } = await supabase.rpc('get_card_submissions', {
+  const { data, error } = await supabase.rpc('get_card_submissions_v2', {
     p_status: status,
     p_limit: limit,
   });
@@ -2571,6 +2579,30 @@ export async function reviewSubmission(input: {
     p_overrides: input.overrides ?? null,
   });
   return { data: (data as CardSubmission) || null, error: rpcError(error) };
+}
+
+/** Creator-only: put an approved card whose art upload failed back in the
+ * Cloudflare queue (scripts/publish-showcase-art.ts picks it up next run). */
+export async function retrySubmissionArt(id: string): Promise<string | null> {
+  const { error } = await supabase.rpc('creator_retry_submission_art', { p_id: id });
+  return rpcError(error);
+}
+
+/** Creator-only: rewrite one existing card — identity, template.overrides and
+ * the mechanics columns together (creator_update_card). Sending no
+ * `overrides` resets the card to its rolled mechanics. Returns the new
+ * catalog version on success. */
+export async function updateCard(
+  card: Record<string, unknown>,
+): Promise<{ version: string | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('creator_update_card', { p_card: card });
+  return { version: typeof data === 'string' ? data : null, error: rpcError(error) };
+}
+
+/** Creator-only: every live card template, for the card editor's picker. One
+ * read, on demand — not part of any player's load. */
+export async function fetchLiveTemplatesForEditor(): Promise<CardTemplate[] | null> {
+  return fetchCardTemplates();
 }
 
 export async function setSubmissionBan(
