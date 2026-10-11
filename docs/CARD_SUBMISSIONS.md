@@ -113,6 +113,21 @@ player submits link ──► pending ──(Creator: APPROVE, one RPC)──►
   replaces the whole site, it first re-downloads every already-published file
   from the live site and refuses to deploy if any is missing. One more RPC
   (`art_pipeline_report`) writes the results.
+- **Cosmetics mirror**: the same run protects the store's cosmetics. Every
+  `shop_items.image_url` hot-linked from a host that isn't ours (today all of
+  them are on `cdn.midjourney.com`) is downloaded, converted to the same webp
+  master and published as `Cosmetics/<id>.webp` in the **same**
+  `frycards-showcase` deployment. Already-mirrored cosmetics are re-downloaded
+  into every deployment, exactly like published cards, and the run refuses to
+  deploy if any of them can't be fetched. Two token-checked RPCs
+  (20261012000008): `cosmetics_mirror_jobs(token)` lists the items, and
+  `cosmetics_mirror_report(token, results)` repoints `image_url` —
+  compare-and-set, so an item edited in the meantime is left alone. A failed
+  download leaves the item hot-linked for the next run. `dry_run` prints every
+  card and cosmetic that would change (WOULD PUBLISH / WOULD MIRROR) and
+  touches nothing; `limit` caps cards and cosmetics separately. Cosmetic files
+  are named by id, not content hash, so they are cached for a day rather than
+  forever. Animated sources become a still webp.
 - **Why a separate Pages project:** `frycards-art` is built from a local copy
   of the bucket that CI does not have; deploying to it from CI would wipe it.
   R2 is not enabled on the Cloudflare account (API: "Please enable R2").

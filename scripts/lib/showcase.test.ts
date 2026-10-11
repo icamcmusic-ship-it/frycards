@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'vitest';
-import { isVideoSource, keyFromUrl, parseJobs, publicBase, showcaseKey } from './showcase';
+import {
+  cosmeticKey,
+  isOurUrl,
+  isVideoSource,
+  keyFromUrl,
+  parseCosmetics,
+  parseJobs,
+  planCosmetics,
+  publicBase,
+  showcaseKey,
+} from './showcase';
 
 describe('showcase art helpers', () => {
   test('keys are content-addressed per card', () => {
@@ -36,5 +46,30 @@ describe('showcase art helpers', () => {
     expect(j.pending).toHaveLength(1);
     expect(j.published).toEqual([]);
     expect(parseJobs(null)).toEqual({ pending: [], published: [] });
+  });
+});
+
+describe('cosmetics mirror helpers', () => {
+  const base = 'https://frycards-showcase.pages.dev';
+  const id = 'aaaaaaaa-0000-0000-0000-000000000001';
+  test('only off-domain images are mirrored; our Cosmetics are re-listed', () => {
+    const plan = planCosmetics(
+      [
+        { id, image_url: 'https://cdn.midjourney.com/x/0_0.png' },
+        { id: id.replace('1', '2'), image_url: `${base}/Cosmetics/x.webp` },
+        { id: id.replace('1', '3'), image_url: 'https://frycards-art.pages.dev/a.webp' },
+        { id: id.replace('1', '4'), image_url: '/img/local.png' },
+      ],
+      base,
+    );
+    expect(plan.pending.map((p) => p.id)).toEqual([id]);
+    expect(plan.published).toHaveLength(1);
+    expect(cosmeticKey(id)).toBe(`Cosmetics/${id}.webp`);
+    expect(isOurUrl('https://evil.example/frycards-showcase.pages.dev/x', base)).toBe(false);
+  });
+  test('parseCosmetics drops malformed rows', () => {
+    expect(
+      parseCosmetics([{ id: 'bad', image_url: 'x' }, null, { id, image_url: 'u' }]),
+    ).toHaveLength(1);
   });
 });

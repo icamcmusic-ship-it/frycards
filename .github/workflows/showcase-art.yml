@@ -1,7 +1,9 @@
 name: Showcase art
 
 # Moves approved Player Showcase art onto Cloudflare Pages and points each
-# card at it (scripts/publish-showcase-art.ts, docs/CARD_SUBMISSIONS.md).
+# card at it, and mirrors every hot-linked cosmetic image (shop_items: card
+# backs, banners, avatars) to Cosmetics/<id>.webp on the same Pages project
+# (scripts/publish-showcase-art.ts, docs/CARD_SUBMISSIONS.md).
 #
 # MANUAL FIRST. Run it from Actions > Showcase art > Run workflow after
 # approving cards. The daily schedule is only a safety net: it does nothing
@@ -24,11 +26,11 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run: list the queued cards and encode nothing, deploy nothing, report nothing.'
+        description: 'Dry run: list the cards and cosmetics that would change; download, deploy and report nothing.'
         type: boolean
         default: false
       limit:
-        description: 'Most cards to process in this run (1-25).'
+        description: 'Most cards, and most cosmetics, to process in this run (1-25 each).'
         type: number
         default: 25
       reason:
