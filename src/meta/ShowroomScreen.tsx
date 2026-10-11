@@ -361,15 +361,22 @@ export function ShowroomScreen({
         )}
 
         {/* HUD */}
-        {/* One row, always. Wrapping put three rows of controls across the
-            bottom third of a 390px stage and straight over the object; a
-            single row that scrolls sideways costs one gesture and never eats
-            the room. */}
-        <div className="absolute bottom-2 inset-x-0 flex justify-start sm:justify-center gap-1.5 px-2 overflow-x-auto">
-          <HudButton onClick={() => nudge({ yaw: -30 })} label="Turn left">
+        {/* One row: on a phone the turn buttons (drag does that) and the
+            key hints drop out so every control fits, RESET included (U64);
+            should it still not fit, it wraps rather than clipping off-screen. */}
+        <div className="absolute bottom-2 inset-x-0 flex flex-wrap justify-center gap-1.5 px-2">
+          <HudButton
+            onClick={() => nudge({ yaw: -30 })}
+            label="Turn left"
+            className="hidden sm:flex"
+          >
             <RotateCcw className="w-4 h-4" aria-hidden />
           </HudButton>
-          <HudButton onClick={() => nudge({ yaw: 30 })} label="Turn right">
+          <HudButton
+            onClick={() => nudge({ yaw: 30 })}
+            label="Turn right"
+            className="hidden sm:flex"
+          >
             <RotateCw className="w-4 h-4" aria-hidden />
           </HudButton>
           <HudButton
@@ -387,7 +394,7 @@ export function ShowroomScreen({
             <ZoomIn className="w-4 h-4" aria-hidden />
           </HudButton>
           <HudButton onClick={flip} label="Flip to the other side" wide>
-            FLIP<span className="pointer-coarse:hidden"> (F)</span>
+            FLIP<span className="hidden sm:inline pointer-coarse:hidden"> (F)</span>
           </HudButton>
           <HudButton
             onClick={() => setSpinIdx((i) => (i + 1) % SPIN_STEPS.length)}
@@ -408,7 +415,7 @@ export function ShowroomScreen({
             <span className="ml-1">{reduced ? 'SPIN OFF' : `SPIN ${spin.label}`}</span>
           </HudButton>
           <HudButton onClick={reset} label="Reset the camera" wide>
-            RESET<span className="pointer-coarse:hidden"> (R)</span>
+            RESET<span className="hidden sm:inline pointer-coarse:hidden"> (R)</span>
           </HudButton>
           <HudButton onClick={fullscreen} label="Fullscreen">
             <Maximize2 className="w-4 h-4" aria-hidden />
@@ -599,7 +606,9 @@ function HudButton({
   wide,
   active,
   disabled,
+  className,
 }: {
+  className?: string;
   children: React.ReactNode;
   onClick: () => void;
   label: string;
@@ -619,6 +628,7 @@ function HudButton({
         active
           ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
           : 'bg-[var(--c-paper)] text-[var(--c-ink)]',
+        className,
       )}
     >
       {children}

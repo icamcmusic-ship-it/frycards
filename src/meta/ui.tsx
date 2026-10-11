@@ -230,12 +230,12 @@ export function CardMarketValuePanel({ cardId, foil }: { cardId: string; foil?: 
       {value.avg_price != null ? (
         <div className="text-[13px] font-bold flex items-center gap-1">
           <Coins className="w-3.5 h-3.5" /> {fmtCredits(value.avg_price)}
-          <span className="text-[9px] font-bold text-[var(--c-steel)] ml-1">
+          <span className="fs-xs font-bold text-[var(--c-steel)] ml-1">
             avg · {value.sales} sale{value.sales === 1 ? '' : 's'}
           </span>
         </div>
       ) : (
-        <div className="text-[10px] font-bold text-[var(--c-steel)]">
+        <div className="fs-xs font-bold text-[var(--c-steel)]">
           Not enough player-market sales yet ({value.sales}/5)
         </div>
       )}
@@ -249,10 +249,14 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
   return (
     <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-[var(--c-ink)] px-4 py-2.5 border-b-4 border-[var(--c-ink)]">
       <div className="flex items-center gap-3 min-w-0">
-        <PopButton onClick={onBack} color="yellow">
+        {/* U62: the back button never wraps; a long title gets two lines at
+            a smaller size on a phone instead of truncating. */}
+        <PopButton onClick={onBack} color="yellow" className="shrink-0 whitespace-nowrap">
           &lt; MENU
         </PopButton>
-        <h1 className="heading-font text-xl text-[var(--c-yellow)] truncate">{title}</h1>
+        <h1 className="heading-font text-base sm:text-xl leading-tight text-[var(--c-yellow)] line-clamp-2 break-words min-w-0">
+          {title}
+        </h1>
       </div>
       {profile && (
         <div className="flex items-center gap-2">
@@ -425,17 +429,14 @@ export function UnavailableShowcaseTile({
         strokeWidth={2.5}
       />
       <span
-        className={cn(
-          'heading-font leading-tight',
-          size === 'compact' ? 'text-[9px]' : 'text-[11px]',
-        )}
+        className={cn('heading-font leading-tight', size === 'compact' ? 'fs-xs' : 'text-[11px]')}
       >
         CARD UNAVAILABLE
       </span>
       <span
         className={cn(
           'font-bold text-[var(--c-steel)] break-all leading-tight',
-          size === 'compact' ? 'text-[7px]' : 'text-[8px]',
+          size === 'compact' ? 'fs-xs' : 'fs-xs',
         )}
       >
         {cardId}
@@ -444,7 +445,7 @@ export function UnavailableShowcaseTile({
         <span
           className={cn(
             'heading-font bg-[var(--c-red)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm',
-            size === 'compact' ? 'text-[8px]' : 'text-[9px]',
+            size === 'compact' ? 'fs-xs' : 'fs-xs',
           )}
         >
           ★ UNPIN

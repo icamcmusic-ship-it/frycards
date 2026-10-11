@@ -682,7 +682,8 @@ function PlayingCard({
 /** Two hole cards, fanned. */
 function HoleCards() {
   return (
-    <div className="flex items-end h-12 pl-2" aria-hidden>
+    // U65: the cards are 60px tall — an h-12 box let them spill up over the step text.
+    <div className="flex items-end h-16 mt-2 pl-2" aria-hidden>
       {(['A♠', 'K♥'] as const).map((c, i) => (
         <span
           key={c}

@@ -77,7 +77,7 @@ export function LeaderPicker({
         <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--c-ink)] sticky top-0">
           <div>
             <div className="heading-font text-sm text-[var(--c-yellow)]">DECK BOX</div>
-            <div className="text-[9px] font-bold text-[var(--c-paper)]/70">
+            <div className="fs-xs font-bold text-[var(--c-paper)]/70">
               PICK YOUR LEADER (Rare or below) — this is permanent, but you can build more decks
               later.
             </div>
@@ -122,7 +122,7 @@ export function LeaderPicker({
                     />
                     <span
                       className={cn(
-                        'absolute top-1 left-1 text-[8px] font-black px-1 ink-border-sm',
+                        'absolute top-1 left-1 fs-xs font-black px-1 ink-border-sm',
                         RARITY_CHIP[leader.rarity || 'Common'] || RARITY_CHIP.Common,
                       )}
                     >
@@ -141,7 +141,7 @@ export function LeaderPicker({
                         {cardColors(leader).map((c) => (
                           <span
                             key={c}
-                            className="inline-flex items-center gap-0.5 text-[8px] font-black text-[var(--c-steel)]"
+                            className="inline-flex items-center gap-0.5 fs-xs font-black text-[var(--c-steel)]"
                           >
                             <span
                               className="w-3 h-3 rounded-full inline-flex items-center justify-center border border-[var(--c-ink)]"
@@ -162,7 +162,7 @@ export function LeaderPicker({
                         {(leader.abilities ?? []).map((a) => (
                           <li
                             key={a.text}
-                            className="text-[9px] font-black leading-tight text-[var(--c-ink)]"
+                            className="fs-xs font-black leading-tight text-[var(--c-ink)]"
                           >
                             › {a.text}
                           </li>
@@ -170,7 +170,7 @@ export function LeaderPicker({
                       </ul>
                     )}
                     {leader.flavor && (
-                      <p className="text-[9px] font-bold text-[var(--c-steel)] mt-0.5 line-clamp-2">
+                      <p className="fs-xs font-bold text-[var(--c-steel)] mt-0.5 line-clamp-2">
                         {leader.flavor}
                       </p>
                     )}

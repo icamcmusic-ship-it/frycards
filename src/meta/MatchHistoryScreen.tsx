@@ -9,6 +9,10 @@ import {
   summarizeMatchHistory,
 } from './matchHistory';
 import { cn } from '../lib/utils';
+import { History } from 'lucide-react';
+import { useRouter } from './useHashRouter';
+import { useMeta } from './MetaContext';
+import { isCpuLocked } from './cpuAccess';
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -41,6 +45,9 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
   const summary = useMemo(() => summarizeMatchHistory(records), [records]);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const router = useRouter();
+  const { profile, guest } = useMeta();
+  const cpuLocked = isCpuLocked(profile, guest);
 
   const copy = async (text: string, what: string) => {
     setError('');
@@ -52,7 +59,7 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="MATCH HISTORY" onBack={onBack} />
       <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-        <p className="text-[11px] font-bold text-[var(--c-steel)] mb-4">
+        <p className="fs-xs font-bold text-[var(--c-steel)] mb-4">
           Your last {records.length === 50 ? 50 : 'matches'} on this device. History is stored in
           this browser only.
         </p>
@@ -68,8 +75,18 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
         )}
 
         {records.length === 0 ? (
-          <div className="ink-border-md bg-[var(--c-paper)] p-6 text-center font-bold text-[var(--c-steel)]">
-            No matches yet. Finish a match and it shows up here.
+          // U66: an empty state with a way forward, and the device-local note said plainly.
+          <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-6 flex flex-col items-center gap-3 text-center">
+            <History className="w-8 h-8 text-[var(--c-steel)]" aria-hidden />
+            <div className="font-bold">No matches yet. Finish a match and it shows up here.</div>
+            <div className="fs-xs font-bold text-[var(--c-steel)]">
+              History is kept on this device only — it won't follow you to another browser.
+            </div>
+            {router && !cpuLocked && (
+              <PopButton color="yellow" onClick={() => router.navigate('play')}>
+                PLAY A MATCH ▸
+              </PopButton>
+            )}
           </div>
         ) : (
           <>
