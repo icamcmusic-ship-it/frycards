@@ -12,9 +12,11 @@
  *  - TYPE LINE: "Event — Quick · 3ϟ", with the rarity marker in the right
  *    slot (set-symbol position).
  *  - TEXT BOX: the poker keywords as chips, one plain rules line, then the
- *    flavor. Flavor text is ALWAYS shown, at every size — the rules line gives
- *    up space first, and the micro board token carries a one-line flavor
- *    strip of its own. A Location prints its table rule.
+ *    flavor. Flavor text shows on the `standard` and `full` faces only; the
+ *    small faces (`compact`, `micro`) drop it so the keyword chips, rules line
+ *    and tier/cost stay legible (audit U69 — tap to inspect shows the whole
+ *    card). On the larger faces the rules line gives up space first. A
+ *    Location prints its table rule.
  *  - BOTTOM-RIGHT PLATE: a power's chip cost in units ("+" when its tier also
  *    needs a second cost), or a Leader's starting nerve. Locations have no
  *    plate.
@@ -1530,7 +1532,7 @@ const TIER: Record<
     showRules: false,
     rulesFont: 6,
     rulesLines: 0,
-    showFlavor: true,
+    showFlavor: false,
   },
   compact: {
     outerBorder: 'border-2',
@@ -1555,7 +1557,7 @@ const TIER: Record<
     showRules: true,
     rulesFont: 6.5,
     rulesLines: 2,
-    showFlavor: true,
+    showFlavor: false,
   },
   standard: {
     outerBorder: 'border-[3px]',
@@ -1837,8 +1839,8 @@ function FittedRules({
   useLayoutEffect(() => {
     const el = ref.current;
     const box = el?.parentElement;
-    // Flavor text is always shown, so when the box overflows it is the rules
-    // paragraph that gives up lines (down to one).
+    // Where flavor text is shown (standard/full), the rules paragraph gives
+    // up lines first when the box overflows (down to one).
     if (el && box && box.scrollHeight > box.clientHeight + 1) {
       setLines((l) => (l > 1 ? l - 1 : l));
     }
@@ -1863,7 +1865,8 @@ function FittedRules({
   );
 }
 
-/** Flavor text, ALWAYS shown (poker pass): renders at up to `MAX_LINES`
+/** Flavor text on the standard and full faces (U69: hidden on compact and
+ * micro): renders at up to `MAX_LINES`
  * clamped lines and MEASURES its wrapper — while the clamped paragraph doesn't
  * fit the leftover space it sheds one line at a time, but never below one
  * line. The rules paragraph above it gives up space first. */
@@ -1961,7 +1964,7 @@ function cap1(s: string): string {
  * full card. The art fills the whole footprint with top/bottom scrims; the
  * top strip carries the type glyph + auto-shrinking name and the tier mark;
  * the bottom strip carries up to two keyword chips (with a "+N" spillover),
- * a one-line flavor strip (flavor is always shown) and the solid-backed
+ * no flavor (small faces drop it, audit U69) and the solid-backed
  * chip-cost gem (starting nerve for Leaders). */
 function MicroCard({
   def,
@@ -2111,17 +2114,6 @@ function MicroCard({
               </span>
             )}
           </div>
-        )}
-        {/* Flavor strip — flavor text is always shown, even on the board token. */}
-        {def.flavor && (
-          <p
-            data-fc="flavor"
-            className="italic leading-tight text-white/85 line-clamp-2 break-words"
-            style={{ fontSize: 5.5, textShadow: '0 1px 2px rgba(0,0,0,0.95)' }}
-            title={def.flavor}
-          >
-            {def.flavor}
-          </p>
         )}
         {statValue(def) && (
           <span className="flex justify-end">

@@ -12,8 +12,9 @@
  * every Full-Art and Mythic card whose flavor ran to the full width of its
  * last line.
  *
- * This measures the two boxes in a real browser at every size and reports any
- * pair that intersects. Run against the Vite dev server:
+ * This measures the two boxes in a real browser and reports any pair that
+ * intersects. Only `full` and `standard` print flavor text: the small faces
+ * (`compact`, `micro`) drop it (audit U69), so those sizes are not measured. Run against the Vite dev server:
  *
  *   npm run dev &
  *   npx tsx scripts/audit-cardface.ts
@@ -35,7 +36,8 @@ const RARITIES = [
   'Alt-Art',
   'Mythic',
 ];
-const SIZES = ['full', 'standard', 'compact', 'micro'];
+// compact and micro print no flavor (U69), so there is nothing to overlap.
+const SIZES = ['full', 'standard'];
 
 interface Overlap {
   rarity: string;

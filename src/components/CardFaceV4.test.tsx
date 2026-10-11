@@ -197,13 +197,17 @@ describe('CardFace', () => {
     expect(cardRuleLines(EVENT)).toContain('Quick: castable in response windows.');
   });
 
-  test('flavor text is visible at every size, micro included', () => {
+  test('flavor text shows on standard and full faces and is dropped on compact and micro (U69)', () => {
     for (const def of [UNIT, EVENT, LEADER, LOCATION]) {
       for (const size of SIZES) {
         const { container, unmount } = render(<CardFace def={def} size={size} />);
         const flavor = container.querySelector('[data-fc="flavor"]');
-        expect(flavor, `${def.type} at ${size}`).toBeTruthy();
-        expect(flavor!.textContent).toContain(def.flavor!);
+        if (size === 'compact' || size === 'micro') {
+          expect(flavor, `${def.type} at ${size}`).toBeNull();
+        } else {
+          expect(flavor, `${def.type} at ${size}`).toBeTruthy();
+          expect(flavor!.textContent).toContain(def.flavor!);
+        }
         unmount();
       }
     }
