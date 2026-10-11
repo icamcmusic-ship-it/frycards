@@ -1773,9 +1773,12 @@ function FittedChips({
         // The clearance is 7px rather than the 3px that clears a bare card:
         // a `full` face also stands inside the graded slab's window, which is
         // a second `overflow-hidden` box wrapped tight around it, and the
-        // clips compose.
+        // clips compose. The Showroom then SCALES that slab down (~0.55 at a
+        // 375px phone), which shrinks the clearance with it, so it is 12px —
+        // pulled back out of the flow by a matching -5px margin, so the
+        // layout is exactly what the old 7px gave.
         size === 'full'
-          ? 'max-h-[68px] py-[7px]'
+          ? 'max-h-[78px] py-[12px] -my-[5px]'
           : size === 'standard'
             ? 'max-h-[30px]'
             : size === 'compact'
