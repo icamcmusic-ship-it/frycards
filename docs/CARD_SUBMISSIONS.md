@@ -83,7 +83,7 @@ player submits link ──► pending ──(Creator: APPROVE, one RPC)──►
                                         │  art = player's link (works at once)
                                         ▼
                                art_status = pending   "ART PENDING"
-                                        │  scheduled Action, every 3 h
+                                        │  manual Action run (daily fallback)
                                         ▼
        download → sharp webp 1200px / ffmpeg 480p mp4 → Cloudflare Pages
                                         ▼
@@ -96,7 +96,15 @@ player submits link ──► pending ──(Creator: APPROVE, one RPC)──►
   `art_status = 'pending'`. The card is playable and packable immediately with
   the original link; approval never waits for the upload.
 - **Upload**: `.github/workflows/showcase-art.yml` runs
-  `scripts/publish-showcase-art.ts` every 3 hours (and on demand). It makes one
+  `scripts/publish-showcase-art.ts`. **Run it by hand** after approving cards:
+  Actions → *Showcase art* → *Run workflow*, with inputs `dry_run` (list the
+  queue, change nothing), `limit` (1–25 cards this run) and an optional
+  `reason` for the log. Locally: `npm run art:showcase -- --dry-run --limit=5`.
+  A daily schedule (06:17 UTC) is only a fallback: its first step asks the
+  GitHub API (`GITHUB_TOKEN`, `actions: read`) for successful
+  `workflow_dispatch` runs of this workflow in the last 7 days and exits
+  early if there are any, so it only does work when nobody has run it by hand
+  for a week. A successful manual dry run also counts as a manual run. It makes one
   RPC (`art_pipeline_jobs`); an empty queue ends the run there. Otherwise it
   downloads each original, encodes it with the main pipeline's settings
   (`scripts/lib/derive.ts` master webp; the `shrink-video-art.ts` ffmpeg

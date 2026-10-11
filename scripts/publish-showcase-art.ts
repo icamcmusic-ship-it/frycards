@@ -59,7 +59,10 @@ const TOKEN = process.env.ART_PIPELINE_TOKEN || '';
 const PROJECT = process.env.SHOWCASE_PAGES_PROJECT || 'frycards-showcase';
 const BASE = publicBase(PROJECT, process.env.SHOWCASE_ART_BASE_URL);
 const WRANGLER = 'wrangler@3.114.0';
-const DRY_RUN = process.argv.includes('--dry-run');
+const DRY_RUN = process.argv.includes('--dry-run') || process.env.SHOWCASE_DRY_RUN === 'true';
+/** Max cards per run: `--limit=N` or SHOWCASE_LIMIT (workflow input), 1–25. */
+const LIMIT_ARG = process.argv.find((a) => a.startsWith('--limit='))?.split('=')[1];
+const LIMIT = Math.min(25, Math.max(1, Number(LIMIT_ARG ?? process.env.SHOWCASE_LIMIT) || 25));
 
 if (!TOKEN) {
   console.log('ART_PIPELINE_TOKEN is not set — nothing to do. See docs/CARD_SUBMISSIONS.md.');
@@ -68,7 +71,7 @@ if (!TOKEN) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
 
-const { data, error } = await supabase.rpc('art_pipeline_jobs', { p_token: TOKEN, p_limit: 25 });
+const { data, error } = await supabase.rpc('art_pipeline_jobs', { p_token: TOKEN, p_limit: LIMIT });
 if (error) {
   console.error('art_pipeline_jobs failed:', error.message);
   process.exit(1);
