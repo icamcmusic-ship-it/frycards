@@ -1,3 +1,69 @@
+# Backend changes: live status
+
+## 2026-10-11 (audit 2026-10-11 §1 A20/A21/B1/B2/B4, §5, §7)
+
+### Applied live (each is also a repo migration, idempotent)
+
+| Live migration name               | Repo file                                            | What                                                                                                                                                                                                                                                                  |
+| --------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api_grants`                      | `20261011000001_api_grants.sql`                      | X1 `rate_shop_purchase` granted; B1 five public read RPCs granted to `anon`; X2 column SELECT on `market_listings` excludes `cpu_ceiling` / `cpu_next_at`; X3/X5 33 helpers revoked from the API; backup tables closed to API roles                                   |
+| `match_tickets_v2`                | `20261011000002_match_tickets_v2.sql`                | A21 ticket records mode/seats; A20/B2 `too_early` retryable (`retry_after`); CPU gate (Creator-only); F-5 rewards; `p_stats` / `p_hands`; `level` emitted from `grant_xp`; X6 `record_match_result` revoked. Old signatures renamed to `*_legacy_v0` (no DROP needed) |
+| `missions_rotation_and_catalogue` | `20261011000003_missions_rotation_and_catalogue.sql` | Rotation, BP XP trim, §1 rows + backfill, wins/games 500, poker-key rows, retired twins hidden, level rows re-seeded                                                                                                                                                  |
+| `realtime_broadcast_and_cost`     | `20261011000004_realtime_broadcast_and_cost.sql`     | S1 broadcast triggers (insert/update) + `realtime.messages` policy + publication trimmed to 8 tables; S3 `quicksell_many`; B4 `sell_bounty_card`; S4 draw indexes; S9 settle cron skipped when idle; S10 FK indexes + 5 initplan policies                             |
+
+Card data: the live `cards` mechanics columns (keywords, tier, subtype, rules
+text, colours) were resynced for 142 rows after the 2026-10-11 card changes
+(Leader abilities, REPRINTS, Soulbound/Weapon text). `verify:pool` cannot reach
+the host from the sandbox, so parity was checked with the same fields in SQL:
+an md5 over every row's id/type/rarity + mechanics columns matches the local
+derivation (`274fc208fe5db6547b6ae4be9fe1455c`), and no row's columns disagree
+with its template.
+
+Smoke-tested live in rolled-back transactions: `begin_match('standard', 6)`
+then an early claim (`too_early`, `retry_after` 720), the same ticket after
+13 min claimed as "deep / 2 seats" pays the ticket's Standard 6-seat 100; a
+non-Creator gets "CPU matches are not open yet"; `get_missions` deals 7 dailies
+and 7 weeklies with no rotating match missions for a non-Creator; a profile
+update writes one broadcast on `user:<uid>`.
+
+### Pending: needs a person to approve DROP / DELETE
+
+`supabase/migrations/20261011000090_pending_destructive.sql` (run it in the SQL
+editor or approve the MCP prompts):
+
+1. Remove the renamed legacy RPCs (`begin_match_legacy_v0`,
+   `record_match_placement_legacy_v0`) and `record_match_result`.
+2. Broadcast on row removal from `player_cards` / `player_inventory` (inserts
+   and updates are live; removals are rare: account reset).
+3. The sixth initplan policy (`own wishlist delete`).
+4. Redundant indexes `player_cards_user_idx`, `shop_slots_owner_idx`.
+5. The four backup tables (about 490 kB).
+6. Cron jobs that prune `cron.job_run_details` (7 days) and the per-day /
+   per-week keyword ledger rows in `stat_once`.
+7. `20261008000006_claim_bingo_week_guard.sql` (replaces `claim_bingo(int)`);
+   tried live on 2026-10-11, timed out at the confirmation prompt.
+
+### Not doable in SQL
+
+- **Leaked-password protection** (advisor WARN) and the Auth connection
+  strategy (absolute 10 → percentage) are Auth settings: Dashboard →
+  Authentication → Policies / Settings.
+- S11 (fewer schema reloads) is a process change: apply migrations as whole
+  files.
+
+### Client follow-ups for other screens
+
+- B6: `refreshPackTypes()` / `refreshShopItems()` exist in `MetaContext`; the
+  Store should call them on mount and after a purchase error.
+- B5 (Bounties): the Store's bounty tab needs the same UTC-reset reload the
+  Achievements screen now has.
+- S6 (catalog as static JSON) and S7 (filtered / polled secondary-screen
+  subscriptions) are not done.
+- The engine still has to fill `MatchStats` and `hands` (see
+  `recordMatchPlacement` in `src/lib/supabase.ts`).
+
+---
+
 # Backend changes: live status (2026-10-09)
 
 The audit's backend fixes (docs/AUDIT-2026-10-08.md, §1.1 B1–B7 and §1.3 M11) are
@@ -31,7 +97,10 @@ this reason only; none of it failed on its own logic.
 Smoke-tested live (in a rolled-back transaction): Booster opens 8 cards, Box 49;
 a pack pinned to an empty set now raises instead of paying out another set.
 
-## Not live (needs `DROP` / `DELETE` approval)
+## Not live (needs `DROP` / `DELETE` approval) — status 2026-10-11
+
+Items 1–3 below turned out to be live in effect (audit 2026-10-11 §3); only
+item 4 (`claim_bingo` week guard) is still not live. Kept for history.
 
 1. **`reset_account()`**, plus `begin_match()` (H-2, one open ticket per account).
    The function does not exist live, so **Settings → Reset Account errors today**.
