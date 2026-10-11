@@ -40,6 +40,7 @@ import { useTheme } from './meta/useTheme';
 import { useMotionMode } from './meta/useMotionMode';
 import { SLAB_CSS } from './meta/slabCss';
 import { ConfirmHost } from './meta/confirm';
+import { SCREEN_LOADERS } from './meta/screenChunks';
 const MotionRoot = React.lazy(() => import('./meta/MotionRoot'));
 // Only shown when the URL carries a shared deck code; renders nothing while
 // its chunk loads (it is a modal, so no placeholder is needed).
@@ -97,57 +98,57 @@ export function noRewardReason(
  * Eager on purpose: MainMenu and AuthScreen (the first thing every session
  * renders), and the small shared UI in `./meta/ui`.
  */
-const PokerMatch = React.lazy(() => import('./components/PokerMatch'));
+const PokerMatch = React.lazy(SCREEN_LOADERS.match);
 const HowToPlayScreen = React.lazy(() =>
-  import('./components/HowToPlay').then((m) => ({ default: m.HowToPlayScreen })),
+  SCREEN_LOADERS.howtoplay().then((m) => ({ default: m.HowToPlayScreen })),
 );
 const StoreScreen = React.lazy(() =>
-  import('./meta/StoreScreen').then((m) => ({ default: m.StoreScreen })),
+  SCREEN_LOADERS.store().then((m) => ({ default: m.StoreScreen })),
 );
 const BattlePassScreen = React.lazy(() =>
-  import('./meta/BattlePassScreen').then((m) => ({ default: m.BattlePassScreen })),
+  SCREEN_LOADERS.battlepass().then((m) => ({ default: m.BattlePassScreen })),
 );
 const AchievementsScreen = React.lazy(() =>
-  import('./meta/AchievementsScreen').then((m) => ({ default: m.AchievementsScreen })),
+  SCREEN_LOADERS.achievements().then((m) => ({ default: m.AchievementsScreen })),
 );
 const SocialScreen = React.lazy(() =>
-  import('./meta/SocialScreen').then((m) => ({ default: m.SocialScreen })),
+  SCREEN_LOADERS.social().then((m) => ({ default: m.SocialScreen })),
 );
 const MarketplaceScreen = React.lazy(() =>
-  import('./meta/MarketplaceScreen').then((m) => ({ default: m.MarketplaceScreen })),
+  SCREEN_LOADERS.market().then((m) => ({ default: m.MarketplaceScreen })),
 );
 const PlayerShopsScreen = React.lazy(() =>
-  import('./meta/PlayerShopsScreen').then((m) => ({ default: m.PlayerShopsScreen })),
+  SCREEN_LOADERS.shops().then((m) => ({ default: m.PlayerShopsScreen })),
 );
 const CollectionScreen = React.lazy(() =>
-  import('./meta/CollectionScreen').then((m) => ({ default: m.CollectionScreen })),
+  SCREEN_LOADERS.collection().then((m) => ({ default: m.CollectionScreen })),
 );
 const GradingScreen = React.lazy(() =>
-  import('./meta/GradingScreen').then((m) => ({ default: m.GradingScreen })),
+  SCREEN_LOADERS.grading().then((m) => ({ default: m.GradingScreen })),
 );
 const ShowroomScreen = React.lazy(() =>
-  import('./meta/ShowroomScreen').then((m) => ({ default: m.ShowroomScreen })),
+  SCREEN_LOADERS.showroom().then((m) => ({ default: m.ShowroomScreen })),
 );
 const DeckBuilderScreen = React.lazy(() =>
-  import('./meta/DeckBuilderScreen').then((m) => ({ default: m.DeckBuilderScreen })),
+  SCREEN_LOADERS.decks().then((m) => ({ default: m.DeckBuilderScreen })),
 );
 const MatchHistoryScreen = React.lazy(() =>
-  import('./meta/MatchHistoryScreen').then((m) => ({ default: m.MatchHistoryScreen })),
+  SCREEN_LOADERS.history().then((m) => ({ default: m.MatchHistoryScreen })),
 );
 const ProfileScreen = React.lazy(() =>
-  import('./meta/ProfileScreen').then((m) => ({ default: m.ProfileScreen })),
+  SCREEN_LOADERS.profile().then((m) => ({ default: m.ProfileScreen })),
 );
 const SettingsScreen = React.lazy(() =>
-  import('./meta/SettingsScreen').then((m) => ({ default: m.SettingsScreen })),
+  SCREEN_LOADERS.settings().then((m) => ({ default: m.SettingsScreen })),
 );
 const ChangelogScreen = React.lazy(() =>
-  import('./meta/ChangelogScreen').then((m) => ({ default: m.ChangelogScreen })),
+  SCREEN_LOADERS.changelog().then((m) => ({ default: m.ChangelogScreen })),
 );
 const NewsCenterScreen = React.lazy(() =>
-  import('./meta/NewsCenterScreen').then((m) => ({ default: m.NewsCenterScreen })),
+  SCREEN_LOADERS.news().then((m) => ({ default: m.NewsCenterScreen })),
 );
 const CardSubmissionsScreen = React.lazy(() =>
-  import('./meta/CardSubmissionsScreen').then((m) => ({ default: m.CardSubmissionsScreen })),
+  SCREEN_LOADERS.submissions().then((m) => ({ default: m.CardSubmissionsScreen })),
 );
 
 /** Shown while a route chunk is in flight. Deliberately the same shape as the
@@ -203,9 +204,7 @@ class ErrorBoundary extends React.Component {
 // Play setup — lazy (src/meta/PlayScreen.tsx)
 // ---------------------------------------------------------------------------
 import type { PlaySetup } from './components/PokerMatch';
-const PlayScreen = React.lazy(() =>
-  import('./meta/PlayScreen').then((m) => ({ default: m.PlayScreen })),
-);
+const PlayScreen = React.lazy(() => SCREEN_LOADERS.play().then((m) => ({ default: m.PlayScreen })));
 
 // ---------------------------------------------------------------------------
 // Game (mounted per match)
