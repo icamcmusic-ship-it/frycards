@@ -18,9 +18,36 @@ vi.mock('./wishlist', async (orig) => ({
   pushWishlistToggle: async () => undefined,
 }));
 
+// The FULL SET view renders every card in the pool as a full card face, and
+// jsdom lays out ~300 of them slowly enough that these tests timed out under
+// a loaded CI box. A representative slice keeps every filter option the
+// tests assert on (each keyword, Location rule, tier, rarity and type) while
+// rendering a fraction of the faces.
+vi.mock('../game/poker/cardpool', async (orig) => {
+  const m = await orig<typeof import('../game/poker/cardpool')>();
+  const keep = new Set(m.POOL.slice(0, 12));
+  const seen = new Set<string>();
+  for (const c of m.POOL) {
+    const keys = [
+      ...(c.keywords ?? []).map((k) => `kw:${k}`),
+      `rule:${c.rule?.id}`,
+      `tier:${c.tier}`,
+      `rarity:${c.rarity}`,
+      `type:${c.type}`,
+      `set:${c.set}`,
+    ];
+    if (keys.some((k) => !seen.has(k))) keep.add(c);
+    for (const k of keys) seen.add(k);
+  }
+  return { ...m, POOL: m.POOL.filter((c) => keep.has(c)) };
+});
+
 import { MetaContext, type MetaState } from './MetaContext';
 import { CollectionScreen } from './CollectionScreen';
 import { POOL } from '../game/poker/cardpool';
+
+// Same reason as the slice above: never fail on jsdom speed alone.
+vi.setConfig({ testTimeout: 20_000 });
 
 afterEach(cleanup);
 beforeEach(() => {

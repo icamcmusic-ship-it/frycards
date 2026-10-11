@@ -4,7 +4,7 @@
  * Grading Lab: shared tab strip, visible selection state, and the sticky
  * summary bar that follows the player through all four steps (audit §2.1 #13).
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { POOL } from '../game/poker/cardpool';
 
@@ -29,6 +29,19 @@ vi.mock('./grading', async (importActual) => ({
 
 const { GradingScreen } = await import('./GradingScreen');
 
+// A full card face per pick in jsdom is slow on a loaded CI box; the
+// default 5s budget was the only thing these tests ever failed on.
+vi.setConfig({ testTimeout: 20_000 });
+
+/** Render and wait for the mount-time fetchGradedCards() to settle, so no
+ * state update lands after the assertions (or after unmount). */
+async function renderSettled() {
+  const r = render(<GradingScreen onBack={() => {}} />);
+  await screen.findByRole('tab', { name: /AT THE GRADERS/ });
+  await act(async () => {});
+  return r;
+}
+
 beforeEach(() => {
   localStorage.clear();
   window.matchMedia = ((q: string) => ({
@@ -48,19 +61,18 @@ const pickCard = () =>
 
 describe('grading tabs', () => {
   test('is a tablist with the active tab aria-selected', async () => {
-    render(<GradingScreen onBack={() => {}} />);
+    await renderSettled();
     expect(screen.getByRole('tablist', { name: 'Grading sections' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'SUBMIT CARDS' }).getAttribute('aria-selected')).toBe(
       'true',
     );
-    await waitFor(() => screen.getByRole('tab', { name: /AT THE GRADERS/ }));
   });
 
   test('remembers the last tab', async () => {
-    const first = render(<GradingScreen onBack={() => {}} />);
+    const first = await renderSettled();
     fireEvent.click(screen.getByRole('tab', { name: /MY SLABS/ }));
     first.unmount();
-    render(<GradingScreen onBack={() => {}} />);
+    await renderSettled();
     expect(screen.getByRole('tab', { name: /MY SLABS/ }).getAttribute('aria-selected')).toBe(
       'true',
     );
@@ -68,16 +80,16 @@ describe('grading tabs', () => {
 });
 
 describe('picking cards', () => {
-  test('shows a count badge on a selected card and none before', () => {
-    render(<GradingScreen onBack={() => {}} />);
+  test('shows a count badge on a selected card and none before', async () => {
+    await renderSettled();
     expect(screen.getByText(/4 spare/)).toBeTruthy();
     pickCard();
     pickCard();
     expect(screen.getByText(/2 of 4/)).toBeTruthy();
   });
 
-  test('the list is not its own scroll box on a phone', () => {
-    render(<GradingScreen onBack={() => {}} />);
+  test('the list is not its own scroll box on a phone', async () => {
+    await renderSettled();
     const list = screen.getByText(/4 spare/).closest('div')!.parentElement!;
     // Bounded scrolling only kicks in from `sm`, never at phone width.
     expect(list.className).toContain('grid-cols-3');
@@ -86,8 +98,8 @@ describe('picking cards', () => {
 });
 
 describe('summary bar', () => {
-  test('is absent for an empty tray and then reads "N CARDS · SERVICE · fee"', () => {
-    render(<GradingScreen onBack={() => {}} />);
+  test('is absent for an empty tray and then reads "N CARDS · SERVICE · fee"', async () => {
+    await renderSettled();
     expect(screen.queryByRole('button', { name: /SUBMIT/ })).toBeNull();
     pickCard();
     pickCard();
@@ -98,8 +110,8 @@ describe('summary bar', () => {
     expect(bar.textContent).toMatch(/3 CARDS · KEEPER ·/);
   });
 
-  test('its extras are folded into DETAILS and the choice is remembered', () => {
-    const first = render(<GradingScreen onBack={() => {}} />);
+  test('its extras are folded into DETAILS and the choice is remembered', async () => {
+    const first = await renderSettled();
     pickCard();
     expect(screen.queryByText(/EXPECTED BACK/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /DETAILS/ }));
@@ -107,7 +119,7 @@ describe('summary bar', () => {
     const group = screen.getByRole('group', { name: 'Pay with' });
     expect(within(group).getAllByRole('button')).toHaveLength(2);
     first.unmount();
-    render(<GradingScreen onBack={() => {}} />);
+    await renderSettled();
     pickCard();
     expect(screen.getByText(/EXPECTED BACK/)).toBeTruthy();
   });
@@ -115,7 +127,7 @@ describe('summary bar', () => {
 
 describe('odds dialog (B7)', () => {
   test('is modal and closes on Escape', async () => {
-    render(<GradingScreen onBack={() => {}} />);
+    await renderSettled();
     fireEvent.click(screen.getByRole('button', { name: /ODDS/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Grading odds' });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
