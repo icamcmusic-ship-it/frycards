@@ -19,6 +19,8 @@ import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
 import { SafeImage } from './SafeImage';
 import { MetaHeader, PopButton, CardMarketValuePanel, Tabs } from './ui';
 import { ActionMenu } from './ActionMenu';
+import { askConfirm } from './confirm';
+import { useToast } from './toast';
 import { FilterSelect } from './FilterSelect';
 import { usePersistedState } from './usePersistedState';
 import {
@@ -209,7 +211,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
 
   const handleDelete = async (d: DeckRow) => {
     if (deletingId) return;
-    if (!window.confirm(`Delete the deck "${d.name}"? This cannot be undone.`)) return;
+    if (!(await askConfirm(`Delete the deck "${d.name}"? This cannot be undone.`))) return;
     setDeletingId(d.id);
     try {
       const err = await deleteDeck(d.id);
@@ -415,6 +417,7 @@ const randomSeed = () => Math.floor(Math.random() * 0x7fffffff);
 
 function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void }) {
   const { session, collection, decks } = useMeta();
+  const { toast } = useToast();
   const narrow = useIsNarrow();
   const db = useMemo(() => new Map(POOL.map((c) => [c.id, c])), []);
   const ownedQty = useMemo(
@@ -505,7 +508,9 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       if (copiedTimeoutRef.current !== null) window.clearTimeout(copiedTimeoutRef.current);
       copiedTimeoutRef.current = window.setTimeout(() => setCopied(null), 1800);
     } catch {
-      window.alert('Could not copy to clipboard — clipboard access is blocked in this browser.');
+      toast('Could not copy to clipboard — clipboard access is blocked in this browser.', {
+        kind: 'loss',
+      });
     }
   };
 
@@ -537,17 +542,29 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     .map((id) => db.get(id))
     .filter((c): c is CardDef => !!c && c.type === 'Location');
 
-  /** Why `card` can't be added right now, or null when it can. */
-  const addBlock = (card: CardDef): string | null => {
+  /** Why `card` can't be added right now (a sentence for the toast and a
+   * short tile badge), or null when it can. */
+  const addBlockInfo = (card: CardDef): { reason: string; short: string } | null => {
     const inDeck = countOf(card.id);
-    if (inDeck >= (availableQty.get(card.id) || 0)) return 'No free copies';
-    if (card.type === 'Location') return inDeck > 0 ? 'Already your Location' : null;
-    if (shape.powers >= m.powers) return `${m.label} decks hold ${m.powers} powers`;
-    if (inDeck >= m.maxCopies) return `Max ${m.maxCopies} copies in ${m.label}`;
+    if (inDeck >= (availableQty.get(card.id) || 0))
+      return { reason: 'No free copies — every copy you own is in this deck', short: 'NONE FREE' };
+    if (card.type === 'Location')
+      return inDeck > 0 ? { reason: 'Already your Location', short: 'IN DECK' } : null;
+    if (shape.powers >= m.powers)
+      return {
+        reason: `Deck full: ${shape.powers}/${m.powers} powers in ${m.label}`,
+        short: 'FULL',
+      };
+    if (inDeck >= m.maxCopies)
+      return { reason: `${m.maxCopies} copies max in ${m.label}`, short: 'MAX' };
     if (card.tier === 5 && shape.tier5 >= m.maxTier5)
-      return `Max ${m.maxTier5} tier-5 card${m.maxTier5 === 1 ? '' : 's'} in ${m.label}`;
+      return {
+        reason: `Max ${m.maxTier5} tier-5 card${m.maxTier5 === 1 ? '' : 's'} in ${m.label}`,
+        short: 'T5 MAX',
+      };
     return null;
   };
+  const addBlock = (card: CardDef): string | null => addBlockInfo(card)?.reason ?? null;
 
   const addCard = (card: CardDef) => {
     if (!leader || addBlock(card)) return;
@@ -563,11 +580,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   /** Auto-fills a legal deck for the current format from owned cards: one
    * Location plus the format's power count, within the copy and tier-5
    * limits. */
-  const handleQuickbuild = () => {
+  const handleQuickbuild = async () => {
     if (!leader) return;
     if (
       cardIds.length > 0 &&
-      !window.confirm('Replace your current card selections with an auto-built deck?')
+      !(await askConfirm('Replace your current card selections with an auto-built deck?'))
     )
       return;
     const rng = rngOn({ rng: randomSeed() });
@@ -708,8 +725,8 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     (deck?.leader_id ?? null) !== leaderId ||
     mode !== initialMode ||
     !sameCards;
-  const handleBack = () => {
-    if (isDirty && !window.confirm('Discard unsaved changes to this deck?')) return;
+  const handleBack = async () => {
+    if (isDirty && !(await askConfirm('Discard unsaved changes to this deck?'))) return;
     onDone();
   };
 
@@ -753,7 +770,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           {/* Routed through handleBack, not onDone directly — reaching this
               step with a dirty draft (e.g. CHANGE LEADER on an edited deck,
               or a just-imported code) must still get the discard confirm. */}
-          <PopButton onClick={handleBack} color="yellow">
+          <PopButton onClick={() => void handleBack()} color="yellow">
             &lt; BACK
           </PopButton>
           <h1 className="heading-font text-xl text-[var(--c-yellow)] min-w-0">
@@ -1190,7 +1207,8 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       {shape.powers}/{m.powers}
       {/* Visual on wide screens only: at 200% text the phone deck bar has no room. */}
       <span className="fs-xs sr-only sm:not-sr-only"> POWERS</span>
-      {shape.locations === 1 ? ' +LOC' : ''}
+      {/* U32: a tick or a cross, never a bare "+LOC" that reads as an error. */}
+      {shape.locations === 1 ? ' · LOC ✓' : ' · LOC ✗'}
     </span>
   );
 
@@ -1212,7 +1230,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           rarely-used commands live in the overflow menu there and sit inline
           from `sm` up. */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-[var(--c-ink)] px-2 sm:px-4 py-2 sm:py-2.5 shrink-0">
-        <PopButton onClick={handleBack} color="yellow" className="shrink-0">
+        <PopButton onClick={() => void handleBack()} color="yellow" className="shrink-0">
           &lt; BACK
         </PopButton>
         <input
@@ -1256,7 +1274,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         {/* Wide screens: the common commands stay one click away. */}
         <PopButton
           color="steel"
-          onClick={handleQuickbuild}
+          onClick={() => void handleQuickbuild()}
           title={`Auto-fill a legal ${m.label} deck from your owned cards`}
           className="hidden sm:block"
         >
@@ -1305,7 +1323,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               id: 'quickbuild',
               label: 'Quickbuild',
               hint: `Auto-fill a legal ${m.label} deck from your cards`,
-              onSelect: handleQuickbuild,
+              onSelect: () => void handleQuickbuild(),
             },
             {
               id: 'leader',
@@ -1479,14 +1497,18 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           <div className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-3 pt-0 flex flex-wrap gap-2.5 content-start">
             {pool.map((c) => {
               const inDeck = countOf(c.id);
-              const blocked = addBlock(c);
+              const block = addBlockInfo(c);
+              const blocked = block?.reason ?? null;
               return (
                 <React.Fragment key={c.id}>
                   <CardFace
                     def={c}
                     count={inDeck}
                     dimmed={blocked !== null}
-                    onClick={() => addCard(c)}
+                    // A dimmed tile names why on its face and on tap (U28) —
+                    // a silent grey card read as broken on a phone.
+                    badge={block?.short}
+                    onClick={() => (blocked ? toast(blocked) : addCard(c))}
                     footer={
                       <button
                         onClick={(e) => {
