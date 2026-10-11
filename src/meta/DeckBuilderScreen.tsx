@@ -12,7 +12,13 @@ import {
   ChevronUp,
   ChevronDown,
 } from 'lucide-react';
-import { encodeDeckCode, decodeDeckCode, deckLink, takePendingDeck } from './deckcode';
+import {
+  encodeDeckCode,
+  decodeDeckCode,
+  deckLink,
+  challengeLink,
+  takePendingDeck,
+} from './deckcode';
 import { takeBuildWith } from './cardOfTheDay';
 import { useMeta } from './MetaContext';
 import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
@@ -47,6 +53,18 @@ import { cardColors, Color, COLOR_IDENTITY, isColorLegal } from '../game/poker/c
 import { ruleName } from '../game/poker/locations';
 import { rngOn } from '../game/poker/rng';
 import { deriveDeckAdvice } from './deckAdvice';
+import { formatTags } from '../game/poker/formats';
+import { DeckMeta } from './DeckMeta';
+import { loadMatchHistory, summarizeMatchHistory } from './matchHistory';
+import {
+  autoDeckName,
+  loadDeckNote,
+  loadDeckVersions,
+  locationFit,
+  plainTextDeck,
+  pushDeckVersion,
+  saveDeckNote,
+} from './deckExtras';
 import { drawTestHand, simulateOpenings } from './goldfish';
 import { COLOR_HEX } from './colors';
 import { cn } from '../lib/utils';
@@ -180,6 +198,10 @@ export function validateDeckList(
 
 export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
   const { decks, refreshDecks, dataLoading } = useMeta();
+  // Q7: each list's record on this device, keyed by its exact code.
+  const [byDeck] = useState(
+    () => new Map(summarizeMatchHistory(loadMatchHistory()).byDeck.map((d) => [d.key, d] as const)),
+  );
   // A deck opened from a shared link is handed over as an unsaved draft, the
   // same shape IMPORT CODE produces.
   const [editing, setEditing] = useState<DeckRow | 'new' | null>(() => {
@@ -279,6 +301,14 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {decks.map((d) => {
             const leader = POOL_BY_ID[d.leader_id];
+            const recordOf = (row: DeckRow, md: ModeId) => {
+              try {
+                return byDeck.get(encodeDeckCode(row.leader_id, row.card_ids, md));
+              } catch {
+                return undefined;
+              }
+            };
+            const tileNote = loadDeckNote(d.id);
             // Per-format verdict; `d.is_valid` only says "legal in some mode".
             const legal = legalModes(d.leader_id, d.card_ids);
             const mode = formatOf(d);
@@ -327,6 +357,14 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                     className="w-full h-full object-cover"
                     fallbackText={leader?.name}
                   />
+                </div>
+                <div className="px-3">
+                  <DeckMeta tags={formatTags(d.leader_id, d.card_ids)} rec={recordOf(d, mode)} />
+                  {tileNote && (
+                    <p className="fs-xs italic text-[var(--c-steel)] truncate" title={tileNote}>
+                      “{tileNote}”
+                    </p>
+                  )}
                 </div>
                 <div className="px-3 fs-xs font-bold text-[var(--c-steel)]">
                   {leader?.name || 'Unknown Leader'} ·{' '}
@@ -457,6 +495,9 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const [name, setName] = useState(initialName);
   const [leaderId, setLeaderId] = useState<string | null>(deck?.leader_id || null);
   const [cardIds, setCardIdsRaw] = useState<string[]>(deck?.card_ids || []);
+  // Q8: a local note per deck; Q20: the last few saved lists.
+  const [note, setNote] = useState(() => (deck?.id ? loadDeckNote(deck.id) : ''));
+  const [versions] = useState(() => (deck?.id ? loadDeckVersions(deck.id) : []));
   // Undo: every card-list edit records the list as it was. Leader, name and
   // format changes are not card edits and are not undone here.
   const [history, setHistory] = useState<string[][]>([]);
@@ -485,7 +526,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   // Which export was just copied (drives the confirmation toast).
-  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  const [copied, setCopied] = useState<'code' | 'link' | 'text' | 'challenge' | null>(null);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const copiedTimeoutRef = useRef<number | null>(null);
 
@@ -499,12 +540,21 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     [],
   );
 
-  const handleExport = async (asLink = false) => {
+  const handleExport = async (as: boolean | 'text' | 'challenge' = false) => {
     if (!leaderId) return;
+    const kind = as === true ? 'link' : as === false ? 'code' : as;
     try {
       const code = encodeDeckCode(leaderId, cardIds, mode);
-      await navigator.clipboard.writeText(asLink ? deckLink(code) : code);
-      setCopied(asLink ? 'link' : 'code');
+      await navigator.clipboard.writeText(
+        kind === 'link'
+          ? deckLink(code)
+          : kind === 'challenge'
+            ? challengeLink(code)
+            : kind === 'text'
+              ? plainTextDeck(leaderId, cardIds, code)
+              : code,
+      );
+      setCopied(kind);
       if (copiedTimeoutRef.current !== null) window.clearTimeout(copiedTimeoutRef.current);
       copiedTimeoutRef.current = window.setTimeout(() => setCopied(null), 1800);
     } catch {
@@ -513,6 +563,16 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       });
     }
   };
+
+  const versionItems = versions.slice(1).map((v, k) => ({
+    id: `ver-${k}`,
+    label: `Restore list from ${new Date(v.at).toLocaleString()}`,
+    hint: 'Into the editor, unsaved',
+    onSelect: () => {
+      setLeaderId(v.leader_id);
+      setCardIds(v.card_ids);
+    },
+  }));
 
   const ownedLeaders = POOL_LEADERS.filter((c) => (ownedQty.get(c.id) || 0) > 0);
   const leader = leaderId ? db.get(leaderId) : undefined;
@@ -669,6 +729,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     [handSeed, cardIds, mode],
   );
 
+  const fitLine = useMemo(() => locationFit(cardIds), [cardIds]);
   // Tier mix / type mix / theme / colour guidance (src/meta/deckAdvice.ts).
   const advice = useMemo(
     () => deriveDeckAdvice(grouped, { mode, identity: colorIdentity }),
@@ -682,16 +743,22 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     setSaving(true);
     setSaveError('');
     try {
+      const typed = name.trim();
       const { data, error } = await saveDeck({
         id: deck?.id,
-        name: name.trim() || 'New Deck',
+        // Q8: an untouched name becomes "Ember/Void Economy", not "New Deck".
+        name: typed && typed !== 'New Deck' ? typed : autoDeckName(leaderId, cardIds),
         leader_id: leaderId,
         card_ids: cardIds,
       });
       if (error) setSaveError(error);
       else {
         const id = data?.id ?? deck?.id;
-        if (id) rememberDeckMode(id, mode);
+        if (id) {
+          rememberDeckMode(id, mode);
+          saveDeckNote(id, note);
+          pushDeckVersion(id, { at: Date.now(), leader_id: leaderId, card_ids: cardIds });
+        }
         onDone();
       }
     } catch {
@@ -1023,6 +1090,37 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const guideBody = (
     <div className="px-3 py-2.5" aria-label="Deck guidance">
       <div className="heading-font fs-xs text-[var(--c-yellow)] mb-1.5">DECK GUIDE</div>
+      {fitLine && <p className="fs-xs font-bold text-[var(--c-paper)] mb-1.5">{fitLine}</p>}
+      {leader && advice.powers === 0 && (
+        // Q21: one Leader, several decks — three seeded starts from your cards.
+        <div className="flex flex-wrap gap-1.5 mb-1.5" aria-label="Sample decks">
+          {[11, 23, 37].map((seed) => {
+            const ids = quickbuildIds(leader, m, POOL, availableQty, rngOn({ rng: seed }));
+            if (!ids.length) return null;
+            return (
+              <button
+                key={seed}
+                onClick={() => setCardIds(ids)}
+                className="btn-pop fs-xs font-black px-2 py-1 ink-border-sm bg-[var(--c-yellow)] text-[var(--c-ink)]"
+                title="Fill the list with this sample (from your cards)"
+              >
+                SAMPLE: {autoDeckName(leader.id, ids)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <label className="block fs-xs font-bold text-[var(--c-paper)]/80 mb-1.5">
+        NOTES (this device)
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          maxLength={500}
+          placeholder="Plan, matchups, what to try next…"
+          className="mt-0.5 w-full px-1.5 py-1 bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm fs-xs"
+        />
+      </label>
       <div className="flex gap-1 mb-1.5">
         {advice.curve.map((b) => (
           <div
@@ -1312,6 +1410,19 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               hint: 'Opens this deck for anyone',
               onSelect: () => handleExport(true),
             },
+            {
+              id: 'text',
+              label: 'Copy as text',
+              hint: 'A readable list for chat, code at the bottom',
+              onSelect: () => handleExport('text'),
+            },
+            {
+              id: 'challenge',
+              label: 'Copy challenge link',
+              hint: '"Beat this deck": opens a practice table against it',
+              onSelect: () => handleExport('challenge'),
+            },
+            ...versionItems,
           ]}
         />
         <ActionMenu
@@ -1333,6 +1444,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             },
             { id: 'code', label: 'Copy deck code', onSelect: () => handleExport() },
             { id: 'link', label: 'Copy deck link', onSelect: () => handleExport(true) },
+            { id: 'text', label: 'Copy as text', onSelect: () => handleExport('text') },
+            {
+              id: 'challenge',
+              label: 'Copy challenge link',
+              onSelect: () => handleExport('challenge'),
+            },
+            ...versionItems,
           ]}
         />
         <PopButton
@@ -1369,6 +1487,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         <span className="fs-xs font-bold text-[var(--c-paper)] min-w-0">
           1 Location + {m.powers} powers · max {m.maxCopies} copies · max {m.maxTier5} tier-5
         </span>
+        {leaderId && <DeckMeta tags={formatTags(leaderId, cardIds)} />}
       </div>
 
       {copied && (
@@ -1376,7 +1495,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           role="status"
           className="fixed top-16 right-2 z-50 heading-font fs-sm bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs px-3 py-1.5"
         >
-          {copied === 'link' ? 'LINK COPIED ✓' : 'CODE COPIED ✓'}
+          {copied === 'link'
+            ? 'LINK COPIED ✓'
+            : copied === 'text'
+              ? 'LIST COPIED ✓'
+              : copied === 'challenge'
+                ? 'CHALLENGE LINK COPIED ✓'
+                : 'CODE COPIED ✓'}
         </div>
       )}
 
