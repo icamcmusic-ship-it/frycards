@@ -394,61 +394,6 @@ html[data-motion='reduced'] .foil-shimmer::after {
   animation: mythic-bg-kf 6s ease-in-out infinite;
 }
 
-/* Ultra-Rare: a lighter, gold-only pulsing frame — visibly stronger than the
-   static Rare/Super-Rare glow at every card size (not just `full`), but not
-   as intense as the two-tone Mythic frame. See rarity.ts's `isMythic`-style
-   `ultra` flag in CardFaceV4.tsx. */
-@keyframes ultra-border-kf {
-  0%,
-  100% {
-    box-shadow:
-      0 0 14px 3px rgba(212, 175, 55, 0.55),
-      0 0 28px 8px rgba(212, 175, 55, 0.3);
-  }
-  50% {
-    box-shadow:
-      0 0 22px 6px rgba(255, 215, 90, 0.8),
-      0 0 42px 14px rgba(212, 175, 55, 0.45);
-  }
-}
-.ultra-frame {
-  animation: ultra-border-kf 2.8s ease-in-out infinite;
-}
-
-/* v4.6 Ultra-Rare "Gilded Relic" template — a brushed gold-leaf name banner
-   (animated slow shimmer, reusing mythic-bg-kf's background-position drift)
-   plus a twinkling gold-dust layer over the whole face. Distinct at a glance
-   from both Super-Rare (static purple tint) and Mythic (red/ember inferno). */
-.ultra-banner {
-  background: linear-gradient(110deg, #8a6d1f, #d4af37, #ffe9a3, #f3cf5d, #d4af37, #8a6d1f);
-  background-size: 250% 100%;
-  animation: mythic-bg-kf 7s ease-in-out infinite;
-}
-@keyframes ultra-sparkle-kf {
-  0%,
-  100% {
-    opacity: 0.25;
-  }
-  35% {
-    opacity: 0.75;
-  }
-  65% {
-    opacity: 0.45;
-  }
-}
-.ultra-sparkle {
-  background-image:
-    radial-gradient(circle 1.5px at 12% 22%, rgba(255, 233, 163, 0.95) 40%, transparent 60%),
-    radial-gradient(circle 1px at 78% 14%, rgba(255, 215, 90, 0.9) 40%, transparent 60%),
-    radial-gradient(circle 1.5px at 88% 55%, rgba(255, 233, 163, 0.8) 40%, transparent 60%),
-    radial-gradient(circle 1px at 30% 68%, rgba(255, 215, 90, 0.85) 40%, transparent 60%),
-    radial-gradient(circle 1.5px at 58% 84%, rgba(255, 233, 163, 0.9) 40%, transparent 60%),
-    radial-gradient(circle 1px at 8% 90%, rgba(255, 215, 90, 0.8) 40%, transparent 60%),
-    radial-gradient(circle 1px at 45% 38%, rgba(255, 245, 200, 0.85) 40%, transparent 60%);
-  animation: ultra-sparkle-kf 2.6s ease-in-out infinite;
-  mix-blend-mode: screen;
-}
-
 /* v4.6 Mythic "Living Inferno" template — a layer of embers rising off the
    card face (two drifting radial-gradient dot fields at different speeds),
    on top of the existing animated red/gold gradient banner + pulsing frame. */
@@ -634,9 +579,6 @@ html[data-motion='reduced'] .foil-shimmer::after {
   html:not([data-motion='full']) .mythic-frame,
   html:not([data-motion='full']) .mythic-bg,
   html:not([data-motion='full']) .mythic-embers,
-  html:not([data-motion='full']) .ultra-frame,
-  html:not([data-motion='full']) .ultra-banner,
-  html:not([data-motion='full']) .ultra-sparkle,
   html:not([data-motion='full']) .aa-frame,
   html:not([data-motion='full']) .aa-holo,
   html:not([data-motion='full']) .serialized-frame,
@@ -651,9 +593,6 @@ html[data-motion='reduced'] .rarity-pulse,
 html[data-motion='reduced'] .mythic-frame,
 html[data-motion='reduced'] .mythic-bg,
 html[data-motion='reduced'] .mythic-embers,
-html[data-motion='reduced'] .ultra-frame,
-html[data-motion='reduced'] .ultra-banner,
-html[data-motion='reduced'] .ultra-sparkle,
 html[data-motion='reduced'] .aa-frame,
 html[data-motion='reduced'] .aa-holo,
 html[data-motion='reduced'] .serialized-frame,

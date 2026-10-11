@@ -433,7 +433,12 @@ function variantCards() {
   const fits = POOL.filter(
     (c) => c.type !== 'Leader' && (!colour || (c.colors ?? []).includes(colour as never)),
   );
-  const framed = fits.find((c) => c.rarity === 'Rare' || c.rarity === 'Super-Rare') ?? fits[0];
+  // `&rarity=` picks the framed card's rarity (default Rare / Super-Rare).
+  const want = params.get('rarity');
+  const framed =
+    (want && fits.find((c) => c.rarity === want)) ||
+    fits.find((c) => c.rarity === 'Rare' || c.rarity === 'Super-Rare') ||
+    fits[0];
   const bleed =
     fits.find((c) => c.rarity === 'Full-Art' || c.rarity === 'Alt-Art') ?? fits[1] ?? fits[0];
   return [framed, bleed].filter(Boolean);

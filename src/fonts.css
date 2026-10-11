@@ -109,3 +109,26 @@
     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
+
+/*
+ * Anak Manja (Khurasan) — the Ultra-Rare "Prism Pop" display face (name
+ * banner, UR seal, cost badge, ULTRA RARE ribbon). Caps-only, with hollow
+ * letterforms and a baked-in outline + extrusion, so it is always set on a
+ * solid plate and never given a text-shadow. Only used at the `full` and
+ * `standard` card sizes (legible from ~16px); smaller faces use Montserrat.
+ *
+ * Subset to printable ASCII (U+0020-007E) and converted to woff2 with
+ * fontTools (`pyftsubset Anak_Manja.ttf --unicodes=U+0020-007E
+ * --flavor=woff2 --layout-features=kern,liga --no-hinting`). A browser only
+ * fetches a face once text actually uses it, so this costs nothing until an
+ * Ultra-Rare card renders. Licence: Copyright (c) 2026 Khurasan, all rights
+ * reserved — see https://khurasanstudio.com/license/ before shipping.
+ */
+@font-face {
+  font-family: 'Anak Manja';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/anak-manja-latin.woff2') format('woff2');
+  unicode-range: U+0020-007E;
+}
