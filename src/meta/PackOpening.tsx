@@ -76,10 +76,18 @@ export function usePointerIsCoarse(): boolean {
 }
 
 /** Face-down card showing the player's equipped card back. */
-function CardBackFace() {
+function CardBackFace({ glow }: { glow?: string }) {
   const back = getCardBackImage();
+  // U42: a paper edge and hard shadow so the card reads on the dark sunburst,
+  // plus a rarity-coloured edge glow as a tease before the flip.
   return (
-    <div className="w-full h-full bg-[var(--c-ink)] ink-border-md shadow-hard-black overflow-hidden flex items-center justify-center">
+    <div
+      className="w-full h-full bg-[var(--c-ink)] overflow-hidden flex items-center justify-center"
+      style={{
+        border: '4px solid #f4f1ea',
+        boxShadow: `6px 6px 0 0 #f4f1ea${glow ? `, 0 0 22px 4px ${glow}` : ''}`,
+      }}
+    >
       {back ? (
         <SafeImage
           boxWidth={480}
@@ -692,7 +700,7 @@ function RevealStage({
         >
           {/* back face */}
           <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden' }}>
-            <CardBackFace />
+            <CardBackFace glow={glowColor} />
           </div>
           {/* front face */}
           <div
