@@ -1,5 +1,57 @@
 # Backend changes: live status
 
+## 2026-10-12 (audit 2026-10-11 §5 collection, §3 S-2, §7 S6/S7/X4)
+
+### Applied live (each is also a repo migration, idempotent, tested in `supabase/migrations-2026-10-12.test.ts`)
+
+| Live migration name                          | Repo file                                   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `collection_stats`                           | `20261012000000_collection_stats.sql`       | §5 collection emitters: `track_collection_stats(uid)` (absolute `unique_cards`, `own_leaders`, `own_mythic` / `own_ultra_rare` / `own_super_rare` / `own_full_art` (non-Leader), `own_locations`, `own_foil_unique`, `own_playsets`, `own_<colour>` (non-Leader)) run by two statement-level triggers on `player_cards` (insert, update), once per user per statement; skips keys with nothing to raise. `new_cards` once per card for life (`stat_once 'own:'`, seeded for every card held before the trigger existed). `track_graded_cards` INSERT adds `graded_foil`, `graded_leader`, `graded_distinct` (`stat_once 'gradedcard:'`, seeded). Rows: `d_new_card_1`, `w_new_cards_10` (rotating pool) and 21 collection achievements, targets computed from live non-Leader counts (Ember 43, Tide 54, Root 48, Gale 40, Void 55, Light 37, Shadow 50, Mythic 7, Full-Art 28, Ultra-Rare 5, Super-Rare 12, Locations 55; Leaders 2 / 6). Backfilled for every player. |
+| `difficulty_reward_mult`                     | `20261012000001_difficulty_reward_mult.sql` | §3 S-2: `begin_match(p_mode, p_seats, p_difficulty)` records `easy` / `normal` / `hard` on `match_tickets.difficulty`; `record_match_placement` reads it from the ticket only and scales credits (x0.8 / x1 / x1.15, before the taper); XP flat; no difficulty = x1. Old 2-arg `begin_match` renamed `begin_match_legacy_v1` and revoked (no removal needed).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `realtime_topics`                            | `20261012000002_realtime_topics.sql`        | §7 S7: `trades` / `friendships` broadcast `changed` to each party's private `user:<uid>`; `market_listings` → public topic `market`, `player_shops` / `shop_listings` → `shops`, `news_posts` / `serialized_supply` → `news` (payload `{table}` only, one per insert/update statement).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `catalog_version`, `catalog_version_invoker` | `20261012000003_catalog_version.sql`        | §7 S6 option (b): `get_catalog_version()` (count + md5 of every template, SECURITY INVOKER, anon + authenticated).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+
+Smoke-tested live in rolled-back transactions: a Hard ticket claimed as "deep"
+paid the ticket's Standard 6-seat 115; a ticket without difficulty paid 100; a
+new card inserted for a player pays `new_cards` 1 and is seeded in `stat_once`;
+a `market_listings` update wrote one `market` message.
+
+X4 confirmed intended: `get_showcase_slabs` is anon-callable like the other
+public profile RPCs granted to `anon` for guests in B1 (`get_player_profile_card`,
+`get_public_profiles`); it returns only slabs the owner pinned. No change.
+
+### Pending
+
+- `20261012000091_after_client_realtime.sql` (SQL editor): (1) row-removal
+  triggers on the public topics (gated keyword); (2) after the screens below
+  switch, trim the publication to `player_shops`, `shop_listings`,
+  `shop_purchases` (still used by PlayerShopsScreen's filtered subscriptions).
+- Auth settings (not SQL): leaked-password protection (advisor WARN) and the
+  Auth connection strategy (absolute 10 → percentage), Dashboard →
+  Authentication.
+- S6 option (a) (static `catalog.<hash>.json` on the Pages host) needs a deploy
+  step; option (b) is live.
+
+### Client follow-ups (files owned by other screens)
+
+- **Difficulty (App.tsx / PlayScreen.tsx):** pass the chosen bot difficulty as
+  the third argument: `beginMatch(setupMode, setupSeats, loadCpuDifficulty())`
+  (`'easy' | 'normal' | 'hard'`, `src/meta/matchPrefs.ts`). Without it the
+  ticket pays like Normal. The game-over preview should pass the same value as
+  the 5th argument of `placementReward(place, seats, mode, hands, difficulty)`.
+  The server's `record_match_placement` result also returns `difficulty`.
+- **S6 (App.tsx catalog load):** `versionedFetch(CATALOG_CACHE_KEY + ':v', await fetchCatalogVersion(), fetchCardTemplates, CATALOG_TTL_MS)` (`src/lib/cache.ts`,
+  `src/lib/supabase.ts`) instead of the 6 h TTL read.
+- **S7:** SocialScreen: replace `subscribeTable('friendships' | 'trades')` with
+  `onUserTableChange(['friendships', 'trades'], bump)` (rides MetaContext's
+  user channel). MarketplaceScreen: `subscribeTopic('market', …)`.
+  PlayerShopsScreen browse (`:974-975`): `subscribeTopic('shops', …)`; the
+  owner/id-filtered subscriptions can stay. NewsCenterScreen:
+  `subscribeTopic('news', …)`. Debounce the refetch. Then apply part 2 of
+  `20261012000091`.
+
+---
+
 ## 2026-10-11 (audit 2026-10-11 §1 A20/A21/B1/B2/B4, §5, §7)
 
 ### Applied live (each is also a repo migration, idempotent)
@@ -26,7 +78,7 @@ non-Creator gets "CPU matches are not open yet"; `get_missions` deals 7 dailies
 and 7 weeklies with no rotating match missions for a non-Creator; a profile
 update writes one broadcast on `user:<uid>`.
 
-### Pending: needs a person to approve DROP / DELETE
+### Was pending (DROP / DELETE): applied by hand 2026-10-12
 
 `supabase/migrations/20261011000090_pending_destructive.sql` (run it in the SQL
 editor or approve the MCP prompts):
@@ -40,8 +92,11 @@ editor or approve the MCP prompts):
 5. The four backup tables (about 490 kB).
 6. Cron jobs that prune `cron.job_run_details` (7 days) and the per-day /
    per-week keyword ledger rows in `stat_once`.
-7. `20261008000006_claim_bingo_week_guard.sql` (replaces `claim_bingo(int)`);
-   tried live on 2026-10-11, timed out at the confirmation prompt.
+7. `20261008000006_claim_bingo_week_guard.sql` (replaces `claim_bingo(int)`).
+
+**Status 2026-10-12: all of the above is live.** `20261011000090` and
+`20261008000006` were run by hand in the SQL editor and verified
+(`claim_bingo(int, date)` is the only overload).
 
 ### Not doable in SQL
 
@@ -57,8 +112,8 @@ editor or approve the MCP prompts):
   Store should call them on mount and after a purchase error.
 - B5 (Bounties): the Store's bounty tab needs the same UTC-reset reload the
   Achievements screen now has.
-- S6 (catalog as static JSON) and S7 (filtered / polled secondary-screen
-  subscriptions) are not done.
+- S6 and S7: server side done 2026-10-12 (see the top section); the screen
+  and App.tsx call sites are still to change.
 - The engine still has to fill `MatchStats` and `hands` (see
   `recordMatchPlacement` in `src/lib/supabase.ts`).
 
@@ -99,8 +154,8 @@ a pack pinned to an empty set now raises instead of paying out another set.
 
 ## Not live (needs `DROP` / `DELETE` approval) — status 2026-10-11
 
-Items 1–3 below turned out to be live in effect (audit 2026-10-11 §3); only
-item 4 (`claim_bingo` week guard) is still not live. Kept for history.
+Items 1–3 below turned out to be live in effect (audit 2026-10-11 §3); item 4
+(`claim_bingo` week guard) went live by hand on 2026-10-12. Kept for history.
 
 1. **`reset_account()`**, plus `begin_match()` (H-2, one open ticket per account).
    The function does not exist live, so **Settings → Reset Account errors today**.
