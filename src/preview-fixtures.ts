@@ -535,6 +535,13 @@ const BINGO = {
 };
 
 const RPCS: Record<string, unknown> = {
+  daily_pack_deals: [
+    {
+      pack_id: 'preview-booster',
+      pct: 15,
+      ends_at: new Date(Date.UTC(2100, 0, 1)).toISOString(),
+    },
+  ],
   get_bingo: BINGO,
   get_missions: MISSIONS,
   get_serialized_feed: SERIALIZED_FEED,

@@ -1371,6 +1371,12 @@ export interface MarketListing {
   cpu_leading?: boolean;
   /** Persona name of the CPU bidder, once one has bid. */
   cpu_bidder_name?: string | null;
+  /** Slab listings (20261012000007): the graded_cards row in escrow, and a
+   * snapshot of its grade, house and Pristine flag. */
+  graded_id?: string | null;
+  slab_grade?: number | null;
+  slab_service?: 'tca' | 'amg' | 'keeper' | null;
+  slab_pristine?: boolean;
 }
 
 /** Marketplace fee taken from the seller's proceeds — mirror of finalize_sale. */
@@ -1387,7 +1393,7 @@ export const MARKET_LIST_LIMIT = 200;
  * to every player by default.
  */
 const MARKET_LISTING_COLUMNS =
-  'id, seller, card_id, foil, quantity, listing_type, price, buyout, current_bid, current_bidder, bid_count, status, created_at, ends_at, cpu_leading, cpu_bidder_name';
+  'id, seller, card_id, foil, quantity, listing_type, price, buyout, current_bid, current_bidder, bid_count, status, created_at, ends_at, cpu_leading, cpu_bidder_name, graded_id, slab_grade, slab_service, slab_pristine';
 
 export async function fetchMarketListings(): Promise<MarketListing[]> {
   // Expired listings are swept by the 5-minute pg_cron job (the RPC is no
@@ -1807,6 +1813,11 @@ export interface ShopListingCardItem {
   card_id: string;
   foil: boolean;
   quantity: number;
+  /** Set when the item is a graded slab (20261012000009). */
+  graded_id?: string;
+  grade?: number;
+  service?: 'tca' | 'amg' | 'keeper';
+  pristine?: boolean;
 }
 
 export type ShopListingType = 'individual' | 'bundle' | 'mystery';
@@ -1826,6 +1837,8 @@ export interface ShopListing {
   total_packs: number | null;
   remaining_packs: number | null;
   ev_frozen: number | null;
+  /** The graded slab this listing holds in escrow (20261012000009). */
+  graded_id?: string | null;
   created_at: string;
 }
 
@@ -2173,6 +2186,20 @@ export async function createShopListing(
     p_slot_id: slotId,
     p_type: type,
     p_cards: cards,
+    p_price: price,
+  });
+  return rpcError(error);
+}
+
+/** Stock a graded slab from the Vault in an empty shop slot. */
+export async function createShopSlabListing(
+  slotId: string,
+  gradedId: string,
+  price: number,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('create_shop_slab_listing', {
+    p_slot_id: slotId,
+    p_graded_id: gradedId,
     p_price: price,
   });
   return rpcError(error);

@@ -88,9 +88,26 @@ import {
   revealGradedCards,
   quicksellGradedCard,
   crackGradedSlab,
+  crossoverSlab,
+  canCrossOver,
+  crossoverFee,
+  expectedCrossoverValue,
+  CROSSOVER_TARGETS,
+  fetchGradingOverview,
+  gradingMinCards,
+  weekSpecial,
+  type GradingOverview,
+  INSURANCE_FLOOR,
+  INSURANCE_RATE,
+  TRADE_IN_COUNT,
+  canTradeIn,
+  createSlabListing,
+  insurancePremium,
+  tradeInSlabs,
 } from './grading';
+import { HousesPanel, ServicePerks, WeeklySpecialBanner } from './GradingHouses';
 
-const TABS = ['submit', 'limbo', 'vault'] as const;
+const TABS = ['submit', 'limbo', 'vault', 'houses'] as const;
 type Tab = (typeof TABS)[number];
 type VaultSort = 'grade' | 'value' | 'newest';
 const isVaultSort = (v: unknown): v is VaultSort =>
@@ -145,7 +162,21 @@ const PendingSlab = React.memo(function PendingSlab({ g }: { g: GradedCard }) {
   const pct = turnaroundProgress(g, now);
   return (
     <div className="flex flex-col gap-1 w-fit">
-      <GradedSlab g={g} size="standard" progress={pct} />
+      {/* A crossover in progress keeps its old grade server-side; the case
+          shows as sealed until the new house's verdict is in. */}
+      <GradedSlab
+        g={
+          g.crossover_pending ? { ...g, grade: null, service: g.crossover_target ?? g.service } : g
+        }
+        size="standard"
+        progress={pct}
+      />
+      {g.crossover_pending && (
+        <span className="heading-font fs-xs text-center">
+          CROSSOVER → {GRADING_SERVICE_BY_ID[g.crossover_target ?? g.service].short} (keeps{' '}
+          {fmtGrade(g.grade!)} if not beaten)
+        </span>
+      )}
       <ProgressBar
         value={Math.round(pct * 100)}
         max={100}
@@ -281,8 +312,51 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
   }, [userId]);
 
   // 1s tick drives the limbo countdowns — only while something is pending.
-  const pending = useMemo(() => graded.filter((g) => g.grade == null), [graded]);
-  const vault = useMemo(() => graded.filter((g) => g.grade != null), [graded]);
+  const pending = useMemo(
+    () => graded.filter((g) => g.grade == null || g.crossover_pending),
+    [graded],
+  );
+  const vault = useMemo(
+    () => graded.filter((g) => g.grade != null && !g.crossover_pending),
+    [graded],
+  );
+  const [overview, setOverview] = useState<GradingOverview | null>(null);
+  const reloadOverview = React.useCallback(async () => {
+    const o = await fetchGradingOverview();
+    if (o) setOverview(o);
+  }, []);
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    void fetchGradingOverview().then((o) => {
+      if (!cancelled && o) setOverview(o);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+  const special = overview?.week_special ?? weekSpecial();
+  const favourite = overview?.collector_favourite ?? null;
+  const slabPrice = React.useCallback(
+    (g: GradedCard) => {
+      const def = POOL_BY_ID[g.card_id];
+      return def
+        ? gradedQuicksellPrice(def.rarity, g.foil, g.grade!, g.service, {
+            pristine: g.pristine,
+            favourite,
+          })
+        : 0;
+    },
+    [favourite],
+  );
+  const [crossFor, setCrossFor] = useState<string | null>(null);
+  const [insure, setInsure] = usePersistedState('grading:insure', false);
+  const [useToken, setUseToken] = useState(true);
+  const [tradeMode, setTradeMode] = useState(false);
+  const [tradePick, setTradePick] = useState<string[]>([]);
+  const [listFor, setListFor] = useState<string | null>(null);
+  const [listType, setListType] = useState<'fixed' | 'auction'>('auction');
+  const [listPrice, setListPrice] = useState('');
   // The screen only needs to re-render when a slab BECOMES ready, so one
   // timeout to the next ready time replaces the old 1s interval that
   // re-rendered this whole ~1,000-line screen every second. The per-second
@@ -361,9 +435,44 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     [basket],
   );
   const unitFee = gradingUnitFee(service, speed, basketCount);
-  const totalFee = unitFee * basketCount;
-  const voucherFee = gradingVoucherFee(totalFee);
-  const charged = currency === 'vouchers' ? voucherFee : totalFee;
+  const minCards = gradingMinCards(service);
+  // Mirror of submit_grading: the weekly special halves a line whose card is
+  // in the special colour, and a ready loyalty perk makes one card free (AMG,
+  // Keeper) — TCA's perk is a +0.5 instead, so its fee is unchanged.
+  const tokens = overview?.tokens ?? 0;
+  const tokenUsable = useToken && tokens > 0 && speed === 'standard';
+  // Per-card fees in submit order: the loyalty perk zeroes the first card
+  // (AMG / Keeper), a trade-in token the next one; insurance is 25% of each
+  // remaining fee.
+  const { totalFee, insuranceFee } = useMemo(() => {
+    let sum = 0;
+    let ins = 0;
+    let perk = (overview?.loyalty?.[service]?.perks_available ?? 0) > 0;
+    let token = tokenUsable;
+    for (const [key, qty] of basket) {
+      const def = POOL_BY_ID[key.split('|')[0]];
+      const halved =
+        special.service === service &&
+        (def?.colors ?? []).some((c: string) => c === special.colour);
+      const row = halved ? Math.ceil(unitFee / 2) : unitFee;
+      for (let i = 0; i < qty; i++) {
+        let fee = row;
+        if (perk) {
+          perk = false;
+          if (service !== 'tca') fee = 0;
+        } else if (token) {
+          token = false;
+          fee = 0;
+        }
+        sum += fee;
+        if (insure) ins += insurancePremium(fee);
+      }
+    }
+    return { totalFee: sum, insuranceFee: ins };
+  }, [basket, service, unitFee, special, overview, insure, tokenUsable]);
+  const payable = totalFee + insuranceFee;
+  const voucherFee = payable > 0 ? gradingVoucherFee(payable) : 0;
+  const charged = currency === 'vouchers' ? voucherFee : payable;
   const balance = currency === 'vouchers' ? (profile?.vouchers ?? 0) : (profile?.credits ?? 0);
   const bulkOff = Math.round((1 - gradingBulkMult(service, basketCount)) * 100);
 
@@ -380,19 +489,12 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
   }, [basket, service]);
 
   const vaultValue = useMemo(
-    () =>
-      vault.reduce((sum, g) => {
-        const def = POOL_BY_ID[g.card_id];
-        return sum + (def ? gradedQuicksellPrice(def.rarity, g.foil, g.grade!, g.service) : 0);
-      }, 0),
-    [vault],
+    () => vault.reduce((sum, g) => sum + slabPrice(g), 0),
+    [vault, slabPrice],
   );
 
   const sortedVault = useMemo(() => {
-    const value = (g: GradedCard) => {
-      const def = POOL_BY_ID[g.card_id];
-      return def ? gradedQuicksellPrice(def.rarity, g.foil, g.grade!, g.service) : 0;
-    };
+    const value = slabPrice;
     const rows = [...vault];
     if (vaultSort === 'grade')
       rows.sort((a, b) => (b.grade ?? 0) - (a.grade ?? 0) || value(b) - value(a));
@@ -404,7 +506,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
           new Date(a.revealed_at ?? a.submitted_at).getTime(),
       );
     return rows;
-  }, [vault, vaultSort]);
+  }, [vault, vaultSort, slabPrice]);
 
   const bump = (cardId: string, foil: boolean, delta: number, max: number) => {
     setBasket((prev) => {
@@ -427,7 +529,10 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
         const [card_id, foil] = key.split('|');
         return { card_id, qty, foil: foil === 'true' };
       });
-      const { data, error } = await submitGrading(items, service, speed, currency);
+      const { data, error } = await submitGrading(items, service, speed, currency, {
+        insure,
+        useToken: tokenUsable,
+      });
       if (error || !data) {
         setError(error || 'Something went wrong — check your connection and try again.');
         return;
@@ -442,7 +547,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
           ? `Submitted ${items.reduce((a, i) => a + i.qty, 0)} card(s) for ${paid} — instant service: your grades are ready to reveal!`
           : `Submitted for ${paid} — your cards are with the graders now.`,
       );
-      await Promise.all([refreshProfile(), refreshCollection(), reload()]);
+      await Promise.all([refreshProfile(), refreshCollection(), reload(), reloadOverview()]);
       setTab('limbo');
     } finally {
       setBusy(false);
@@ -454,14 +559,26 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     setBusy(true);
     setError('');
     try {
-      const { revealed, error } = await revealGradedCards();
+      const { revealed, registry, refunded, error } = await revealGradedCards();
       if (error) {
         setError(error);
         return;
       }
+      if (registry.length > 0) {
+        setNotice(
+          'Set Registry: ' +
+            registry.map((r) => `${r.colour} ${r.milestone}% (+${fmtCredits(r.bonus)})`).join(', '),
+        );
+        void refreshProfile();
+      }
+      if (refunded > 0) {
+        setNotice((n) => `${n ? n + ' · ' : ''}Grade insurance refunded ${fmtCredits(refunded)}.`);
+        void refreshProfile();
+      }
+      void reloadOverview();
       if (revealed.length > 0) {
         setCeremony(revealed);
-        setNotice('');
+        if (registry.length === 0) setNotice('');
       } else {
         // The server disagreed that anything was due — a clock skew between
         // this browser and the database, which the countdown alone would leave
@@ -486,6 +603,71 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
       }
       setNotice(`Sold for ${fmtCredits(data.price)}.`);
       await Promise.all([refreshProfile(), reload()]);
+    } finally {
+      setSlabBusy(null);
+    }
+  };
+
+  const crossSlab = async (g: GradedCard, target: GradingService) => {
+    if (slabBusy) return;
+    setSlabBusy(g.id);
+    setError('');
+    try {
+      const { error } = await crossoverSlab(g.id, target);
+      if (error) {
+        setError(error);
+        return;
+      }
+      setCrossFor(null);
+      setNotice(
+        `Sent to ${GRADING_SERVICE_BY_ID[target].short} for a crossover — it keeps its ${fmtGrade(g.grade!)} unless the new grade is higher.`,
+      );
+      await Promise.all([refreshProfile(), reload()]);
+      setTab('limbo');
+    } finally {
+      setSlabBusy(null);
+    }
+  };
+
+  const tradeIn = async () => {
+    if (busy || tradePick.length !== TRADE_IN_COUNT) return;
+    setBusy(true);
+    setError('');
+    try {
+      const { data, error } = await tradeInSlabs(tradePick);
+      if (error || !data) {
+        setError(error || 'Something went wrong — check your connection and try again.');
+        return;
+      }
+      setNotice(
+        `Traded in ${TRADE_IN_COUNT} slabs — you now hold ${data.tokens} free-grading token${data.tokens === 1 ? '' : 's'} (any house, standard speed).`,
+      );
+      setTradeMode(false);
+      setTradePick([]);
+      await Promise.all([reload(), reloadOverview()]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const listSlab = async (g: GradedCard) => {
+    const price = Math.floor(Number(listPrice));
+    if (slabBusy || !(price >= 1)) return;
+    setSlabBusy(g.id);
+    setError('');
+    try {
+      const { data, error } = await createSlabListing(g.id, listType, price);
+      if (error || !data) {
+        setError(error || 'Something went wrong — check your connection and try again.');
+        return;
+      }
+      setListFor(null);
+      setNotice(
+        listType === 'auction'
+          ? `Listed at auction. The CPU collector on it favours ${GRADING_SERVICE_BY_ID[data.cpu_favourite].short} slabs.`
+          : 'Listed on the Marketplace.',
+      );
+      await reload();
     } finally {
       setSlabBusy(null);
     }
@@ -546,6 +728,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                 badge: dueCount > 0 ? 'READY' : undefined,
               },
               { id: 'vault', label: `MY SLABS (${vault.length})` },
+              { id: 'houses', label: 'HOUSES & REGISTRY' },
             ]}
           />
           <PopButton
@@ -563,6 +746,10 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
           {error && <Notice text={error} />}
           {notice && !error && <Notice text={notice} kind="success" />}
         </div>
+
+        {(tab === 'submit' || tab === 'houses') && <WeeklySpecialBanner overview={overview} />}
+
+        {tab === 'houses' && <HousesPanel overview={overview} vault={vault} />}
 
         {tab === 'submit' && (
           <>
@@ -708,7 +895,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
             <Step
               n={2}
               title="PICK A SERVICE"
-              hint="All three roll the same grade table — the fee buys resale premium, not a better grade."
+              hint="Each house wins somewhere: Keeper on cheap cards, AMG in the middle and for registries, TCA at the top."
             />
             <div className="grid sm:grid-cols-3 gap-3">
               {GRADING_SERVICES.map((s) => {
@@ -744,6 +931,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                       <dt className="text-[var(--c-steel)]">Chance of 9+</dt>
                       <dd className="text-right">{Math.round(chanceOfAtLeast(s.id, 9) * 100)}%</dd>
                     </dl>
+                    <ServicePerks service={s.id} />
                   </button>
                 );
               })}
@@ -881,14 +1069,135 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                     </button>
                   ))}
                 </div>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <PopButton
+                    color={tradeMode ? 'yellow' : 'steel'}
+                    className="!px-2 !py-1 !text-[11px]"
+                    onClick={() => {
+                      setTradeMode(!tradeMode);
+                      setTradePick([]);
+                    }}
+                    title={`Trade ${TRADE_IN_COUNT} slabs graded below 7 for one free grading at any house (standard speed). The slabs are destroyed.`}
+                  >
+                    {tradeMode ? 'CANCEL TRADE-IN' : `TRADE-IN (${TRADE_IN_COUNT} SLABS UNDER 7)`}
+                  </PopButton>
+                  {tradeMode && (
+                    <PopButton
+                      color="red"
+                      className="!px-2 !py-1 !text-[11px]"
+                      disabled={busy || tradePick.length !== TRADE_IN_COUNT}
+                      onClick={() => void tradeIn()}
+                    >
+                      DESTROY {tradePick.length}/{TRADE_IN_COUNT} FOR A TOKEN
+                    </PopButton>
+                  )}
+                  {(overview?.tokens ?? 0) > 0 && (
+                    <span className="fs-xs font-bold">
+                      {overview?.tokens} free-grading token{overview?.tokens === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-3">
                   {sortedVault.map((g) => {
                     const def = POOL_BY_ID[g.card_id];
                     if (!def) return null;
-                    const price = gradedQuicksellPrice(def.rarity, g.foil, g.grade!, g.service);
+                    const price = slabPrice(g);
+                    const listed = !!g.listing_id;
+                    if (tradeMode) {
+                      const ok = canTradeIn(g);
+                      const picked = tradePick.includes(g.id);
+                      return (
+                        <div key={g.id} className={cn('w-fit', !ok && 'opacity-40')}>
+                          <GradedSlab
+                            g={g}
+                            size="standard"
+                            selected={picked}
+                            onClick={
+                              ok
+                                ? () =>
+                                    setTradePick((p) =>
+                                      picked
+                                        ? p.filter((x) => x !== g.id)
+                                        : p.length < TRADE_IN_COUNT
+                                          ? [...p, g.id]
+                                          : p,
+                                    )
+                                : undefined
+                            }
+                          />
+                        </div>
+                      );
+                    }
+                    if (listed) {
+                      return (
+                        <div key={g.id} className="flex flex-col gap-1.5 w-fit">
+                          <GradedSlab g={g} size="standard" />
+                          <span className="heading-font fs-xs text-center px-1 py-0.5 ink-border-sm bg-[var(--c-ink)] text-[var(--c-yellow)]">
+                            LISTED FOR SALE (MARKET OR SHOP)
+                          </span>
+                        </div>
+                      );
+                    }
                     return (
                       <div key={g.id} className="flex flex-col gap-1.5 w-fit">
                         <GradedSlab g={g} size="standard" />
+                        {listFor === g.id ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex gap-1">
+                              {(['auction', 'fixed'] as const).map((t) => (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  aria-pressed={listType === t}
+                                  onClick={() => setListType(t)}
+                                  className={cn(
+                                    'heading-font fs-xs px-2 py-1 ink-border-sm',
+                                    listType === t && 'bg-[var(--c-yellow)]',
+                                  )}
+                                >
+                                  {t.toUpperCase()}
+                                </button>
+                              ))}
+                            </div>
+                            <input
+                              className="ink-border-sm px-2 py-1 text-xs font-bold w-full"
+                              inputMode="numeric"
+                              aria-label={listType === 'auction' ? 'Starting bid' : 'Price'}
+                              placeholder={`${listType === 'auction' ? 'Start' : 'Price'} (house pays ${price})`}
+                              value={listPrice}
+                              onChange={(e) => setListPrice(e.target.value.replace(/[^0-9]/g, ''))}
+                            />
+                            <div className="flex gap-1">
+                              <PopButton
+                                color="black"
+                                className="!px-2 !py-1 !text-[11px]"
+                                disabled={slabBusy === g.id || !listPrice}
+                                onClick={() => void listSlab(g)}
+                              >
+                                LIST
+                              </PopButton>
+                              <PopButton
+                                color="steel"
+                                className="!px-2 !py-1 !text-[11px]"
+                                onClick={() => setListFor(null)}
+                              >
+                                CANCEL
+                              </PopButton>
+                            </div>
+                          </div>
+                        ) : (
+                          <PopButton
+                            color="steel"
+                            className="!px-2 !py-1 !text-[11px]"
+                            onClick={() => {
+                              setListFor(g.id);
+                              setListPrice('');
+                            }}
+                            title="Sell to players and CPU collectors on the Marketplace. CPU bidders each favour one house."
+                          >
+                            LIST ON MARKET
+                          </PopButton>
+                        )}
                         {onShowroom && (
                           <PopButton
                             color="black"
@@ -913,6 +1222,41 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                             </span>
                           )}
                         </PopButton>
+                        {canCrossOver(g) &&
+                          (crossFor === g.id ? (
+                            <div className="flex flex-col gap-1">
+                              {CROSSOVER_TARGETS.map((t) => (
+                                <PopButton
+                                  key={t}
+                                  color="black"
+                                  className="!px-2 !py-1 !text-[11px]"
+                                  disabled={
+                                    slabBusy === g.id || (profile?.credits ?? 0) < crossoverFee(t)
+                                  }
+                                  onClick={() => void crossSlab(g, t)}
+                                  title={`Average after crossover: ${fmtCredits(expectedCrossoverValue(def.rarity, g.foil, g.grade!, t))}`}
+                                >
+                                  → {GRADING_SERVICE_BY_ID[t].short} · {fmtCredits(crossoverFee(t))}
+                                </PopButton>
+                              ))}
+                              <PopButton
+                                color="steel"
+                                className="!px-2 !py-1 !text-[11px]"
+                                onClick={() => setCrossFor(null)}
+                              >
+                                CANCEL
+                              </PopButton>
+                            </div>
+                          ) : (
+                            <PopButton
+                              color="steel"
+                              className="!px-2 !py-1 !text-[11px]"
+                              onClick={() => setCrossFor(g.id)}
+                              title="Send this Keeper slab to TCA or AMG once, for their full fee. The grade never goes down."
+                            >
+                              CROSS OVER
+                            </PopButton>
+                          ))}
                         {crackConfirm === g.id ? (
                           <div className="flex gap-1">
                             <PopButton
@@ -970,9 +1314,39 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                 {currency === 'vouchers' ? (
                   <Vouchers amount={voucherFee} />
                 ) : (
-                  <Credits amount={totalFee} />
+                  <Credits amount={payable} />
+                )}
+                {insure && insuranceFee > 0 && (
+                  <span className="fs-xs opacity-80">
+                    (incl. {fmtCredits(insuranceFee)} insurance)
+                  </span>
                 )}
               </span>
+              <label
+                className="heading-font fs-xs flex items-center gap-1 min-h-6 cursor-pointer"
+                title={`Insurance: +${Math.round(INSURANCE_RATE * 100)}% of the fee. A grade below ${INSURANCE_FLOOR} refunds the base fee; the premium is never refunded.`}
+              >
+                <input
+                  type="checkbox"
+                  checked={insure}
+                  onChange={(e) => setInsure(e.target.checked)}
+                />
+                INSURE (+{Math.round(INSURANCE_RATE * 100)}%, refund under {INSURANCE_FLOOR})
+              </label>
+              {tokens > 0 && (
+                <label
+                  className="heading-font fs-xs flex items-center gap-1 min-h-6 cursor-pointer"
+                  title="A trade-in token grades one card free at standard speed"
+                >
+                  <input
+                    type="checkbox"
+                    checked={useToken}
+                    disabled={speed !== 'standard'}
+                    onChange={(e) => setUseToken(e.target.checked)}
+                  />
+                  USE TOKEN ({tokens}){speed !== 'standard' ? ' · STANDARD ONLY' : ''}
+                </label>
+              )}
               <button
                 type="button"
                 onClick={() => setPayDetailsOpen(!payDetailsOpen)}
@@ -986,13 +1360,15 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                 color="yellow"
                 className="ml-auto"
                 onClick={() => void submit()}
-                disabled={busy || charged > balance}
+                disabled={busy || charged > balance || basketCount < minCards}
               >
                 {busy
                   ? 'SUBMITTING…'
-                  : charged > balance
-                    ? `NOT ENOUGH ${currency === 'vouchers' ? 'VOUCHERS' : 'CREDITS'}`
-                    : 'SUBMIT ▸'}
+                  : basketCount < minCards
+                    ? `${GRADING_SERVICE_BY_ID[service].short} NEEDS ${minCards}+ CARDS`
+                    : charged > balance
+                      ? `NOT ENOUGH ${currency === 'vouchers' ? 'VOUCHERS' : 'CREDITS'}`
+                      : 'SUBMIT ▸'}
               </PopButton>
             </div>
             {payDetailsOpen && (
@@ -1017,7 +1393,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                         (
                           id === 'vouchers'
                             ? profile.vouchers < voucherFee
-                            : profile.credits < totalFee
+                            : profile.credits < payable
                         )
                           ? { opacity: 0.6 }
                           : undefined
@@ -1043,7 +1419,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                   {currency === 'vouchers' ? (
                     <Vouchers amount={voucherFee} />
                   ) : (
-                    <Credits amount={totalFee} />
+                    <Credits amount={payable} />
                   )}
                   <span className="text-[var(--c-paper)]/70">
                     {' '}

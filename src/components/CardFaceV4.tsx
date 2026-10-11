@@ -59,6 +59,7 @@ import {
 import { useFocusTrap } from './useFocusTrap';
 import { COLOR_PIP, colorBg } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
+import { CARD_SIZES, type CardSize } from './cardSizes';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -1435,18 +1436,8 @@ function CardArtBase({
 }
 const CardArt = React.memo(CardArtBase);
 
-/** The fixed pixel sizes for `CardFace`'s `size` prop — exported so any
- * wrapper that needs to reserve exact space for a card can read the real
- * dimensions instead of hardcoding a magic number. */
-export const CARD_SIZES = {
-  micro: { w: 78, h: 109 },
-  compact: { w: 110, h: 154 },
-  standard: { w: 140, h: 196 },
-  full: { w: 240, h: 336 },
-} as const;
+export { CARD_SIZES, type CardSize };
 const SIZES = CARD_SIZES;
-
-export type CardSize = keyof typeof SIZES;
 
 /** Hand-tuned per-tier presentation values. `compact` and `standard` are NOT
  * just a linear shrink of `full` — each tier gets its own font sizes, border

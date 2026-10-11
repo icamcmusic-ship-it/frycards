@@ -3,7 +3,7 @@ import { useRouteTab } from './useHashRouter';
 import { msUntilNextUtcMidnight } from './utcReset';
 import { bountySellBlockedWhy } from './sellable';
 import { loadPackHistory, PackHistoryEntry } from './packHistory';
-import { Package, Percent, Backpack, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, Percent, Sparkles } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   openPack,
@@ -23,7 +23,7 @@ import {
   BountyCard,
   Profile,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, Credits, Vouchers, Tabs } from './ui';
+import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
 import { cn } from '../lib/utils';
 import { RARITY_CHIP, ALL_SET_NAMES, RARITY_ORDER } from './rarity';
 import { SafeImage } from './SafeImage';
@@ -42,6 +42,12 @@ import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/poker/cardpool';
 import { CardDef } from '../game/poker/cards';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
+import { PackArt } from './pack/PackArt';
+import { packColor, packIconCandidates } from './pack/packArt';
+import { PackTile, StoreHero, WhatsInside, leavingIn } from './pack/StoreParts';
+import { fetchDailyDeals, type DailyDeal, type StorePack } from '../lib/storeApi';
+import { loadWishlist } from './wishlist';
+import { packCardCount } from './packodds';
 
 function bountyDefFor(card: BountyCard): CardDef {
   return (
@@ -160,6 +166,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
   const ownedCosmetics = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
 
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTs(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
   // Only active, directly purchasable packs belong on the shelf — inactive or
   // reward-only packs used to render buy buttons that the server rejected.
   const buyablePacks = useMemo(
@@ -168,10 +179,25 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         (p) =>
           p.is_active &&
           p.acquisition === 'purchase' &&
-          (p.price_credits != null || p.price_vouchers != null),
-      ),
-    [packTypes],
+          (p.price_credits != null || p.price_vouchers != null) &&
+          // B4: a limited pack leaves the shelf at available_until.
+          !(
+            (p as StorePack).available_until &&
+            new Date((p as StorePack).available_until!).getTime() <= nowTs
+          ),
+      ) as StorePack[],
+    [packTypes, nowTs],
   );
+  // B2: today's deal (server-enforced price in every buy RPC).
+  const [deals, setDeals] = useState<DailyDeal[]>([]);
+  useEffect(() => {
+    let live = true;
+    void fetchDailyDeals().then((d) => live && setDeals(d));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const dealPct = (id: string) => deals.find((d) => d.pack_id === id)?.pct;
 
   // Standalone tiles render one-to-one. Grouped tiles (rows sharing a
   // pack_group — used when multiple set variants of a pack were live)
@@ -180,11 +206,17 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   // standalone tiles (Volume #1 Booster Pack + Booster Box) and no pack_group
   // rows exist, so the grouped path is currently dormant but kept for future
   // multi-set drops.
-  const standalonePacks = useMemo(() => buyablePacks.filter((p) => !p.pack_group), [buyablePacks]);
+  // Colour packs carry a `color_*` pack_group for their wrapper colour; they
+  // are standalone tiles, not set variants.
+  const isSetVariant = (p: PackType) => !!p.pack_group && !p.pack_group.startsWith('color_');
+  const standalonePacks = useMemo(
+    () => buyablePacks.filter((p) => !isSetVariant(p)),
+    [buyablePacks],
+  );
   const groupedPackTiles = useMemo(() => {
-    const groups = new Map<string, PackType[]>();
+    const groups = new Map<string, StorePack[]>();
     for (const p of buyablePacks) {
-      if (!p.pack_group) continue;
+      if (!p.pack_group || !isSetVariant(p)) continue;
       const list = groups.get(p.pack_group) ?? [];
       list.push(p);
       groups.set(p.pack_group, list);
@@ -195,15 +227,22 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     }));
   }, [buyablePacks]);
 
+  // Featured: limited (leaving soonest first), then today's deal.
+  const featuredPacks = useMemo(() => {
+    const limited = standalonePacks
+      .filter((p) => leavingIn(p.available_until, nowTs))
+      .sort((a, b) => (a.available_until ?? '').localeCompare(b.available_until ?? ''));
+    const deal = standalonePacks.filter((p) => dealPct(p.id) && !limited.includes(p));
+    return [...limited, ...deal];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [standalonePacks, deals, nowTs]);
+  const shelfPacks = standalonePacks.filter((p) => !featuredPacks.includes(p));
+  const heroPack: StorePack | undefined = featuredPacks[0] ?? standalonePacks[0];
+
   const dailyPack = packTypes.find((p) => p.acquisition === 'daily_free' && p.is_active);
   // Ticks once a minute so the daily-pack countdown/READY state flips on its
   // own instead of staying frozen at whatever "now" was when the screen
   // first mounted (previously only updated by leaving and re-entering Store).
-  const [nowTs, setNowTs] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNowTs(Date.now()), 60_000);
-    return () => window.clearInterval(id);
-  }, []);
   const dailyReadyAt = profile?.last_free_pack_at
     ? new Date(profile.last_free_pack_at).getTime() + DAILY_PACK_COOLDOWN_MS
     : 0;
@@ -504,17 +543,28 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
+        {/* A1 + B1: storefront hero */}
+        {tab === 'packs' && heroPack && (
+          <StoreHero
+            pack={heroPack}
+            dealPct={dealPct(heroPack.id)}
+            now={nowTs}
+            onOpen={() =>
+              void handleOpenPack(heroPack, heroPack.price_credits != null ? 'credits' : 'vouchers')
+            }
+            onInside={() => setOddsPack(heroPack)}
+          />
+        )}
+
         {/* Daily free pack */}
         {tab === 'packs' && profile && dailyPack && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 bg-[var(--c-paper)] ink-border-md shadow-hard-black p-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-16 h-12 ink-border-sm overflow-hidden shrink-0 bg-[var(--c-ink)]">
-                <SafeImage
-                  boxWidth={64}
-                  src={dailyPack.image_url}
-                  alt={dailyPack.name}
-                  className="w-full h-full object-contain"
-                  fallbackText={dailyPack.name}
+              <div className="w-12 h-16 ink-border-sm overflow-hidden shrink-0 bg-[#111]">
+                <PackArt
+                  candidates={packIconCandidates(dailyPack)}
+                  name={dailyPack.name}
+                  color={packColor(dailyPack)}
                 />
               </div>
               <div className="min-w-0">
@@ -547,37 +597,70 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         )}
 
         {tab === 'packs' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {standalonePacks.map((pack) => (
-              <PackTile
-                key={pack.id}
-                variants={[pack]}
-                profile={profile}
-                busyId={busyId}
-                onBuy={handleOpenPack}
-                onBuyBulk={handleOpenPacksBulk}
-                onSaveForLater={handleBuyToInventory}
-                onViewOdds={setOddsPack}
-              />
-            ))}
-            {groupedPackTiles.map(({ group, variants }) => (
-              <PackTile
-                key={group}
-                variants={variants}
-                profile={profile}
-                busyId={busyId}
-                onBuy={handleOpenPack}
-                onBuyBulk={handleOpenPacksBulk}
-                onSaveForLater={handleBuyToInventory}
-                onViewOdds={setOddsPack}
-              />
-            ))}
-            {buyablePacks.length === 0 && (
-              <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-10">
-                No packs are on the shelf right now — check back soon.
-              </div>
+          <>
+            {featuredPacks.length > 0 && (
+              <>
+                <h2 className="heading-font text-sm mb-2">FEATURED</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
+                  {featuredPacks.map((pack) => (
+                    <PackTile
+                      key={pack.id}
+                      variants={[pack]}
+                      profile={profile}
+                      busyId={busyId}
+                      dealPct={dealPct}
+                      now={nowTs}
+                      bulkCap={bulkCapFor}
+                      onBuy={handleOpenPack}
+                      onBuyBulk={handleOpenPacksBulk}
+                      onSaveForLater={handleBuyToInventory}
+                      onViewOdds={setOddsPack}
+                    />
+                  ))}
+                </div>
+                {(shelfPacks.length > 0 || groupedPackTiles.length > 0) && (
+                  <h2 className="heading-font text-sm mb-2">ALL PACKS</h2>
+                )}
+              </>
             )}
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {shelfPacks.map((pack) => (
+                <PackTile
+                  key={pack.id}
+                  variants={[pack]}
+                  profile={profile}
+                  busyId={busyId}
+                  dealPct={dealPct}
+                  now={nowTs}
+                  bulkCap={bulkCapFor}
+                  onBuy={handleOpenPack}
+                  onBuyBulk={handleOpenPacksBulk}
+                  onSaveForLater={handleBuyToInventory}
+                  onViewOdds={setOddsPack}
+                />
+              ))}
+              {groupedPackTiles.map(({ group, variants }) => (
+                <PackTile
+                  key={group}
+                  variants={variants}
+                  profile={profile}
+                  busyId={busyId}
+                  dealPct={dealPct}
+                  now={nowTs}
+                  bulkCap={bulkCapFor}
+                  onBuy={handleOpenPack}
+                  onBuyBulk={handleOpenPacksBulk}
+                  onSaveForLater={handleBuyToInventory}
+                  onViewOdds={setOddsPack}
+                />
+              ))}
+              {buyablePacks.length === 0 && (
+                <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-10">
+                  No packs are on the shelf right now — check back soon.
+                </div>
+              )}
+            </div>
+          </>
         ) : tab === 'my_packs' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {inventory
@@ -836,6 +919,8 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
   const rows = packOdds(pack);
   const expected = expectedRarities(pack);
   const foilOdds = packFoilChance(pack);
+  const { collection, profile } = useMeta();
+  const wishlist = useMemo(() => loadWishlist(profile?.id), [profile?.id]);
 
   useEscapeClose(onClose);
 
@@ -862,7 +947,7 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
           <div>
             <div className="heading-font text-sm text-[var(--c-yellow)]">{pack.name}</div>
             <div className="fs-xs font-bold text-[var(--c-paper)]/70">
-              DROP ODDS · {pack.card_count} CARDS PER{' '}
+              WHAT&apos;S INSIDE · {packCardCount(pack)} CARDS PER{' '}
               {pack.pack_tier === 'booster_box' ? 'BOX' : 'PACK'}
             </div>
           </div>
@@ -872,13 +957,14 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
         </div>
 
         <div className="p-4">
+          <WhatsInside pack={pack as StorePack} collection={collection ?? []} wishlist={wishlist} />
           <div className="fs-xs font-bold text-[var(--c-steel)] mb-1">
             Every pack is rolled slot by slot. These are the configured odds for each slot; the
             notes below cover the extras the server adds on top.
           </div>
           <div className="fs-xs font-bold text-[var(--c-steel)] mb-3">
             Every pack also has a {(SERIALIZED_PULL_CHANCE * 100).toFixed(0)}% chance of one extra
-            Serialized card, on top of the {pack.card_count} above.
+            Serialized card, on top of the {packCardCount(pack)} above.
           </div>
 
           <div className="fs-xs font-bold text-[var(--c-steel)] mb-3">
@@ -982,232 +1068,6 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
             ))}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** Shared shelf tile for a pack (or a swipeable group of same-slot set
- * variants — set boosters / set boxes). `variants.length === 1` renders as a
- * plain standalone tile; `> 1` adds a set-picker before the buy buttons. */
-function PackTile({
-  variants,
-  profile,
-  busyId,
-  onBuy,
-  onBuyBulk,
-  onSaveForLater,
-  onViewOdds,
-}: {
-  key?: React.Key;
-  variants: PackType[];
-  profile: Profile | null;
-  busyId: string | null;
-  onBuy: (pack: PackType, currency: 'credits' | 'vouchers') => void;
-  onBuyBulk: (pack: PackType, count: number, currency: 'credits' | 'vouchers') => void;
-  onSaveForLater: (pack: PackType, currency: 'credits' | 'vouchers') => void;
-  onViewOdds: (pack: PackType) => void;
-}) {
-  const [idx, setIdx] = useState(0);
-  const grouped = variants.length > 1;
-  const pack = variants[Math.min(idx, variants.length - 1)];
-
-  return (
-    <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black flex flex-col overflow-hidden">
-      <div className="flex justify-between items-center px-3 py-1.5 bg-[var(--c-ink)]">
-        <span className="heading-font text-[11px] text-[var(--c-yellow)] truncate">
-          {pack.name}
-        </span>
-        <span className="fs-xs font-mono font-bold text-[var(--c-paper)] uppercase shrink-0">
-          {(pack.pack_tier || 'standard').replace(/_/g, ' ')}
-        </span>
-      </div>
-      <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative bg-[var(--c-ink)]">
-        <SafeImage
-          boxWidth={320}
-          src={pack.image_url}
-          alt={pack.name}
-          className="w-full h-full object-contain"
-          fallbackText={pack.name}
-        />
-        <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font fs-xs px-1.5 ink-border-sm flex items-center gap-1">
-          <Package className="w-3 h-3" /> {pack.card_count} CARDS
-        </span>
-        {pack.guaranteed_rarity && (
-          <span
-            className={cn(
-              'absolute bottom-1 right-1 heading-font fs-xs px-1.5 ink-border-sm',
-              RARITY_CHIP[pack.guaranteed_rarity] || RARITY_CHIP.Common,
-            )}
-          >
-            {pack.guaranteed_rarity}+ GUARANTEED
-          </span>
-        )}
-        {grouped && (
-          <div className="absolute inset-x-0 top-1 flex items-center justify-between px-1">
-            <button
-              onClick={() => setIdx((i) => (i - 1 + variants.length) % variants.length)}
-              className="w-10 h-10 flex items-center justify-center bg-[var(--c-ink)]/80 text-[var(--c-paper)] ink-border-sm"
-              title="Previous set"
-              aria-label="Previous set"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <div className="flex items-center gap-1 bg-[var(--c-ink)]/80 px-1.5 py-0.5 ink-border-sm">
-              {variants.map((v, i) => (
-                <span
-                  key={v.id}
-                  className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    i === idx ? 'bg-[var(--c-yellow)]' : 'bg-[var(--c-paper)]/40',
-                  )}
-                />
-              ))}
-            </div>
-            <button
-              onClick={() => setIdx((i) => (i + 1) % variants.length)}
-              className="w-10 h-10 flex items-center justify-center bg-[var(--c-ink)]/80 text-[var(--c-paper)] ink-border-sm"
-              title="Next set"
-              aria-label="Next set"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
-      <p className="text-[11px] font-bold text-[var(--c-steel)] px-3 flex-1">{pack.description}</p>
-      <p className="fs-xs font-bold text-[var(--c-steel)]/80 px-3 mt-1">
-        Includes: {packSetsLine(pack)}
-      </p>
-      <button
-        onClick={() => onViewOdds(pack)}
-        className="mx-3 mt-1 py-2 self-start flex items-center gap-1 fs-xs font-black text-[var(--c-steel)] underline decoration-2 underline-offset-2 hover:text-[var(--c-ink)]"
-      >
-        <Percent className="w-3 h-3" /> VIEW DROP ODDS
-      </button>
-      <div className="flex gap-2 p-3 pb-1.5">
-        {pack.price_credits != null && (
-          <div className="flex-1 min-w-0">
-            <PopButton
-              color="yellow"
-              className="w-full"
-              disabled={!profile || profile.credits < pack.price_credits || !!busyId}
-              title={
-                profile && profile.credits < pack.price_credits ? 'Not enough credits' : undefined
-              }
-              onClick={() => onBuy(pack, 'credits')}
-            >
-              {busyId === pack.id ? (
-                'OPENING…'
-              ) : pack.price_credits === 0 ? (
-                'OPEN · FREE'
-              ) : (
-                // U39: a verb on the primary button, not a bare price.
-                <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
-                  BUY &amp; OPEN · <Credits amount={pack.price_credits} />
-                </span>
-              )}
-            </PopButton>
-            {profile && profile.credits < pack.price_credits && (
-              <div className="mt-1 flex items-center justify-center gap-0.5 fs-xs font-black text-[var(--c-steel)]">
-                <Credits amount={pack.price_credits - profile.credits} /> SHORT
-              </div>
-            )}
-          </div>
-        )}
-        {/* `price_vouchers` 0 means "not voucher-purchasable", same as the
-            cosmetics grid below and ProfileScreen document — a bare `!= null`
-            rendered a free 0 VOUCHERS buy button on such a row (v23). */}
-        {pack.price_vouchers != null && pack.price_vouchers > 0 && (
-          <div className="flex-1 min-w-0">
-            <PopButton
-              color="steel"
-              className="w-full"
-              disabled={!profile || profile.vouchers < pack.price_vouchers || !!busyId}
-              title={
-                profile && profile.vouchers < pack.price_vouchers
-                  ? 'Not enough vouchers'
-                  : undefined
-              }
-              onClick={() => onBuy(pack, 'vouchers')}
-            >
-              {busyId === pack.id ? (
-                'OPENING…'
-              ) : (
-                <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
-                  OPEN · <Vouchers amount={pack.price_vouchers} />
-                </span>
-              )}
-            </PopButton>
-            {profile && profile.vouchers < pack.price_vouchers && (
-              <div className="mt-1 text-center fs-xs font-black text-[var(--c-steel)]">
-                {fmtVouchers(pack.price_vouchers - profile.vouchers)} SHORT
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      {/* Mass opening: buy-and-open several copies in one rip. The offered
-          multiples are clamped to what one reveal can hold, so a 49-card box
-          offers ×5 rather than a ×10 that would deal out 490 cards. */}
-      {pack.price_credits != null && pack.price_credits > 0 && (
-        <div className="mx-3 mb-1.5 flex gap-1.5">
-          {[5, 10]
-            .filter((n) => n <= bulkCapFor(pack))
-            .map((n) => (
-              <button
-                key={n}
-                disabled={!profile || !!busyId || profile.credits < pack.price_credits! * n}
-                onClick={() => onBuyBulk(pack, n, 'credits')}
-                className="flex-1 min-h-10 flex items-center justify-center gap-1 fs-xs font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {busyId === 'bulk:' + pack.id + ':' + n ? (
-                  'OPENING…'
-                ) : (
-                  <>
-                    {/* U40: no padded parentheses. */}
-                    OPEN {n} · <Credits amount={pack.price_credits! * n} />
-                  </>
-                )}
-              </button>
-            ))}
-        </div>
-      )}
-      <div className="mx-3 mb-3 flex gap-1.5">
-        {pack.price_credits != null && (
-          <button
-            disabled={!profile || !!busyId || profile.credits < pack.price_credits}
-            onClick={() => onSaveForLater(pack, 'credits')}
-            className="flex-1 min-h-10 flex items-center justify-center gap-1 fs-xs font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Backpack className="w-3 h-3" />
-            {busyId === 'inv:' + pack.id + ':credits' ? (
-              'BUYING…'
-            ) : pack.price_credits === 0 ? (
-              'SAVE FOR LATER · FREE'
-            ) : (
-              <>
-                SAVE FOR LATER · <Credits amount={pack.price_credits} />
-              </>
-            )}
-          </button>
-        )}
-        {pack.price_vouchers != null && pack.price_vouchers > 0 && (
-          <button
-            disabled={!profile || !!busyId || profile.vouchers < pack.price_vouchers}
-            onClick={() => onSaveForLater(pack, 'vouchers')}
-            className="flex-1 min-h-10 flex items-center justify-center gap-1 fs-xs font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Backpack className="w-3 h-3" />
-            {busyId === 'inv:' + pack.id + ':vouchers' ? (
-              'BUYING…'
-            ) : (
-              <>
-                SAVE FOR LATER · <Vouchers amount={pack.price_vouchers} />
-              </>
-            )}
-          </button>
-        )}
       </div>
     </div>
   );

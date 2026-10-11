@@ -83,7 +83,7 @@ player submits link ──► pending ──(Creator: APPROVE, one RPC)──►
                                         │  art = player's link (works at once)
                                         ▼
                                art_status = pending   "ART PENDING"
-                                        │  scheduled Action, every 3 h
+                                        │  manual Action run (daily fallback)
                                         ▼
        download → sharp webp 1200px / ffmpeg 480p mp4 → Cloudflare Pages
                                         ▼
@@ -96,7 +96,15 @@ player submits link ──► pending ──(Creator: APPROVE, one RPC)──►
   `art_status = 'pending'`. The card is playable and packable immediately with
   the original link; approval never waits for the upload.
 - **Upload**: `.github/workflows/showcase-art.yml` runs
-  `scripts/publish-showcase-art.ts` every 3 hours (and on demand). It makes one
+  `scripts/publish-showcase-art.ts`. **Run it by hand** after approving cards:
+  Actions → *Showcase art* → *Run workflow*, with inputs `dry_run` (list the
+  queue, change nothing), `limit` (1–25 cards this run) and an optional
+  `reason` for the log. Locally: `npm run art:showcase -- --dry-run --limit=5`.
+  A daily schedule (06:17 UTC) is only a fallback: its first step asks the
+  GitHub API (`GITHUB_TOKEN`, `actions: read`) for successful
+  `workflow_dispatch` runs of this workflow in the last 7 days and exits
+  early if there are any, so it only does work when nobody has run it by hand
+  for a week. A successful manual dry run also counts as a manual run. It makes one
   RPC (`art_pipeline_jobs`); an empty queue ends the run there. Otherwise it
   downloads each original, encodes it with the main pipeline's settings
   (`scripts/lib/derive.ts` master webp; the `shrink-video-art.ts` ffmpeg
@@ -105,6 +113,21 @@ player submits link ──► pending ──(Creator: APPROVE, one RPC)──►
   replaces the whole site, it first re-downloads every already-published file
   from the live site and refuses to deploy if any is missing. One more RPC
   (`art_pipeline_report`) writes the results.
+- **Cosmetics mirror**: the same run protects the store's cosmetics. Every
+  `shop_items.image_url` hot-linked from a host that isn't ours (today all of
+  them are on `cdn.midjourney.com`) is downloaded, converted to the same webp
+  master and published as `Cosmetics/<id>.webp` in the **same**
+  `frycards-showcase` deployment. Already-mirrored cosmetics are re-downloaded
+  into every deployment, exactly like published cards, and the run refuses to
+  deploy if any of them can't be fetched. Two token-checked RPCs
+  (20261012000008): `cosmetics_mirror_jobs(token)` lists the items, and
+  `cosmetics_mirror_report(token, results)` repoints `image_url` —
+  compare-and-set, so an item edited in the meantime is left alone. A failed
+  download leaves the item hot-linked for the next run. `dry_run` prints every
+  card and cosmetic that would change (WOULD PUBLISH / WOULD MIRROR) and
+  touches nothing; `limit` caps cards and cosmetics separately. Cosmetic files
+  are named by id, not content hash, so they are cached for a day rather than
+  forever. Animated sources become a still webp.
 - **Why a separate Pages project:** `frycards-art` is built from a local copy
   of the bucket that CI does not have; deploying to it from CI would wipe it.
   R2 is not enabled on the Cloudflare account (API: "Please enable R2").

@@ -55,7 +55,7 @@ function headHints(env: Record<string, string>): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const env = {
     ...loadEnv(mode, process.cwd(), 'VITE_'),
     BASE_URL: process.env.GITHUB_PAGES === 'true' ? '/frycards/' : '/',
@@ -63,6 +63,10 @@ export default defineConfig(({ mode }) => {
   return {
     base: process.env.GITHUB_PAGES === 'true' ? '/frycards/' : '/',
     plugins: [react(), tailwindcss(), headHints(env)],
+    // The production app fills the card pool from the network/cache and only
+    // loads the bundled catalog as a last resort (src/game/poker/cardpool.ts),
+    // which keeps ~28 kB gzip out of the entry bundle.
+    define: { __BUNDLED_POOL_AT_IMPORT__: command === 'build' ? 'false' : 'true' },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

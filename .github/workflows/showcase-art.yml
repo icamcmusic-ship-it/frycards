@@ -1,7 +1,13 @@
 name: Showcase art
 
 # Moves approved Player Showcase art onto Cloudflare Pages and points each
-# card at it (scripts/publish-showcase-art.ts, docs/CARD_SUBMISSIONS.md).
+# card at it, and mirrors every hot-linked cosmetic image (shop_items: card
+# backs, banners, avatars) to Cosmetics/<id>.webp on the same Pages project
+# (scripts/publish-showcase-art.ts, docs/CARD_SUBMISSIONS.md).
+#
+# MANUAL FIRST. Run it from Actions > Showcase art > Run workflow after
+# approving cards. The daily schedule is only a safety net: it does nothing
+# unless there has been NO successful manual run in the last 7 days.
 #
 # Approval in the app never waits on this: the card is playable at once with
 # the player's original link, and this swaps the URL when it runs. An idle run
@@ -17,12 +23,28 @@ name: Showcase art
 # Without the token the job exits successfully having done nothing.
 
 on:
-  schedule:
-    - cron: '17 */3 * * *'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run: list the cards and cosmetics that would change; download, deploy and report nothing.'
+        type: boolean
+        default: false
+      limit:
+        description: 'Most cards, and most cosmetics, to process in this run (1-25 each).'
+        type: number
+        default: 25
+      reason:
+        description: 'Optional note for the run log (e.g. "approved 3 cards").'
+        type: string
+        required: false
+  schedule:
+    # Daily fallback, 06:17 UTC. Exits at the first step unless no manual run
+    # has succeeded in the last 7 days.
+    - cron: '17 6 * * *'
 
 permissions:
   contents: read
+  actions: read # the schedule guard lists this workflow's own runs
 
 concurrency:
   # Two deploys of the same Pages project would race each other.
@@ -39,24 +61,51 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       SHOWCASE_PAGES_PROJECT: ${{ vars.SHOWCASE_PAGES_PROJECT }}
       SHOWCASE_ART_BASE_URL: ${{ vars.SHOWCASE_ART_BASE_URL }}
+      SHOWCASE_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+      SHOWCASE_LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.limit || 25 }}
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
+      - name: Schedule guard (skip if a manual run succeeded in the last 7 days)
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          if [ "$EVENT" != "schedule" ]; then
+            echo "Manual run${REASON:+: $REASON} (dry_run=$SHOWCASE_DRY_RUN, limit=$SHOWCASE_LIMIT)."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          since=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          count=$(gh api -X GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/showcase-art.yml/runs" \
+            -f event=workflow_dispatch -f status=success -f created=">=${since}" -f per_page=1 \
+            --jq '.total_count')
+          if [ "${count:-0}" -gt 0 ]; then
+            echo "A manual run succeeded since ${since}; the schedule has nothing to do."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "No successful manual run since ${since}; running the fallback."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Skip without a token
-        if: env.ART_PIPELINE_TOKEN == ''
+        if: steps.guard.outputs.run == 'true' && env.ART_PIPELINE_TOKEN == ''
         run: echo "ART_PIPELINE_TOKEN is not set; nothing to do."
 
       - uses: actions/checkout@v4
-        if: env.ART_PIPELINE_TOKEN != ''
+        if: steps.guard.outputs.run == 'true' && env.ART_PIPELINE_TOKEN != ''
 
       - uses: actions/setup-node@v4
-        if: env.ART_PIPELINE_TOKEN != ''
+        if: steps.guard.outputs.run == 'true' && env.ART_PIPELINE_TOKEN != ''
         with:
           node-version: 22
           cache: npm
 
-      - if: env.ART_PIPELINE_TOKEN != ''
+      - if: steps.guard.outputs.run == 'true' && env.ART_PIPELINE_TOKEN != ''
         run: npm ci
 
       - name: Publish pending showcase art
-        if: env.ART_PIPELINE_TOKEN != ''
+        if: steps.guard.outputs.run == 'true' && env.ART_PIPELINE_TOKEN != ''
         run: npm run art:showcase

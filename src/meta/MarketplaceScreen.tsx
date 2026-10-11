@@ -332,6 +332,15 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 </span>
               )}
               {l.quantity > 1 && <span className="fs-xs font-black">×{l.quantity}</span>}
+              {l.graded_id && l.slab_grade != null && (
+                <span
+                  className="fs-xs font-black px-1 ink-border-sm bg-[var(--c-paper)]"
+                  title="A graded slab — the buyer receives the slab itself"
+                >
+                  SLAB {l.slab_pristine ? 'PRISTINE ' : ''}
+                  {Number(l.slab_grade)} · {(l.slab_service ?? '').toUpperCase()}
+                </span>
+              )}
             </div>
             <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
               {isAuction ? 'AUCTION' : 'FIXED PRICE'} · Seller:{' '}

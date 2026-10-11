@@ -24,7 +24,6 @@ import {
   History,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { CardOfTheDay } from './CardOfTheDay';
 import { LevelBadge, PopButton, Notice } from './ui';
 import { CurrencyBar } from './CurrencyBar';
 import { RoleBadge } from './RoleBadge';
@@ -32,6 +31,7 @@ import { ACCOUNT_ONLY_SCREENS, MetaScreen } from './routes';
 import { isCpuLocked } from './cpuAccess';
 import type { PlaySetup } from '../components/PokerMatch';
 import { usePersistedState } from './usePersistedState';
+import { preloadScreen, preloadWhenIdle } from './screenChunks';
 import {
   claimDailyLogin,
   DailyLoginResult,
@@ -40,6 +40,20 @@ import {
 } from '../lib/supabase';
 import { fmtCredits } from './economy';
 import { SafeImage } from './SafeImage';
+
+// Card of the Day pulls in the full card renderer and the 3D inspector
+// (~20 kB gzip); it sits below the menu tiles, so it loads after first paint
+// behind a placeholder of the same footprint.
+const CardOfTheDay = React.lazy(() =>
+  import('./CardOfTheDay').then((m) => ({ default: m.CardOfTheDay })),
+);
+function CardOfTheDayPlaceholder() {
+  return (
+    <div className="relative z-10 max-w-5xl mx-auto px-6 pb-6 flex justify-center" aria-hidden>
+      <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 w-[22rem] max-w-full h-[178px] opacity-60" />
+    </div>
+  );
+}
 
 // The screen list lives with the router; re-exported so existing imports keep working.
 export type { MetaScreen } from './routes';
@@ -276,6 +290,15 @@ export function MainMenu({
   rematchLabel?: string;
 }) {
   const { profile, guest, signOut, shopItems } = useMeta();
+  // Warm the likeliest next screens once the menu is up, so the first tap
+  // does not flash the LOADING fallback. Tiles also warm on hover/focus.
+  useEffect(
+    () =>
+      preloadWhenIdle(
+        guest ? ['play', 'howtoplay'] : ['play', 'collection', 'decks', 'store', 'match'],
+      ),
+    [guest],
+  );
   // Rewards waiting to be claimed — badged on the MISSIONS tile, which until
   // now gave no hint that anything had finished.
   const [claimable, setClaimable] = useState(0);
@@ -456,6 +479,8 @@ export function MainMenu({
     <button
       key={t.key}
       onClick={() => !t.disabled && onNavigate(t.muted ? 'howtoplay' : t.key)}
+      onPointerEnter={() => !t.disabled && preloadScreen(t.muted ? 'howtoplay' : t.key)}
+      onFocus={() => !t.disabled && preloadScreen(t.muted ? 'howtoplay' : t.key)}
       // aria-disabled instead of disabled: a disabled button drops out
       // of the tab order, so keyboard/switch users could never reach
       // the tile to hear WHY it's off. The onClick guard above keeps it
@@ -607,6 +632,8 @@ export function MainMenu({
           <button
             type="button"
             onClick={() => onNavigate('play')}
+            onPointerEnter={() => preloadScreen('play')}
+            onFocus={() => preloadScreen('play')}
             className="btn-pop w-full flex items-center gap-3 sm:gap-5 p-4 sm:p-6 text-left bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-md shadow-hard-black-lg hover:-translate-y-1 transition-all"
           >
             <Swords className="w-8 h-8 sm:w-12 sm:h-12 shrink-0" aria-hidden />
@@ -655,10 +682,12 @@ export function MainMenu({
         ))}
       </div>
 
-      <CardOfTheDay
-        onBuild={guest ? undefined : () => onNavigate('decks')}
-        onPlay={cpuLocked ? undefined : onPlaySetup}
-      />
+      <React.Suspense fallback={<CardOfTheDayPlaceholder />}>
+        <CardOfTheDay
+          onBuild={guest ? undefined : () => onNavigate('decks')}
+          onPlay={cpuLocked ? undefined : onPlaySetup}
+        />
+      </React.Suspense>
     </div>
   );
 }

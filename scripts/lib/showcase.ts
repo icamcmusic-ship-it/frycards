@@ -55,6 +55,9 @@ export const SHOWCASE_HEADERS = `# Written by scripts/publish-showcase-art.ts.
 /cards/*
   Cache-Control: public, max-age=31536000, immutable
   Access-Control-Allow-Origin: *
+/Cosmetics/*
+  Cache-Control: public, max-age=86400
+  Access-Control-Allow-Origin: *
 `;
 
 /** Validate the RPC's response shape. */
@@ -66,5 +69,54 @@ export function parseJobs(raw: unknown): Jobs {
       (j) => j && typeof j.submission_id === 'string' && /^[a-z0-9_]{3,64}$/.test(j.card_id ?? ''),
     ),
     published: arr<PublishedJob>(o.published).filter((j) => j && typeof j.art_url === 'string'),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Cosmetic mirror (shop_items images hot-linked from elsewhere).
+// ---------------------------------------------------------------------------
+
+export interface CosmeticItem {
+  id: string;
+  image_url: string;
+}
+
+/** Hosts we serve from: this Pages project and the main art project. */
+export function isOurUrl(url: string, base: string): boolean {
+  if (url.startsWith(base.replace(/\/+$/, '') + '/')) return true;
+  try {
+    const host = new URL(url).host;
+    return /^frycards-[a-z0-9-]+\.pages\.dev$/i.test(host) || host.endsWith('.supabase.co');
+  } catch {
+    // A relative path is bundled with the app.
+    return !/^[a-z]+:/i.test(url);
+  }
+}
+
+/** Not content-addressed: one stable name per item, by the item's id. */
+export function cosmeticKey(id: string): string {
+  return `Cosmetics/${id}.webp`;
+}
+
+export function parseCosmetics(raw: unknown): CosmeticItem[] {
+  return (Array.isArray(raw) ? raw : []).filter(
+    (c): c is CosmeticItem =>
+      !!c &&
+      typeof c.id === 'string' &&
+      /^[0-9a-f-]{36}$/i.test(c.id) &&
+      typeof c.image_url === 'string',
+  );
+}
+
+/** Split shop items into ones to mirror and ones already on our Pages site
+ * (which must be re-listed in every deployment). */
+export function planCosmetics(
+  items: CosmeticItem[],
+  base: string,
+): { pending: CosmeticItem[]; published: CosmeticItem[] } {
+  const b = base.replace(/\/+$/, '');
+  return {
+    pending: items.filter((i) => !isOurUrl(i.image_url, b)),
+    published: items.filter((i) => i.image_url.startsWith(`${b}/Cosmetics/`)),
   };
 }

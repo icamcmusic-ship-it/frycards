@@ -22,6 +22,13 @@ import {
   fmtGrade,
   gradedQuicksellPrice,
   quicksellGradedCard,
+  canCrossOver,
+  crossoverFee,
+  crossoverSlab,
+  expectedCrossoverValue,
+  collectorFavourite,
+  CROSSOVER_TARGETS,
+  type Subgrades,
 } from './grading';
 import { quicksellPrice } from './economy';
 import { fetchShowcaseSlabs, setShowcaseSlabs } from '../lib/supabase';
@@ -67,12 +74,19 @@ export function SlabDetailModal({
   useEscapeClose(onClose);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<'sell' | 'crack' | null>(null);
+  const [confirm, setConfirm] = useState<'sell' | 'crack' | 'cross' | null>(null);
   const def = POOL_BY_ID[g.card_id];
   const svc = GRADING_SERVICE_BY_ID[g.service];
-  const graded = g.grade != null;
+  const graded = g.grade != null && !g.crossover_pending;
   const isPinned = pinned.includes(g.id);
-  const price = graded ? gradedQuicksellPrice(def?.rarity, g.foil, g.grade!, g.service) : 0;
+  const price = graded
+    ? gradedQuicksellPrice(def?.rarity, g.foil, g.grade!, g.service, {
+        pristine: g.pristine,
+        favourite: collectorFavourite(),
+      })
+    : 0;
+  const subgrades = g.subgrades as Subgrades | null | undefined;
+  const limiting = subgrades ? Math.min(...Object.values(subgrades).map(Number)) : null;
   const raw = quicksellPrice(def?.rarity, g.foil);
   const prem = premiumTier(g.grade);
 
@@ -148,22 +162,62 @@ export function SlabDetailModal({
             <div className="flex items-center gap-3">
               <span className="heading-font text-4xl leading-none">{fmtGrade(g.grade!)}</span>
               <span className="heading-font text-sm">
-                {GRADE_WORDS[String(g.grade)] ?? 'GRADED'}
-                {prem && (
-                  <span className="ml-2 fs-xs px-1.5 py-0.5 ink-border-sm bg-[var(--c-yellow)]">
-                    {prem === 'gem' ? 'GEM CASE' : prem === 'mintplus' ? 'PRISM CASE' : 'HOLO CASE'}
+                {g.pristine ? 'PRISTINE' : (GRADE_WORDS[String(g.grade)] ?? 'GRADED')}
+                {g.pristine ? (
+                  <span className="ml-2 fs-xs px-1.5 py-0.5 ink-border-sm bg-[var(--c-ink)] text-[#e8c76a]">
+                    BLACK LABEL
                   </span>
+                ) : (
+                  prem && (
+                    <span className="ml-2 fs-xs px-1.5 py-0.5 ink-border-sm bg-[var(--c-yellow)]">
+                      {prem === 'gem'
+                        ? 'GEM CASE'
+                        : prem === 'mintplus'
+                          ? 'PRISM CASE'
+                          : 'HOLO CASE'}
+                    </span>
+                  )
                 )}
               </span>
             </div>
+          ) : g.crossover_pending ? (
+            <div className="heading-font text-sm">
+              CROSSING OVER TO {GRADING_SERVICE_BY_ID[g.crossover_target ?? 'tca'].short} — ready{' '}
+              {fmtDate(g.ready_at)} · keeps {fmtGrade(g.grade!)} unless beaten
+            </div>
           ) : (
             <div className="heading-font text-sm">AT THE GRADERS — ready {fmtDate(g.ready_at)}</div>
+          )}
+
+          {graded && subgrades && (
+            <div className="grid grid-cols-4 gap-1 text-center" aria-label="Subgrades">
+              {(['centering', 'corners', 'edges', 'surface'] as const).map((k) => (
+                <div
+                  key={k}
+                  className={
+                    'ink-border-sm px-1 py-0.5 ' +
+                    (Number(subgrades[k]) === limiting && !g.pristine ? 'bg-[var(--c-yellow)]' : '')
+                  }
+                  title={
+                    Number(subgrades[k]) === limiting && !g.pristine
+                      ? 'The limiting subgrade — this is what sets the grade, and the price'
+                      : undefined
+                  }
+                >
+                  <div className="fs-xs font-bold text-[var(--c-steel)] uppercase">{k}</div>
+                  <div className="heading-font text-sm">{fmtGrade(Number(subgrades[k]))}</div>
+                </div>
+              ))}
+            </div>
           )}
 
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px] font-bold">
             <dt className="text-[var(--c-steel)]">Service</dt>
             <dd>
               {svc.name} (resale ×{svc.premium})
+              {g.crossed_from
+                ? ` · crossed over from ${GRADING_SERVICE_BY_ID[g.crossed_from].short}`
+                : ''}
             </dd>
             <dt className="text-[var(--c-steel)]">Turnaround</dt>
             <dd className="uppercase">{g.speed}</dd>
@@ -177,6 +231,15 @@ export function SlabDetailModal({
               <>
                 <dt className="text-[var(--c-steel)]">Revealed</dt>
                 <dd>{fmtDate(g.revealed_at)}</dd>
+                {g.insured && (
+                  <>
+                    <dt className="text-[var(--c-steel)]">Insurance</dt>
+                    <dd>
+                      Insured ({(g.insurance_paid ?? 0).toLocaleString('en-US')} premium)
+                      {g.grade! < 7 ? ' · base fee refunded' : ''}
+                    </dd>
+                  </>
+                )}
                 <dt className="text-[var(--c-steel)]">Condition</dt>
                 <dd>{CONDITION_TEXT[conditionOf(g.grade)]}</dd>
                 <dt className="text-[var(--c-steel)]">Slab value</dt>
@@ -198,7 +261,10 @@ export function SlabDetailModal({
 
           {error && <Notice text={error} />}
 
-          {graded && !readOnly && (
+          {graded && !readOnly && g.listing_id && (
+            <Notice text="This slab is listed for sale on the Marketplace or in your shop — it can't be sold to the house, cracked or crossed over until the listing ends or is cancelled." />
+          )}
+          {graded && !readOnly && !g.listing_id && (
             // CANCEL renders in the spot QUICKSELL / CRACK occupied and the
             // CONFIRM button appears after it, so a double-tap cancels.
             <div className="flex flex-wrap gap-2">
@@ -254,6 +320,37 @@ export function SlabDetailModal({
                   CONFIRM SELL FOR {price.toLocaleString('en-US')}
                 </PopButton>
               ) : null}
+              {canCrossOver(g) &&
+                (confirm === 'cross' ? (
+                  <>
+                    <PopButton color="steel" disabled={busy} onClick={() => setConfirm(null)}>
+                      CANCEL
+                    </PopButton>
+                    {CROSSOVER_TARGETS.map((t) => (
+                      <PopButton
+                        key={t}
+                        color="black"
+                        disabled={busy}
+                        title={`Average value after crossover: ${expectedCrossoverValue(def.rarity, g.foil, g.grade!, t).toLocaleString('en-US')}`}
+                        onClick={() =>
+                          void run(async () => (await crossoverSlab(g.id, t)).error, false)
+                        }
+                      >
+                        → {GRADING_SERVICE_BY_ID[t].short} FOR{' '}
+                        {crossoverFee(t).toLocaleString('en-US')}
+                      </PopButton>
+                    ))}
+                  </>
+                ) : (
+                  <PopButton
+                    color="steel"
+                    disabled={busy}
+                    onClick={() => setConfirm('cross')}
+                    title="Send this Keeper slab to TCA or AMG once, at their full fee. The grade never goes down; a crossed TCA slab can't be Pristine."
+                  >
+                    CROSS OVER
+                  </PopButton>
+                ))}
               {confirm === 'crack' ? (
                 <PopButton color="steel" disabled={busy} onClick={() => setConfirm(null)}>
                   CANCEL

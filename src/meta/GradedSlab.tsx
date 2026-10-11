@@ -106,9 +106,12 @@ export { SLAB_CSS } from './slabCss';
  * case, a 9.5 (MINT+) a prismatic one, and a 10 (GEM MINT) a gold case with a
  * turning ring and sparkles — the three should be told apart across a shelf.
  */
-export type PremiumTier = 'mint' | 'mintplus' | 'gem' | null;
-export function premiumTier(grade: number | null): PremiumTier {
+export type PremiumTier = 'mint' | 'mintplus' | 'gem' | 'pristine' | null;
+/** PRISTINE (TCA direct-submission 10s only) outranks GEM MINT: a black-and-
+ * gold "black label" case. */
+export function premiumTier(grade: number | null, pristine = false): PremiumTier {
   if (grade == null) return null;
+  if (pristine && grade >= 10) return 'pristine';
   if (grade >= 10) return 'gem';
   if (grade >= 9.5) return 'mintplus';
   if (grade >= 9) return 'mint';
@@ -135,6 +138,20 @@ const PREMIUM: Record<
       'linear-gradient(135deg, #5a3b00 0%, #f0c419 35%, #fff3b0 50%, #c48a00 70%, #5a3b00 100%)',
     badge: '◆ GEM MINT',
   },
+  pristine: {
+    ring: 'conic-gradient(from var(--slab-angle), #0b0b0b, #e8c76a, #fff6d6, #0b0b0b, #b8892b, #fff6d6, #0b0b0b)',
+    shell:
+      'linear-gradient(135deg, #050505 0%, #1d1a12 30%, #c9a24a 48%, #fff1c2 52%, #1d1a12 70%, #050505 100%)',
+    badge: '★ PRISTINE',
+  },
+};
+
+/** Glow colour around a premium case (shared with the 3D case). */
+export const PREMIUM_GLOW: Record<Exclude<PremiumTier, null>, string> = {
+  mint: 'rgba(110,200,255,0.55)',
+  mintplus: 'rgba(185,139,255,0.6)',
+  gem: 'rgba(240,196,25,0.75)',
+  pristine: 'rgba(232,199,106,0.95)',
 };
 
 /**
@@ -239,8 +256,9 @@ function Damage({ level, seed }: { level: 1 | 2 | 3; seed: number }) {
 }
 
 /** Hover text: the condition tier, or the premium case, of a revealed slab. */
-export function slabTooltip(grade: number): string {
-  const tier = premiumTier(grade);
+export function slabTooltip(grade: number, pristine = false): string {
+  const tier = premiumTier(grade, pristine);
+  if (tier === 'pristine') return `PRISTINE ${fmtGrade(grade)} — black-and-gold case`;
   if (tier === 'gem') return `GEM MINT ${fmtGrade(grade)} — gold case`;
   if (tier === 'mintplus') return `MINT+ ${fmtGrade(grade)} — prism case`;
   if (tier === 'mint') return `MINT ${fmtGrade(grade)} — holo case`;
@@ -282,7 +300,7 @@ export function GradedSlab({
   const tone = caseTone(g.grade);
   const cert = certOf(g.id);
   const word = graded ? (GRADE_WORDS[String(g.grade)] ?? 'GRADED') : 'AT THE GRADERS';
-  const premium = premiumTier(g.grade);
+  const premium = premiumTier(g.grade, !!g.pristine);
   const prem = premium ? PREMIUM[premium] : null;
   const condition = conditionOf(g.grade);
   const certSeed = parseInt(cert.no, 10);
@@ -303,7 +321,7 @@ export function GradedSlab({
           onClick();
         }
       }}
-      title={graded ? slabTooltip(g.grade!) : undefined}
+      title={graded ? slabTooltip(g.grade!, !!g.pristine) : undefined}
       aria-label={
         graded
           ? `${def.name}, graded ${fmtGrade(g.grade!)} ${word} by ${svc.name}, certificate ${cert.no}`
@@ -328,7 +346,7 @@ export function GradedSlab({
         boxShadow: embedded
           ? 'inset 0 2px 0 rgba(255,255,255,0.55), inset 0 -3px 6px rgba(0,0,0,0.45)'
           : prem
-            ? `inset 0 2px 0 rgba(255,255,255,0.7), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6), 0 0 ${premium === 'gem' ? 18 : 10}px ${premium === 'gem' ? 'rgba(240,196,25,0.75)' : premium === 'mintplus' ? 'rgba(185,139,255,0.6)' : 'rgba(110,200,255,0.55)'}`
+            ? `inset 0 2px 0 rgba(255,255,255,0.7), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6), 0 0 ${premium === 'gem' || premium === 'pristine' ? 18 : 10}px ${PREMIUM_GLOW[premium!]}`
             : 'inset 0 2px 0 rgba(255,255,255,0.55), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6)',
       }}
     >
@@ -348,7 +366,7 @@ export function GradedSlab({
           aria-hidden
         />
       )}
-      {premium === 'gem' &&
+      {(premium === 'gem' || premium === 'pristine') &&
         !embedded &&
         [
           [8, 18],
@@ -375,8 +393,8 @@ export function GradedSlab({
       <div
         className="relative flex items-stretch gap-1 mb-1.5 overflow-hidden"
         style={{
-          background: tone.plate,
-          color: tone.plateInk,
+          background: premium === 'pristine' ? '#0b0b0b' : tone.plate,
+          color: premium === 'pristine' ? '#e8c76a' : tone.plateInk,
           border: '2px solid var(--c-ink)',
           borderRadius: 3,
         }}
@@ -386,10 +404,10 @@ export function GradedSlab({
             className="slab-holo absolute inset-0 pointer-events-none"
             style={{
               backgroundImage:
-                premium === 'gem'
+                premium === 'gem' || premium === 'pristine'
                   ? 'linear-gradient(100deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.65) 25%, rgba(255,240,180,0) 50%, rgba(255,255,255,0.5) 75%, rgba(255,255,255,0) 100%)'
                   : 'linear-gradient(100deg, rgba(255,122,217,0.25), rgba(255,211,110,0.25), rgba(125,255,176,0.25), rgba(110,200,255,0.25), rgba(185,139,255,0.25), rgba(255,122,217,0.25))',
-              mixBlendMode: 'multiply',
+              mixBlendMode: premium === 'pristine' ? 'screen' : 'multiply',
               opacity: premium === 'mint' ? 0.55 : 0.9,
             }}
             aria-hidden

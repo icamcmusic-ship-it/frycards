@@ -94,6 +94,7 @@ import {
   closeShop,
   buyShopSlot,
   createShopListing,
+  createShopSlabListing,
   cancelShopListing,
   buyShopListing,
   createMysteryTemplate,
@@ -109,11 +110,65 @@ import {
   SHOP_FLOOR_DAILY_CAP,
 } from '../lib/supabase';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
+import { GradedSlab } from './GradedSlab';
+import {
+  GRADING_SERVICE_BY_ID,
+  fetchGradedCards,
+  fmtGrade,
+  gradedQuicksellPrice,
+  type GradedCard,
+} from './grading';
 
 // Mirror rarity.ts's ladder — a local copy drifted once already (missing
 // 'Alt-Art'), which made Alt-Art weights/guarantees impossible to express in
 // the mystery builder even though the server's validate_mystery_pool accepts them.
 const RARITIES = RARITY_ORDER;
+
+type SlabItem = {
+  card_id: string;
+  foil?: boolean;
+  graded_id?: string;
+  grade?: number;
+  service?: 'tca' | 'amg' | 'keeper';
+  pristine?: boolean;
+};
+
+/** "PRISTINE 10 · TCA" / "9.5 · AMG" for a slab item, or null for a raw card. */
+function slabLabel(it: SlabItem | undefined): string | null {
+  if (!it?.graded_id || it.grade == null || !it.service) return null;
+  return `${it.pristine ? 'PRISTINE ' : ''}${fmtGrade(Number(it.grade))} · ${
+    GRADING_SERVICE_BY_ID[it.service].short
+  }`;
+}
+
+/** The slab case for a shop item — the same artwork as the Vault. */
+function SlabThumb({ it }: { it: SlabItem }) {
+  const g = {
+    id: it.graded_id!,
+    user_id: '',
+    card_id: it.card_id,
+    foil: !!it.foil,
+    service: it.service ?? 'keeper',
+    speed: 'standard',
+    fee_paid: 0,
+    submitted_at: '',
+    ready_at: '',
+    grade: it.grade == null ? null : Number(it.grade),
+    revealed_at: null,
+    pristine: !!it.pristine,
+  } as GradedCard;
+  return <GradedSlab g={g} size="compact" />;
+}
+
+function slabItemValue(it: SlabItem): number {
+  return gradedQuicksellPrice(
+    POOL_BY_ID[it.card_id]?.rarity,
+    !!it.foil,
+    Number(it.grade),
+    it.service ?? 'keeper',
+    { pristine: it.pristine },
+  );
+}
 
 function defFor(cardId: string): CardDef {
   return (
@@ -1524,7 +1579,11 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
         }}
       >
         <div className="shrink-0 flex flex-col gap-1 items-center">
-          <CardFace def={headline} size="compact" foil={cards[0]?.foil} />
+          {cards[0]?.graded_id ? (
+            <SlabThumb it={cards[0]} />
+          ) : (
+            <CardFace def={headline} size="compact" foil={cards[0]?.foil} />
+          )}
           {cards.length > 1 && (
             <span className="fs-xs font-black text-center bg-[var(--c-ink)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm">
               +{cards.length - 1} MORE
@@ -1540,9 +1599,11 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                   without cross-checking the tiny card art. */}
               {l.listing_type === 'bundle'
                 ? `BUNDLE · ${totalCards} CARDS`
-                : `${headline.name}${cards[0]?.foil ? ' ✦' : ''}${
-                    (cards[0]?.quantity ?? 1) > 1 ? ` ×${cards[0].quantity}` : ''
-                  }`}
+                : slabLabel(cards[0])
+                  ? `${headline.name}${cards[0]?.foil ? ' ✦' : ''} · SLAB ${slabLabel(cards[0])}`
+                  : `${headline.name}${cards[0]?.foil ? ' ✦' : ''}${
+                      (cards[0]?.quantity ?? 1) > 1 ? ` ×${cards[0].quantity}` : ''
+                    }`}
             </div>
             <RarityPill rarity={topRarity}>{topRarity}</RarityPill>
           </div>
@@ -1784,7 +1845,9 @@ function MyShopTab() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [addMode, setAddMode] = useState<'none' | 'individual' | 'bundle' | 'mystery'>('none');
+  const [addMode, setAddMode] = useState<'none' | 'individual' | 'bundle' | 'mystery' | 'slab'>(
+    'none',
+  );
 
   const [loadError, setLoadError] = useState('');
   // `isCancelled` guards a fast account switch (or unmount) from letting a
@@ -2137,6 +2200,16 @@ function MyShopTab() {
           </span>
         </PopButton>
         <PopButton
+          color={addMode === 'slab' ? 'black' : 'yellow'}
+          disabled={emptySlots.length === 0}
+          onClick={() => setAddMode(addMode === 'slab' ? 'none' : 'slab')}
+          title="Stock a graded slab from your Vault"
+        >
+          <span className="flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> SLAB
+          </span>
+        </PopButton>
+        <PopButton
           // Unlike INDIVIDUAL/BUNDLE, this panel also lets you define a pack
           // type ("CREATE PACK TYPE") with no slot needed at all — only
           // actually submitting a pool for sale needs one, and that path is
@@ -2164,6 +2237,16 @@ function MyShopTab() {
           busy={busy}
           onSubmit={(slotId, items, price) =>
             run(() => createShopListing(slotId, addMode, items, price), 'Listing created!')
+          }
+        />
+      )}
+      {addMode === 'slab' && (
+        <SlabStockForm
+          userId={userId}
+          emptySlots={emptySlots}
+          busy={busy}
+          onSubmit={(slotId, gradedId, price) =>
+            run(() => createShopSlabListing(slotId, gradedId, price), 'Slab stocked!')
           }
         />
       )}
@@ -2213,8 +2296,8 @@ function MyShopTab() {
                     .map(
                       (c) =>
                         `${defFor(c.card_id).name}${c.foil ? ' ✦' : ''}${
-                          c.quantity > 1 ? ` ×${c.quantity}` : ''
-                        }`,
+                          slabLabel(c) ? ` · SLAB ${slabLabel(c)}` : ''
+                        }${c.quantity > 1 ? ` ×${c.quantity}` : ''}`,
                     )
                     .join(', ')}
               {' · '}
@@ -2227,7 +2310,13 @@ function MyShopTab() {
                   color="steel"
                   disabled={busy}
                   onClick={async () => {
-                    if (!(await askConfirm('Cancel this listing? Your cards will be returned.')))
+                    if (
+                      !(await askConfirm(
+                        l.graded_id
+                          ? 'Cancel this listing? The slab goes back to your Vault.'
+                          : 'Cancel this listing? Your cards will be returned.',
+                      ))
+                    )
                       return;
                     run(() => cancelShopListing(l.id), undefined, true);
                   }}
@@ -2520,6 +2609,120 @@ function OpenShopPanel({
           onClick={() => onOpen(name.trim(), banner.trim() || null, tagline.trim() || null, accent)}
         >
           OPEN SHOP ▸
+        </PopButton>
+      </div>
+    </div>
+  );
+}
+
+/** Stock a slab from the Vault: pick one (not listed, not mid-crossover), a
+ * slot and a price. The slab stays in escrow until it sells or is delisted. */
+function SlabStockForm({
+  userId,
+  emptySlots,
+  busy,
+  onSubmit,
+}: {
+  userId: string;
+  emptySlots: ShopSlot[];
+  busy: boolean;
+  onSubmit: (slotId: string, gradedId: string, price: number) => void;
+}) {
+  const [slabs, setSlabs] = useState<GradedCard[] | null>(null);
+  const [pick, setPick] = useState<string>('');
+  const [slotId, setSlotId] = useState(emptySlots[0]?.id || '');
+  const [price, setPrice] = useState(0);
+  useEffect(() => {
+    if (!slotId || !emptySlots.some((s) => s.id === slotId)) setSlotId(emptySlots[0]?.id || '');
+  }, [emptySlots, slotId]);
+  useEffect(() => {
+    let live = true;
+    if (!userId) return;
+    fetchGradedCards(userId)
+      .then((rows) => {
+        if (live)
+          setSlabs(rows.filter((g) => g.grade != null && !g.listing_id && !g.crossover_pending));
+      })
+      .catch(() => {
+        if (live) setSlabs([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [userId]);
+  const chosen = slabs?.find((g) => g.id === pick);
+  const house = chosen
+    ? gradedQuicksellPrice(
+        POOL_BY_ID[chosen.card_id]?.rarity,
+        chosen.foil,
+        chosen.grade!,
+        chosen.service,
+        { pristine: chosen.pristine },
+      )
+    : 0;
+  return (
+    <div className="ink-border-sm p-3 bg-[var(--c-paper)] flex flex-col gap-2">
+      <div className="heading-font text-xs">STOCK A SLAB FROM YOUR VAULT</div>
+      {slabs == null ? (
+        <p className="fs-xs font-bold">Loading your slabs…</p>
+      ) : slabs.length === 0 ? (
+        <p className="fs-xs font-bold">No slabs free to stock — grade some cards first.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2 max-h-[40vh] overflow-y-auto">
+          {slabs.map((g) => (
+            <GradedSlab
+              key={g.id}
+              g={g}
+              size="compact"
+              selected={pick === g.id}
+              onClick={() => {
+                setPick(g.id);
+                setPrice(
+                  gradedQuicksellPrice(POOL_BY_ID[g.card_id]?.rarity, g.foil, g.grade!, g.service, {
+                    pristine: g.pristine,
+                  }),
+                );
+              }}
+            />
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 fs-xs font-bold">
+        <label className="flex items-center gap-1">
+          Slot
+          <select
+            className="ink-border-sm px-1 py-0.5"
+            value={slotId}
+            onChange={(e) => setSlotId(e.target.value)}
+          >
+            {emptySlots.map((s) => (
+              <option key={s.id} value={s.id}>
+                #{s.slot_index}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1">
+          Price
+          <input
+            className="ink-border-sm px-1 py-0.5 w-24"
+            inputMode="numeric"
+            value={price || ''}
+            onChange={(e) => setPrice(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)}
+          />
+        </label>
+        {chosen && (
+          <span className="text-[var(--c-steel)]">
+            The house would pay {house.toLocaleString('en-US')}. Shop Floor customers value slabs
+            from Marketplace sales and pay more for their favourite house.
+          </span>
+        )}
+        <PopButton
+          color="black"
+          disabled={busy || !chosen || !slotId || price < 1}
+          onClick={() => chosen && onSubmit(slotId, chosen.id, price)}
+        >
+          LIST SLAB
         </PopButton>
       </div>
     </div>
@@ -3432,7 +3635,10 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
           // kinds are priced against.
           const wantValue = c.listing_cards.reduce(
             (sum, it) =>
-              sum + quicksellPrice(POOL_BY_ID[it.card_id]?.rarity, !!it.foil) * (it.quantity ?? 1),
+              sum +
+              ((it as SlabItem).graded_id
+                ? slabItemValue(it as SlabItem)
+                : quicksellPrice(POOL_BY_ID[it.card_id]?.rarity, !!it.foil) * (it.quantity ?? 1)),
             0,
           );
           const offerValue = offerDef ? quicksellPrice(offerDef.rarity, c.offer_foil) : 0;
@@ -3538,7 +3744,12 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
               </div>
               {/* Trades show both sides: your card ⇄ theirs. */}
               <div className="shrink-0 flex items-center gap-1">
-                {def && <CardFace def={def} size="compact" foil={!!item?.foil} />}
+                {def &&
+                  ((item as SlabItem | undefined)?.graded_id ? (
+                    <SlabThumb it={item as SlabItem} />
+                  ) : (
+                    <CardFace def={def} size="compact" foil={!!item?.foil} />
+                  ))}
                 {c.kind === 'trade' && offerDef && (
                   <>
                     <span className="heading-font text-lg" aria-hidden>
