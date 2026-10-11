@@ -132,6 +132,18 @@ export function ShowroomScreen({
   const [slabs, setSlabs] = useState<GradedCard[]>([]);
   const [slabsLoading, setSlabsLoading] = useState(false);
   const stageWrapRef = useRef<HTMLDivElement>(null);
+  // While the stage itself is the fullscreen element it must fill the whole
+  // viewport — the inline 52vh/62vh stage height left the bottom of the
+  // screen black.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const sync = () =>
+      setIsFullscreen(
+        document.fullscreenElement != null && document.fullscreenElement === stageWrapRef.current,
+      );
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
 
   // Graded rows live in their own table and are not part of MetaContext's
   // collection payload, so the showroom fetches them the same way the
@@ -308,7 +320,13 @@ export function ShowroomScreen({
       </div>
 
       {/* Stage */}
-      <div ref={stageWrapRef} className="relative bg-black">
+      <div
+        ref={stageWrapRef}
+        className={cn(
+          'relative bg-black',
+          isFullscreen && 'w-screen h-[100dvh] flex flex-col overflow-hidden',
+        )}
+      >
         {def ? (
           <Showroom3D
             def={def}
@@ -317,11 +335,18 @@ export function ShowroomScreen({
             onPose={setPose}
             spinSpeed={spin.dps}
             scaleHint={shown.kind === 'slab' ? 1.35 : 1}
-            className="w-full h-[52vh] min-h-[320px] sm:h-[62vh]"
+            className={
+              isFullscreen ? 'w-full flex-1 min-h-0' : 'w-full h-[52vh] min-h-[320px] sm:h-[62vh]'
+            }
             slab={slab ? slabSubject(slab) : undefined}
           />
         ) : (
-          <div className="w-full h-[52vh] min-h-[320px] sm:h-[62vh] flex items-center justify-center text-center px-6">
+          <div
+            className={cn(
+              'w-full flex items-center justify-center text-center px-6',
+              isFullscreen ? 'flex-1 min-h-0' : 'h-[52vh] min-h-[320px] sm:h-[62vh]',
+            )}
+          >
             <p className="font-bold text-sm text-[var(--c-paper)]/70">
               {source === 'slabs'
                 ? slabsLoading
