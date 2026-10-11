@@ -1813,6 +1813,11 @@ export interface ShopListingCardItem {
   card_id: string;
   foil: boolean;
   quantity: number;
+  /** Set when the item is a graded slab (20261012000009). */
+  graded_id?: string;
+  grade?: number;
+  service?: 'tca' | 'amg' | 'keeper';
+  pristine?: boolean;
 }
 
 export type ShopListingType = 'individual' | 'bundle' | 'mystery';
@@ -1832,6 +1837,8 @@ export interface ShopListing {
   total_packs: number | null;
   remaining_packs: number | null;
   ev_frozen: number | null;
+  /** The graded slab this listing holds in escrow (20261012000009). */
+  graded_id?: string | null;
   created_at: string;
 }
 
@@ -2179,6 +2186,20 @@ export async function createShopListing(
     p_slot_id: slotId,
     p_type: type,
     p_cards: cards,
+    p_price: price,
+  });
+  return rpcError(error);
+}
+
+/** Stock a graded slab from the Vault in an empty shop slot. */
+export async function createShopSlabListing(
+  slotId: string,
+  gradedId: string,
+  price: number,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('create_shop_slab_listing', {
+    p_slot_id: slotId,
+    p_graded_id: gradedId,
     p_price: price,
   });
   return rpcError(error);

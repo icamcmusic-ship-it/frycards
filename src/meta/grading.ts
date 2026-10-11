@@ -666,7 +666,7 @@ export function gradingEVTable(): {
 // ---------------------------------------------------------------------------
 
 /** Insurance premium on top of each card's fee (never refunded). */
-export const INSURANCE_RATE = 0.1;
+export const INSURANCE_RATE = 0.25;
 /** A direct grade below this refunds an insured card's base fee. */
 export const INSURANCE_FLOOR = 7;
 /** Slabs per trade-in, and the grade they must be under. */

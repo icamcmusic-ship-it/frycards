@@ -262,7 +262,7 @@ export function SlabDetailModal({
           {error && <Notice text={error} />}
 
           {graded && !readOnly && g.listing_id && (
-            <Notice text="This slab is listed on the Marketplace — it can't be sold to the house, cracked or crossed over until the listing ends or is cancelled." />
+            <Notice text="This slab is listed for sale on the Marketplace or in your shop — it can't be sold to the house, cracked or crossed over until the listing ends or is cancelled." />
           )}
           {graded && !readOnly && !g.listing_id && (
             // CANCEL renders in the spot QUICKSELL / CRACK occupied and the

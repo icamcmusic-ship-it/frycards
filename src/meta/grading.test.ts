@@ -192,7 +192,7 @@ describe('grading economy mirrors', () => {
     // TCA is strictest, so its insurance pays out most often.
     expect(insuranceClaimChance('tca')).toBeGreaterThan(insuranceClaimChance('amg'));
     expect(insuranceClaimChance('amg')).toBeGreaterThan(insuranceClaimChance('keeper'));
-    expect(insurancePremium(400)).toBe(40);
+    expect(insurancePremium(400)).toBe(100);
     const base = { id: 'x', grade: 6.5, retired: false, listing_id: null } as any;
     expect(canTradeIn(base)).toBe(true);
     expect(canTradeIn({ ...base, grade: 7 })).toBe(false);

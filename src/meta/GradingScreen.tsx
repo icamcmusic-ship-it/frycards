@@ -442,7 +442,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
   const tokens = overview?.tokens ?? 0;
   const tokenUsable = useToken && tokens > 0 && speed === 'standard';
   // Per-card fees in submit order: the loyalty perk zeroes the first card
-  // (AMG / Keeper), a trade-in token the next one; insurance is 10% of each
+  // (AMG / Keeper), a trade-in token the next one; insurance is 25% of each
   // remaining fee.
   const { totalFee, insuranceFee } = useMemo(() => {
     let sum = 0;
@@ -1133,7 +1133,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                         <div key={g.id} className="flex flex-col gap-1.5 w-fit">
                           <GradedSlab g={g} size="standard" />
                           <span className="heading-font fs-xs text-center px-1 py-0.5 ink-border-sm bg-[var(--c-ink)] text-[var(--c-yellow)]">
-                            LISTED ON THE MARKETPLACE
+                            LISTED FOR SALE (MARKET OR SHOP)
                           </span>
                         </div>
                       );
@@ -1331,7 +1331,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                   checked={insure}
                   onChange={(e) => setInsure(e.target.checked)}
                 />
-                INSURE (+10%, refund under {INSURANCE_FLOOR})
+                INSURE (+{Math.round(INSURANCE_RATE * 100)}%, refund under {INSURANCE_FLOOR})
               </label>
               {tokens > 0 && (
                 <label

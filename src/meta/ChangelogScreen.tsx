@@ -114,15 +114,15 @@ export const ENTRIES: ChangelogEntry[] = [
         route: { screen: 'grading', sub: ['vault'], label: 'OPEN THE VAULT' },
       },
       {
-        title: 'Slabs on the Marketplace',
-        body: 'List a slab at a fixed price or at auction. A listed slab is held in escrow, the buyer gets the slab itself, and each CPU collector favours one house and bids higher for its slabs.',
+        title: 'Slabs on the Marketplace and in shops',
+        body: 'List a slab at a fixed price or at auction, or stock it in your player shop from the Vault. A listed slab is held in escrow, the buyer gets the slab itself, and CPU collectors and Shop Floor customers each favour one house and pay more for its slabs.',
         category: 'grading',
         icon: Store,
         route: { screen: 'grading', sub: ['vault'], label: 'LIST A SLAB' },
       },
       {
         title: 'Insurance & trade-ins',
-        body: 'Insure a submission for +10% of the fee: a grade under 7 refunds the base fee (the premium is kept). Trade five slabs under 7 for a free grading at any house. New achievements and missions cover Pristine pulls, crossover upgrades, trade-ins, slab sales, insured saves and registries.',
+        body: 'Insure a submission for +25% of the fee: a grade under 7 refunds the base fee (the premium is kept). Trade five slabs under 7 for a free grading at any house. New achievements and missions cover Pristine pulls, crossover upgrades, trade-ins, slab sales, insured saves and registries.',
         category: 'grading',
         icon: ShieldCheck,
       },
