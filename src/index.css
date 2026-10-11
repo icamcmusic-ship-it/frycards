@@ -1060,3 +1060,207 @@ html[data-motion='reduced'] .sfx-burst {
   background-image: radial-gradient(rgba(255, 255, 255, 0.08) 22%, transparent 24%);
   background-size: 6px 6px;
 }
+
+/* ---------------------------------------------------------------------------
+   Patch notes (ChangelogScreen): release heroes with a version burst, item
+   cards with NEW stickers, category filters and before -> after callouts.
+   --------------------------------------------------------------------------- */
+.cl-hero {
+  background: var(--c-steel);
+  color: #fff;
+  padding: 18px 16px;
+  box-shadow: 6px 6px 0 0 var(--c-ink);
+}
+.cl-hero-dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 18%, transparent 20%);
+  background-size: 10px 10px;
+  mask-image: linear-gradient(110deg, transparent 35%, #000 100%);
+  -webkit-mask-image: linear-gradient(110deg, transparent 35%, #000 100%);
+  pointer-events: none;
+}
+.cl-hero h2 {
+  color: #ffd54f;
+  text-shadow: 2px 2px 0 #1a1a1a;
+}
+.cl-burst {
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  background: var(--c-yellow);
+  color: #1a1a1a;
+  clip-path: polygon(
+    50% 0%,
+    61% 14%,
+    79% 7%,
+    80% 25%,
+    98% 28%,
+    88% 44%,
+    100% 58%,
+    83% 66%,
+    86% 85%,
+    67% 83%,
+    57% 100%,
+    45% 86%,
+    27% 95%,
+    24% 77%,
+    5% 74%,
+    14% 57%,
+    0% 43%,
+    16% 34%,
+    11% 15%,
+    30% 16%,
+    39% 1%
+  );
+  filter: drop-shadow(3px 3px 0 #1a1a1a);
+  transform: rotate(-8deg);
+}
+.cl-burst span {
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.cl-burst small {
+  font-size: 12px;
+  margin-right: 1px;
+}
+.cl-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #1a1a1a;
+  color: #ffd54f;
+  border: 2px solid #1a1a1a;
+}
+.cl-tag-new {
+  background: var(--c-red);
+  color: #fff;
+}
+.cl-chip {
+  display: inline-block;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border: 2px solid var(--c-ink);
+}
+.cl-item {
+  position: relative;
+  padding: 12px 14px 14px;
+}
+.cl-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  transform: rotate(-3deg);
+}
+.cl-new {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  z-index: 1;
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--c-red);
+  color: #fff;
+  border: 2px solid #1a1a1a;
+  box-shadow: 2px 2px 0 0 #1a1a1a;
+  transform: rotate(6deg);
+}
+.cl-changes li {
+  padding: 4px 8px;
+  border: 2px dashed color-mix(in srgb, var(--c-ink) 35%, transparent);
+}
+.cl-before {
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  color: color-mix(in srgb, var(--c-ink) 55%, transparent);
+}
+.cl-after {
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 5px;
+  background: var(--c-yellow);
+  color: #1a1a1a;
+  border: 2px solid var(--c-ink);
+}
+.cl-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 5px 8px 5px 10px;
+  background: var(--c-paper);
+  color: var(--c-ink);
+  box-shadow: 2px 2px 0 0 var(--c-ink);
+}
+.cl-filter[aria-pressed='true'] {
+  background: var(--c-ink);
+  color: var(--c-paper);
+}
+.cl-count {
+  min-width: 20px;
+  padding: 0 4px;
+  text-align: center;
+  background: var(--c-yellow);
+  color: #1a1a1a;
+  border: 2px solid currentColor;
+}
+html[data-scheme='dark'] .cl-filter[aria-pressed='true'] {
+  background: var(--c-yellow);
+  color: #1a1a1a;
+}
+html[data-scheme='dark'] .cl-hero {
+  background: #050507;
+  border-color: var(--c-ink);
+}
+html[data-scheme='dark'] .cl-icon[style*='#1a1a1a'] {
+  border-color: var(--c-ink);
+}
+/* Entrance: the cards pop in, staggered. Off under Reduced motion. */
+@keyframes cl-pop-kf {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.cl-hero,
+.cl-item {
+  animation: cl-pop-kf 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.cl-item {
+  animation-delay: calc(min(var(--cl-i, 0), 8) * 45ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion='full']) .cl-hero,
+  html:not([data-motion='full']) .cl-item {
+    animation: none;
+  }
+}
+html[data-motion='reduced'] .cl-hero,
+html[data-motion='reduced'] .cl-item {
+  animation: none;
+}
+.cl-burst-sm {
+  width: 56px;
+  height: 56px;
+}
+.cl-burst-sm span {
+  font-size: 15px;
+}
+.cl-burst-sm small {
+  font-size: 9px;
+}
+html[data-scheme='dark'] .cl-new,
+html[data-scheme='dark'] .cl-tag-new {
+  color: #050507;
+}

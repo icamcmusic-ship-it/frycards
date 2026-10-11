@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { askConfirm } from './confirm';
-import { Sparkles, ScrollText, Newspaper } from 'lucide-react';
+import { Sparkles, Newspaper } from 'lucide-react';
 import { MetaHeader } from './ui';
 import { useMeta } from './MetaContext';
 import {
@@ -13,7 +13,7 @@ import {
   fetchPublicProfiles,
   subscribeTopic,
 } from '../lib/supabase';
-import { ENTRIES } from './ChangelogScreen';
+import { ENTRIES, loadLastSeenVersion, unseenItemCount } from './ChangelogScreen';
 import { RARITY_CHIP } from './rarity';
 import { SafeImage } from './SafeImage';
 
@@ -28,11 +28,8 @@ function authorLabel(author: string | null | undefined, names: Map<string, strin
 }
 
 /** Derived from ChangelogScreen's newest entry so this pointer can never
- * drift out of date again (it used to be a hard-coded copy of an old
- * update's headline). */
+ * drift out of date again. */
 const LATEST = ENTRIES[0];
-const teaser = (LATEST?.items[0] ?? '').slice(0, 140);
-const LATEST_UPDATE_HEADLINE = `${LATEST?.version ?? 'Latest update'} — ${teaser}${(LATEST?.items[0] ?? '').length > 140 ? '…' : ''}`;
 
 function timeAgo(iso: string | null | undefined): string {
   const ms = iso ? Date.now() - new Date(iso).getTime() : NaN;
@@ -54,6 +51,7 @@ export function NewsCenterScreen({
   onOpenChangelog: () => void;
 }) {
   const { profile } = useMeta();
+  const [newCount] = useState(() => unseenItemCount(loadLastSeenVersion()));
   const [posts, setPosts] = useState<NewsPost[]>([]);
   const [feed, setFeed] = useState<SerializedFeedEntry[]>([]);
   // U63: posts store the author's user id; resolve it to a username, and
@@ -176,18 +174,37 @@ export function NewsCenterScreen({
           </div>
         )}
 
-        {/* Changelog pointer */}
+        {/* Changelog pointer: the newest release, with a count of what's new
+            since this player last opened the patch notes. */}
         <button
           onClick={onOpenChangelog}
-          className="btn-pop w-full text-left flex items-center gap-3 bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-md shadow-hard-black-xs px-5 py-4"
+          className="btn-pop cl-news w-full text-left flex items-center gap-3 bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-md shadow-hard-black-xs px-4 py-3.5"
         >
-          <ScrollText className="w-6 h-6 text-[var(--c-yellow)] shrink-0" />
-          <div className="min-w-0">
-            <div className="heading-font text-sm text-[var(--c-yellow)]">LATEST UPDATE</div>
-            <div className="text-[12px] font-bold truncate">{LATEST_UPDATE_HEADLINE}</div>
+          <div className="cl-burst cl-burst-sm shrink-0" aria-hidden="true">
+            <span className="heading-font">
+              <small>v</small>
+              {LATEST?.version}
+            </span>
           </div>
-          <span className="ml-auto heading-font text-[11px] text-[var(--c-yellow)] shrink-0">
-            FULL CHANGELOG &gt;
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="heading-font text-sm text-[var(--c-yellow)]">
+                {newCount > 0 ? `${newCount} NEW SINCE YOU LAST PLAYED` : 'LATEST UPDATE'}
+              </span>
+            </div>
+            <div className="heading-font text-[15px] uppercase leading-tight truncate">
+              {LATEST?.name ?? 'Latest update'}
+            </div>
+            <div className="text-[12px] font-bold opacity-80 truncate">{LATEST?.tagline}</div>
+          </div>
+          <span className="heading-font text-[11px] text-[var(--c-yellow)] shrink-0 hidden sm:inline">
+            PATCH NOTES &gt;
+          </span>
+          <span
+            className="heading-font text-[16px] text-[var(--c-yellow)] shrink-0 sm:hidden"
+            aria-hidden="true"
+          >
+            &gt;
           </span>
         </button>
 
