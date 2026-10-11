@@ -31,10 +31,16 @@ import {
   type Subgrades,
 } from './grading';
 import { quicksellPrice } from './economy';
-import { fetchShowcaseSlabs, setShowcaseSlabs } from '../lib/supabase';
+import {
+  fetchShowcaseSlabs,
+  setShowcaseCards,
+  slabIdOfShowcaseEntry,
+  slabShowcaseEntry,
+} from '../lib/supabase';
 
-/** Max slabs pinned to a profile — mirror of profiles_showcase_slabs_max3. */
-export const MAX_SHOWCASE_SLABS = 3;
+/** Profile showcase slots, shared by cards and slabs — mirror of the cap in
+ * set_showcase_cards. */
+export const MAX_SHOWCASE = 6;
 
 const CONDITION_TEXT = [
   'Clean — sharp corners, centred, no visible wear.',
@@ -61,7 +67,8 @@ export function SlabDetailModal({
   /** Someone else's slab (from a profile showcase): details only, no actions. */
   readOnly?: boolean;
   g: GradedCard;
-  /** Current showcase_slabs on the profile. */
+  /** Current profile showcase entries (profiles.showcase_cards — cards and
+   * `slab:<id>` entries). */
   pinned: string[];
   onClose: () => void;
   /** Called after any action that changed the slab, the collection or the
@@ -78,7 +85,9 @@ export function SlabDetailModal({
   const def = POOL_BY_ID[g.card_id];
   const svc = GRADING_SERVICE_BY_ID[g.service];
   const graded = g.grade != null && !g.crossover_pending;
-  const isPinned = pinned.includes(g.id);
+  const entry = slabShowcaseEntry(g.id);
+  const isPinned = pinned.includes(entry);
+  const full = !isPinned && pinned.length >= MAX_SHOWCASE;
   const price = graded
     ? gradedQuicksellPrice(def?.rarity, g.foil, g.grade!, g.service, {
         pristine: g.pristine,
@@ -110,12 +119,7 @@ export function SlabDetailModal({
 
   const togglePin = () =>
     run(
-      () =>
-        setShowcaseSlabs(
-          isPinned
-            ? pinned.filter((id) => id !== g.id)
-            : [...pinned, g.id].slice(-MAX_SHOWCASE_SLABS),
-        ),
+      () => setShowcaseCards(isPinned ? pinned.filter((id) => id !== entry) : [...pinned, entry]),
       false,
     );
 
@@ -271,10 +275,10 @@ export function SlabDetailModal({
               <PopButton
                 color={isPinned ? 'steel' : 'yellow'}
                 onClick={() => void togglePin()}
-                disabled={busy}
+                disabled={busy || full}
                 title={
-                  !isPinned && pinned.length >= MAX_SHOWCASE_SLABS
-                    ? `Your ${MAX_SHOWCASE_SLABS} slots are full — pinning replaces the oldest`
+                  full
+                    ? `All ${MAX_SHOWCASE} showcase slots are full — unpin a card or slab first`
                     : undefined
                 }
               >
@@ -286,9 +290,9 @@ export function SlabDetailModal({
                   )}
                   {isPinned
                     ? 'UNPIN FROM PROFILE'
-                    : pinned.length >= MAX_SHOWCASE_SLABS
-                      ? 'SHOWCASE (REPLACES OLDEST)'
-                      : `SHOWCASE (${pinned.length}/${MAX_SHOWCASE_SLABS})`}
+                    : full
+                      ? `SHOWCASE FULL (${MAX_SHOWCASE}/${MAX_SHOWCASE})`
+                      : `SHOWCASE (${pinned.length}/${MAX_SHOWCASE})`}
                 </span>
               </PopButton>
               {onShowroom && (
@@ -389,94 +393,46 @@ export function SlabDetailModal({
 }
 
 /**
- * The "graded showcase" strip on a profile — up to three pinned slabs, read
- * through get_showcase_slabs so it works for other players' profiles too
- * (graded_cards itself is owner-only).
+ * The profile showcase grid — cards and graded slabs in the owner's pin order
+ * (profiles.showcase_cards). Slab rows come from get_showcase_slabs so it
+ * works on other players' profiles too (graded_cards itself is owner-only).
  */
-export function ShowcaseSlabsRow({
+export function ShowcaseGrid({
   userId,
-  refreshKey,
-  emptyText,
-  heading,
-  onEdited,
+  entries,
+  size,
+  renderCard,
 }: {
   userId: string;
-  /** Own profile: show reorder / unpin controls, then call this to refresh. */
-  onEdited?: () => Promise<void> | void;
-  /** Printed above the row only when there is something to show. */
-  heading?: string;
-  /** Change to refetch (e.g. the viewer's own showcase_slabs array). */
-  refreshKey?: string;
-  emptyText?: string;
+  entries: string[];
+  size: 'standard' | 'compact';
+  /** Render a plain card entry (CardFace / unavailable tile). */
+  renderCard: (cardId: string) => React.ReactNode;
 }) {
-  const [slabs, setSlabs] = useState<GradedCard[] | null>(null);
+  const [slabs, setSlabs] = useState<Record<string, GradedCard>>({});
   const [open, setOpen] = useState<GradedCard | null>(null);
-  const [busy, setBusy] = useState(false);
-  const save = async (next: GradedCard[]) => {
-    setBusy(true);
-    const err = await setShowcaseSlabs(next.map((x) => x.id));
-    if (!err) {
-      setSlabs(next);
-      await onEdited?.();
-    }
-    setBusy(false);
-  };
-  const swap = (a: number, b: number) => {
-    if (!slabs) return;
-    const next = [...slabs];
-    [next[a], next[b]] = [next[b], next[a]];
-    return save(next);
-  };
+  const slabKey = entries.filter((e) => slabIdOfShowcaseEntry(e)).join(',');
   React.useEffect(() => {
+    if (!slabKey) return;
     let cancelled = false;
     void fetchShowcaseSlabs(userId).then((rows) => {
-      if (!cancelled) setSlabs(rows as GradedCard[]);
+      if (!cancelled) setSlabs(Object.fromEntries((rows as GradedCard[]).map((g) => [g.id, g])));
     });
     return () => {
       cancelled = true;
     };
-  }, [userId, refreshKey]);
-  if (slabs == null) return null;
-  if (slabs.length === 0)
-    return emptyText ? (
-      <p className="text-[11px] font-bold text-[var(--c-steel)]">{emptyText}</p>
-    ) : null;
+  }, [userId, slabKey]);
   return (
-    <div>
-      {heading && (
-        <h2 className="heading-font text-sm mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
-          {heading}
-        </h2>
-      )}
-      <div className="flex flex-wrap gap-3">
-        {slabs.map((g, i) => (
-          <div key={g.id} className="flex flex-col items-center gap-1">
-            <GradedSlab g={g} size="compact" onClick={() => setOpen(g)} />
-            {onEdited && (
-              <div className="flex gap-1">
-                {(
-                  [
-                    ['◀', 'Move left', i > 0, () => swap(i, i - 1)],
-                    ['▶', 'Move right', i < slabs.length - 1, () => swap(i, i + 1)],
-                    ['✕', 'Unpin', true, () => save(slabs.filter((x) => x.id !== g.id))],
-                  ] as const
-                ).map(([glyph, label, enabled, fn]) => (
-                  <button
-                    key={label}
-                    type="button"
-                    disabled={!enabled || busy}
-                    onClick={() => void fn()}
-                    aria-label={`${label}: ${POOL_BY_ID[g.card_id]?.name ?? 'slab'}`}
-                    title={label}
-                    className="heading-font fs-xs w-7 h-7 ink-border-sm bg-[var(--c-paper)] disabled:opacity-30"
-                  >
-                    {glyph}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+    <>
+      <div className={`flex flex-wrap items-end ${size === 'compact' ? 'gap-2' : 'gap-3'}`}>
+        {entries.map((e) => {
+          const slabId = slabIdOfShowcaseEntry(e);
+          if (!slabId) return <React.Fragment key={e}>{renderCard(e)}</React.Fragment>;
+          const g = slabs[slabId];
+          // Not loaded yet, or pruned since: skip rather than show a gap.
+          if (!g) return null;
+          return <GradedSlab key={e} g={g} size={size} onClick={() => setOpen(g)} />;
+        })}
       </div>
       {open && (
         <SlabDetailModal
@@ -487,6 +443,6 @@ export function ShowcaseSlabsRow({
           onChanged={() => {}}
         />
       )}
-    </div>
+    </>
   );
 }

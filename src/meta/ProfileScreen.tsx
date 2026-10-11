@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { askConfirm } from './confirm';
-import { ShowcaseSlabsRow } from './SlabDetailModal';
+import { ShowcaseGrid } from './SlabDetailModal';
 import { Pencil, Check, Search, ShieldAlert, Star } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -289,36 +289,26 @@ export function ProfileScreen({
           {(profile.showcase_cards || []).length === 0 ? (
             <EmptyState
               icon={<Star className="w-7 h-7" aria-hidden />}
-              text="Pin up to 6 cards from your Collection to show off here."
+              text="Pin up to 6 cards or graded slabs from your Collection to show off here."
               action={
                 onManageShowcase ? { label: 'ADD CARDS ▸', onClick: onManageShowcase } : undefined
               }
             />
           ) : (
-            <div className="flex flex-wrap gap-3">
-              {(profile.showcase_cards || []).map((id) => {
+            <ShowcaseGrid
+              userId={profile.id}
+              entries={profile.showcase_cards || []}
+              size="standard"
+              renderCard={(id) => {
                 const def = POOL_BY_ID[id];
                 // An id that no longer resolves still occupies its slot and
-                // still counts toward the 6-card cap, so it gets a tile that
-                // says so rather than the silent gap this used to render.
-                if (!def) return <UnavailableShowcaseTile key={id} cardId={id} size="standard" />;
-                return <CardFace key={id} def={def} size="standard" />;
-              })}
-            </div>
+                // still counts toward the 6-slot cap, so it gets a tile that
+                // says so rather than a silent gap.
+                if (!def) return <UnavailableShowcaseTile cardId={id} size="standard" />;
+                return <CardFace def={def} size="standard" />;
+              }}
+            />
           )}
-        </div>
-
-        {/* Graded showcase — pinned slabs (pin them from a slab's detail sheet). */}
-        <div className="mt-7">
-          <h2 className="heading-font text-base bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5 mb-2">
-            GRADED SHOWCASE
-          </h2>
-          <ShowcaseSlabsRow
-            userId={profile.id}
-            refreshKey={(profile.showcase_slabs ?? []).join(',')}
-            emptyText="Open a graded slab in your Collection and press SHOWCASE to pin up to 3 here."
-            onEdited={refreshProfile}
-          />
         </div>
 
         {/* Cosmetic lockers */}

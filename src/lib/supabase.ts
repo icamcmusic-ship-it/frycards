@@ -178,9 +178,9 @@ export interface Profile {
   equipped_banner: string | null;
   equipped_avatar: string | null;
   last_free_pack_at: string | null;
+  /** Up to 6 pinned entries: card ids, and graded slabs as `slab:<id>`
+   * (see SLAB_SHOWCASE_PREFIX). */
   showcase_cards: string[];
-  /** Up to 3 graded slab ids pinned on the profile (graded_cards.id). */
-  showcase_slabs?: string[];
   /** Opt out of username recognition in the News Center's Serialized-pull
    * feed — the pull itself always still posts, just as "A collector". */
   hide_serialized_announcements: boolean;
@@ -518,19 +518,20 @@ export async function setUsername(name: string): Promise<string | null> {
   return rpcError(error);
 }
 
-/** Pin up to 6 owned cards to show off on the profile (own or when viewed by others). */
+/** Showcase entries that are graded slabs are stored as `slab:<graded_cards.id>`
+ * in profiles.showcase_cards, mixed with plain card ids (20261013000000). */
+export const SLAB_SHOWCASE_PREFIX = 'slab:';
+export const slabShowcaseEntry = (gradedId: string) => SLAB_SHOWCASE_PREFIX + gradedId;
+export const slabIdOfShowcaseEntry = (entry: string): string | null =>
+  entry.startsWith(SLAB_SHOWCASE_PREFIX) ? entry.slice(SLAB_SHOWCASE_PREFIX.length) : null;
+
+/** Pin up to 6 owned cards and/or graded slabs to the profile (own or when viewed by others). */
 export async function setShowcaseCards(cardIds: string[]): Promise<string | null> {
   const { error } = await supabase.rpc('set_showcase_cards', { p_card_ids: cardIds });
   return rpcError(error);
 }
 
-/** Pin up to 3 of your own graded slabs to the profile. */
-export async function setShowcaseSlabs(ids: string[]): Promise<string | null> {
-  const { error } = await supabase.rpc('set_showcase_slabs', { p_ids: ids });
-  return rpcError(error);
-}
-
-/** Anyone's pinned slabs (graded_cards rows), in pin order. */
+/** Anyone's pinned slabs (graded_cards rows from their showcase), in pin order. */
 export async function fetchShowcaseSlabs(userId: string): Promise<
   {
     id: string;

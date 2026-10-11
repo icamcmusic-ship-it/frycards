@@ -60,18 +60,17 @@ import {
   quicksellCards,
   quicksellMany,
   setShowcaseCards,
+  slabIdOfShowcaseEntry,
   type QuicksellManyItem,
 } from '../lib/supabase';
 import { GradedCard, fetchGradedCards, gradedQuicksellPrice } from './grading';
 import { GradedSlab } from './GradedSlab';
-import { SlabDetailModal } from './SlabDetailModal';
+import { SlabDetailModal, MAX_SHOWCASE } from './SlabDetailModal';
 import { AnimatePresence } from 'motion/react';
 import type { ShowroomSubject } from './ShowroomScreen';
 import { isPremiumRarity } from '../components/Card3DShowroom';
 import { fmtCredits, quicksellPrice } from './economy';
 import { cardColors } from '../game/poker/colors';
-
-const MAX_SHOWCASE = 6;
 
 /** Spare (unlocked) normal/foil split for one card, modeling decks as
  * consuming normal copies first and only spilling into foil once normal is
@@ -405,12 +404,15 @@ export function CollectionScreen({
   const setName = setFilters.includes(filters.set) ? filters.set : 'All';
 
   const showcase = profile?.showcase_cards || [];
+  const pinnedSlabIds = showcase
+    .map(slabIdOfShowcaseEntry)
+    .filter((id): id is string => id != null);
 
   const toggleShowcase = async (cardId: string) => {
     if (showcaseBusy) return;
     const inShowcase = showcase.includes(cardId);
     if (!inShowcase && showcase.length >= MAX_SHOWCASE) {
-      setShowcaseError(`You can only showcase up to ${MAX_SHOWCASE} cards.`);
+      setShowcaseError(`You can only showcase up to ${MAX_SHOWCASE} cards and slabs.`);
       return;
     }
     const next = inShowcase ? showcase.filter((id) => id !== cardId) : [...showcase, cardId];
@@ -1054,12 +1056,27 @@ export function CollectionScreen({
               ) : (
                 <>
                   <p className="fs-xs font-bold text-[var(--c-steel)] mb-2">
-                    Tap a pinned card to unpin it. To pin more, open an owned card and choose ☆ ADD
-                    TO SHOWCASE.
+                    Tap a pinned card to unpin it (tap a slab to open it). To pin more, open an
+                    owned card and choose ☆ ADD TO SHOWCASE, or a graded slab and press SHOWCASE.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {showcase.map((id) => {
-                      const def = POOL_BY_ID[id];
+                      const slabId = slabIdOfShowcaseEntry(id);
+                      if (slabId) {
+                        const g = gradedCards.find((x) => x.id === slabId);
+                        // A pinned slab opens its detail sheet (UNPIN lives there).
+                        if (g)
+                          return (
+                            <GradedSlab
+                              key={id}
+                              g={g}
+                              size="compact"
+                              onClick={() => setSlabOpen(g.id)}
+                            />
+                          );
+                        if (dataLoading) return null;
+                      }
+                      const def = slabId ? undefined : POOL_BY_ID[id];
                       // This is the player's own showcase, so the placeholder is
                       // the recovery path: tapping it unpins the dead slot.
                       if (!def)
@@ -1098,7 +1115,7 @@ export function CollectionScreen({
                     <SlabDetailModal
                       key={g.id}
                       g={g}
-                      pinned={profile?.showcase_slabs ?? []}
+                      pinned={showcase}
                       onClose={() => setSlabOpen(null)}
                       onChanged={async (gone) => {
                         await Promise.all([
@@ -1124,8 +1141,7 @@ export function CollectionScreen({
                 summary={
                   <>
                     {gradedCards.length}
-                    {(profile?.showcase_slabs?.length ?? 0) > 0 &&
-                      ` · ${profile!.showcase_slabs!.length}/3 on your profile`}
+                    {pinnedSlabIds.length > 0 && ` · ${pinnedSlabIds.length} on your profile`}
                   </>
                 }
               >
@@ -1163,11 +1179,11 @@ export function CollectionScreen({
                     {/* The slab's own keyframes travel with it — a top-grade case
                       shines on this shelf as well as in the Lab. */}
                     <div className="flex flex-wrap gap-2">
-                      {sortSlabs(gradedCards, slabSort, profile?.showcase_slabs ?? []).map((g) => (
+                      {sortSlabs(gradedCards, slabSort, pinnedSlabIds).map((g) => (
                         <div key={g.id} className="flex flex-col gap-1 w-fit">
                           <div className="relative">
                             <GradedSlab g={g} onClick={() => setSlabOpen(g.id)} />
-                            {profile?.showcase_slabs?.includes(g.id) && (
+                            {pinnedSlabIds.includes(g.id) && (
                               <span className="absolute -top-2 -right-2 heading-font fs-xs bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm z-20">
                                 ★ PINNED
                               </span>
