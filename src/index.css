@@ -834,3 +834,83 @@ html[data-motion='reduced'] .targeted-flash {
 html[data-motion='reduced'] .chip-float {
   animation: chip-fade-kf 0.9s linear both;
 }
+
+/* ---------------------------------------------------------------------------
+   Dark themes (INK; AUDIT-2026-10-11 U61). A dark theme inverts the roles —
+   paper is the dark page, ink the light text, border and offset shadow — so
+   most of the app needs nothing. These rules re-map the few places that use a
+   role as a SURFACE with a fixed partner colour:
+   - yellow surfaces carry ink text, which is now light: give them dark text;
+   - ink surfaces (top bars, ink buttons) carry paper / yellow text: keep them
+     a near-black chrome and turn their paper text light;
+   - literal white / black fills from the light themes.
+   The poker table is a dark felt in every theme and keeps the classic roles
+   (its scope resets them), so none of this applies inside it.
+   --------------------------------------------------------------------------- */
+html[data-scheme='dark'] .poker-table {
+  --c-ink: #1a1a1a;
+  --c-paper: #f7f7f7;
+  --c-red: #d43531;
+  --c-steel: #2c3e50;
+}
+html[data-scheme='dark'] body {
+  background-color: var(--c-paper);
+  color: var(--c-ink);
+}
+/* Yellow surfaces hold dark text. */
+html[data-scheme='dark'] [class~='bg-[var(--c-yellow)]']:not(.poker-table *),
+html[data-scheme='dark']
+  [class~='bg-[var(--c-yellow)]']:not(.poker-table *)
+  [class*='text-[var(--c-ink)]'] {
+  color: var(--c-paper);
+}
+/* Ink as a surface stays a dark chrome, raised off the page by its outline. */
+html[data-scheme='dark'] [class~='bg-[var(--c-ink)]']:not(.poker-table *) {
+  background-color: #050507;
+  color: var(--c-ink);
+}
+html[data-scheme='dark']
+  [class~='bg-[var(--c-ink)]']:not(.poker-table *)
+  [class*='text-[var(--c-paper)]'],
+html[data-scheme='dark']
+  [class~='bg-[var(--c-ink)]'][class*='text-[var(--c-paper)]']:not(.poker-table *) {
+  color: var(--c-ink);
+}
+/* Steel stays a dark surface: its paper text turns light, and steel used as a
+   secondary TEXT colour is lifted so it reads on the dark page. */
+html[data-scheme='dark'] [class*='bg-[var(--c-steel)]']:not(.poker-table *),
+html[data-scheme='dark']
+  [class*='bg-[var(--c-steel)]']:not(.poker-table *)
+  [class*='text-[var(--c-paper)]'] {
+  color: var(--c-ink);
+}
+html[data-scheme='dark'] [class*='text-[var(--c-steel)]']:not(.poker-table *) {
+  color: #a9bccd;
+}
+html[data-scheme='dark']
+  [class~='bg-[var(--c-yellow)]']:not(.poker-table *)
+  [class*='text-[var(--c-steel)]'] {
+  color: #3b4d5e;
+}
+/* Translucent ink is a backdrop / scrim: keep it dark. */
+html[data-scheme='dark'] [class*='bg-[var(--c-ink)]/']:not(.poker-table *) {
+  background-color: rgb(0 0 0 / 0.72);
+}
+/* Literal light-theme fills. */
+html[data-scheme='dark'] .bg-white:not(.poker-table *) {
+  background-color: #262830;
+}
+html[data-scheme='dark'] .text-black:not(.poker-table *) {
+  color: var(--c-ink);
+}
+html[data-scheme='dark'] [class*='bg-[var(--c-red)]'][class~='text-white']:not(.poker-table *) {
+  color: var(--c-paper);
+}
+/* Form fields follow the page, not the UA's light default. */
+html[data-scheme='dark']
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not(.poker-table *),
+html[data-scheme='dark'] textarea:not(.poker-table *),
+html[data-scheme='dark'] select:not(.poker-table *) {
+  background-color: var(--c-paper);
+  color: var(--c-ink);
+}

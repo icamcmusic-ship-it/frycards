@@ -10,7 +10,7 @@ import {
   Timer,
   Waves,
 } from 'lucide-react';
-import { THEMES, ThemeName } from './themes';
+import { SYSTEM_THEMES, THEMES, type ThemeChoice } from './themes';
 import { PopButton, Notice } from './ui';
 import { CurrencyBar } from './CurrencyBar';
 import { useMeta } from './MetaContext';
@@ -29,6 +29,20 @@ import {
   saveHandHelper,
   loadFourColor,
   saveFourColor,
+  TIMER_MODES,
+  type TimerMode,
+  loadTimerMode,
+  saveTimerMode,
+  loadAutoDeal,
+  saveAutoDeal,
+  loadPauseOnTarget,
+  savePauseOnTarget,
+  loadAmountsInBB,
+  saveAmountsInBB,
+  HAND_SORTS,
+  type HandSort,
+  loadHandSort,
+  saveHandSort,
 } from './matchPrefs';
 import { restartCoach } from './coachPractice';
 
@@ -45,8 +59,8 @@ export function SettingsScreen({
   onMotionModeChange,
   onBack,
 }: {
-  currentTheme: ThemeName;
-  onThemeChange: (theme: ThemeName) => void;
+  currentTheme: ThemeChoice;
+  onThemeChange: (theme: ThemeChoice) => void;
   motionMode: MotionMode;
   onMotionModeChange: (mode: MotionMode) => void;
   onBack: () => void;
@@ -78,6 +92,11 @@ export function SettingsScreen({
   const [handHelper, setHandHelper] = useState(() => loadHandHelper(false));
   const [fourColor, setFourColor] = useState(loadFourColor);
   const [coachQueued, setCoachQueued] = useState(false);
+  const [timers, setTimers] = useState<TimerMode>(loadTimerMode);
+  const [autoDeal, setAutoDeal] = useState(loadAutoDeal);
+  const [pauseOnTarget, setPauseOnTarget] = useState(loadPauseOnTarget);
+  const [inBB, setInBB] = useState(loadAmountsInBB);
+  const [handSort, setHandSort] = useState<HandSort>(loadHandSort);
   // Two-step reset: the first press arms it, the second (within 6s) fires.
   const [resetArmed, setResetArmed] = useState(false);
   const pickSpeed = (idx: number) => {
@@ -177,7 +196,7 @@ export function SettingsScreen({
             <Palette className="w-6 h-6 text-[var(--c-ink)]" />
             <h2 className="heading-font text-lg">COLOR THEME</h2>
             <span className="fs-sm font-bold text-[var(--c-steel)]" aria-live="polite">
-              {THEMES[currentTheme]?.label}
+              {currentTheme === 'system' ? 'MATCH SYSTEM' : THEMES[currentTheme]?.label}
             </span>
           </div>
           <div
@@ -185,42 +204,34 @@ export function SettingsScreen({
             aria-label="Color theme"
             className="flex gap-3 overflow-x-auto px-1 pt-1 pb-3 snap-x"
           >
-            {themeList.map((theme) => {
-              const selected = currentTheme === theme.name;
-              return (
-                <button
-                  key={theme.name}
-                  type="button"
-                  onClick={() => onThemeChange(theme.name)}
-                  aria-pressed={selected}
-                  aria-label={`${theme.label} theme${selected ? ', selected' : ''}`}
-                  title={theme.label}
-                  className={`relative shrink-0 snap-start w-14 h-14 p-1 ink-border-md transition-all ${
-                    selected
-                      ? 'ring-4 ring-[var(--c-ink)] shadow-hard-black'
-                      : 'hover:-translate-y-0.5 shadow-hard-black-xs'
-                  }`}
-                >
-                  {/* The theme's five roles as vertical stripes */}
-                  <span className="flex w-full h-full">
-                    {[
-                      theme.colors.ink,
-                      theme.colors.steel,
-                      theme.colors.red,
-                      theme.colors.yellow,
-                      theme.colors.paper,
-                    ].map((color, idx) => (
-                      <span key={idx} className="flex-1" style={{ backgroundColor: color }} />
-                    ))}
-                  </span>
-                  {selected && (
-                    <span className="absolute inset-0 m-auto w-6 h-6 flex items-center justify-center rounded-full bg-[var(--c-ink)] text-[var(--c-paper)]">
-                      <Check className="w-4 h-4" strokeWidth={3} aria-hidden />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {/* SYSTEM follows the device's light/dark setting (S-13): half
+                the light theme, half the dark one. */}
+            <ThemeSwatch
+              label="MATCH SYSTEM"
+              selected={currentTheme === 'system'}
+              onClick={() => onThemeChange('system')}
+              stripes={[
+                THEMES[SYSTEM_THEMES.light].colors.paper,
+                THEMES[SYSTEM_THEMES.light].colors.ink,
+                THEMES[SYSTEM_THEMES.dark].colors.paper,
+                THEMES[SYSTEM_THEMES.dark].colors.ink,
+              ]}
+            />
+            {themeList.map((theme) => (
+              <ThemeSwatch
+                key={theme.name}
+                label={theme.label}
+                selected={currentTheme === theme.name}
+                onClick={() => onThemeChange(theme.name)}
+                stripes={[
+                  theme.colors.ink,
+                  theme.colors.steel,
+                  theme.colors.red,
+                  theme.colors.yellow,
+                  theme.colors.paper,
+                ]}
+              />
+            ))}
           </div>
         </div>
 
@@ -275,12 +286,8 @@ export function SettingsScreen({
           </div>
           <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
             <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
-              How long the bots at your table take to act: 1× / 2× / INSTANT. At 1× a raise, cast or
-              large call takes 5–7 seconds and a check or fold 1–2; 2× halves that and INSTANT skips
-              the wait. The pause never depends on a bot's hand, so it is never a tell, and the
-              match clock is charged the same at every speed — this changes how long you wait, not
-              how fast the blinds rise. You can also cycle it mid-match from the BOTS chip on the
-              table.
+              How long the bots take to act. It never depends on their cards, and the blinds rise
+              the same at every speed. Also the BOTS chip on the table.
             </p>
             <div className="flex flex-wrap gap-2">
               {CPU_SPEEDS.map((s, i) => (
@@ -290,7 +297,38 @@ export function SettingsScreen({
                   ariaPressed={cpuSpeed === i}
                   onClick={() => pickSpeed(i)}
                 >
-                  <OptionLabel label={s.label} blurb={s.blurb} />
+                  <OptionLabel label={s.label} blurb={SPEED_TIMINGS[s.label] ?? s.blurb} />
+                </PopButton>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Table timers (AUDIT-2026-10-11 §3.1.0). */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Timer className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">TABLE TIMERS</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              Whether the table hurries you. OFF never folds, checks or passes for you — take all
+              the time you want. On RELAXED and OFF every action counts as a fixed 5 seconds on the
+              match clock, so the blinds rise by hands played, not by how long you think. Also the
+              TIMERS chip on the table.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {TIMER_MODES.map((t) => (
+                <PopButton
+                  key={t.id}
+                  color={timers === t.id ? 'yellow' : 'steel'}
+                  ariaPressed={timers === t.id}
+                  onClick={() => {
+                    setTimers(t.id);
+                    saveTimerMode(t.id);
+                  }}
+                >
+                  <OptionLabel label={t.label} blurb={t.blurb} />
                 </PopButton>
               ))}
             </div>
@@ -379,6 +417,57 @@ export function SettingsScreen({
               >
                 {fourColor ? 'ON' : 'OFF'}
               </PopButton>
+            </div>
+            <ToggleRow
+              title="AUTO-DEAL"
+              blurb="Deal the next hand by itself after the result. Off shows a DEAL NEXT HAND button, so you can read the hand's recap first."
+              on={autoDeal}
+              onChange={(v) => {
+                setAutoDeal(v);
+                saveAutoDeal(v);
+              }}
+            />
+            <ToggleRow
+              title="PAUSE WHEN A POWER TARGETS ME"
+              blurb="A power cast at you stays on screen, and the bots wait, until you tap GOT IT."
+              on={pauseOnTarget}
+              onChange={(v) => {
+                setPauseOnTarget(v);
+                savePauseOnTarget(v);
+              }}
+            />
+            <ToggleRow
+              title="AMOUNTS IN BIG BLINDS"
+              blurb="Show bets, stacks, pots and power costs in big blinds (4.5 BB) instead of chips."
+              on={inBB}
+              onChange={(v) => {
+                setInBB(v);
+                saveAmountsInBB(v);
+              }}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="heading-font text-sm">POWER HAND ORDER</div>
+                <p className="text-[11px] font-bold text-[var(--c-steel)] mt-1 max-w-md">
+                  How your power cards line up at the table. Also the sort chip above them.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {HAND_SORTS.map((o) => (
+                  <PopButton
+                    key={o.id}
+                    color={handSort === o.id ? 'yellow' : 'steel'}
+                    ariaPressed={handSort === o.id}
+                    title={o.blurb}
+                    onClick={() => {
+                      setHandSort(o.id);
+                      saveHandSort(o.id);
+                    }}
+                  >
+                    {o.label.replace('↕ ', '')}
+                  </PopButton>
+                ))}
+              </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="min-w-0">
@@ -536,6 +625,90 @@ export function SettingsScreen({
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Bot speed timings on each option (U60). */
+const SPEED_TIMINGS: Record<string, string> = {
+  '1×': '1–7 s per bot',
+  '2×': 'half that',
+  INSTANT: 'no waiting',
+};
+
+function ThemeSwatch({
+  label,
+  selected,
+  onClick,
+  stripes,
+}: {
+  key?: React.Key;
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+  stripes: string[];
+}) {
+  return (
+    <div className="shrink-0 snap-start flex flex-col items-center gap-1 w-16">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={selected}
+        aria-label={`${label} theme${selected ? ', selected' : ''}`}
+        title={label}
+        className={`relative w-14 h-14 p-1 ink-border-md transition-all ${
+          selected
+            ? 'ring-4 ring-[var(--c-ink)] shadow-hard-black'
+            : 'hover:-translate-y-0.5 shadow-hard-black-xs'
+        }`}
+      >
+        <span className="flex w-full h-full">
+          {stripes.map((color, idx) => (
+            <span key={idx} className="flex-1" style={{ backgroundColor: color }} />
+          ))}
+        </span>
+        {selected && (
+          <span className="absolute inset-0 m-auto w-6 h-6 flex items-center justify-center rounded-full bg-[var(--c-ink)] text-[var(--c-paper)]">
+            <Check className="w-4 h-4" strokeWidth={3} aria-hidden />
+          </span>
+        )}
+      </button>
+      {/* U59: the name under every swatch, not only in a tooltip. */}
+      <span
+        aria-hidden
+        className={`fs-xs font-black text-center leading-tight ${selected ? '' : 'text-[var(--c-steel)]'}`}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function ToggleRow({
+  title,
+  blurb,
+  on,
+  onChange,
+}: {
+  title: string;
+  blurb: string;
+  on: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="min-w-0">
+        <div className="heading-font text-sm">{title}</div>
+        <p className="text-[11px] font-bold text-[var(--c-steel)] mt-1 max-w-md">{blurb}</p>
+      </div>
+      <PopButton
+        color={on ? 'yellow' : 'steel'}
+        ariaPressed={on}
+        ariaLabel={`${title.toLowerCase()} ${on ? 'on' : 'off'}`}
+        onClick={() => onChange(!on)}
+      >
+        {on ? 'ON' : 'OFF'}
+      </PopButton>
     </div>
   );
 }

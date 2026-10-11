@@ -14,7 +14,16 @@ export type ThemeName =
   | 'amethyst'
   | 'punch'
   | 'scarlet'
-  | 'celadon';
+  | 'celadon'
+  | 'ink';
+
+/** A saved choice: a theme, or SYSTEM — follow the device's light/dark setting
+ * (S-13), resolving to SYSTEM_THEMES. */
+export type ThemeChoice = ThemeName | 'system';
+export const SYSTEM_THEMES: { light: ThemeName; dark: ThemeName } = {
+  light: 'classic',
+  dark: 'ink',
+};
 
 /**
  * The five color roles the whole UI is built from (see src/index.css):
@@ -36,6 +45,14 @@ export interface Theme {
   name: ThemeName;
   label: string;
   colors: ThemeColors;
+  /**
+   * A dark theme INVERTS the roles: paper is the dark page and ink the light
+   * text and outline. The two light-band roles that hold dark text — yellow
+   * surfaces — and the ink-as-surface chrome (top bars, ink buttons) are
+   * re-mapped in index.css under `html[data-scheme='dark']`, which
+   * `applyTheme` sets.
+   */
+  dark?: boolean;
 }
 
 export const THEMES: Record<ThemeName, Theme> = {
@@ -243,6 +260,25 @@ export const THEMES: Record<ThemeName, Theme> = {
       steel: '#4a6964',
     },
   },
+  ink: {
+    name: 'ink',
+    label: 'INK (DARK)',
+    dark: true,
+    colors: {
+      // Inverted: light ink on a near-black paper, so every ink border and
+      // offset shadow turns into a white comic outline.
+      ink: '#eeeae0',
+      paper: '#15161a',
+      yellow: '#ffd54f',
+      // Light enough to carry the dark paper as text (7:1) and to read as
+      // text on the paper (6.4:1).
+      red: '#ff7a6b',
+      // A dark slate SURFACE (like every theme's steel) that holds light text
+      // (7.9:1); as a text colour on the paper it is lifted to #a9bccd in
+      // index.css (8.6:1).
+      steel: '#3b4d5e',
+    },
+  },
 };
 
 export const DEFAULT_THEME: ThemeName = 'classic';
@@ -260,4 +296,12 @@ export function applyTheme(themeName: ThemeName) {
   root.style.setProperty('--c-yellow', theme.colors.yellow);
   root.style.setProperty('--c-red', theme.colors.red);
   root.style.setProperty('--c-steel', theme.colors.steel);
+  root.setAttribute('data-scheme', theme.dark ? 'dark' : 'light');
+  root.style.colorScheme = theme.dark ? 'dark' : 'light';
+}
+
+/** The theme a choice stands for right now (SYSTEM reads the OS setting). */
+export function resolveTheme(choice: ThemeChoice, prefersDark: boolean): ThemeName {
+  if (choice !== 'system') return choice;
+  return prefersDark ? SYSTEM_THEMES.dark : SYSTEM_THEMES.light;
 }
