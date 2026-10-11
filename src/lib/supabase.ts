@@ -69,6 +69,9 @@ export function subscribeTable(
   };
 }
 
+/** Extra per-table listeners on the user channel (see onUserTableChange). */
+const userTableListeners = new Set<{ tables: Set<string>; cb: (table: string) => void }>();
+
 /**
  * The signed-in user's private change feed (audit §7 S1). The database sends
  * one `changed` broadcast per statement to topic `user:<uid>` whenever that
@@ -84,7 +87,9 @@ export function subscribeUserChannel(
     .channel(`user:${userId}`, { config: { private: true } })
     .on('broadcast', { event: 'changed' }, (msg: { payload?: { table?: string } }) => {
       const table = msg?.payload?.table;
-      if (typeof table === 'string') onChange(table);
+      if (typeof table !== 'string') return;
+      onChange(table);
+      for (const l of userTableListeners) if (l.tables.has(table)) l.cb(table);
     });
   let removed = false;
   // Private channels authorise with the session's JWT.
@@ -94,6 +99,47 @@ export function subscribeUserChannel(
       if (!removed) channel.subscribe();
     });
 
+  return () => {
+    if (removed) return;
+    removed = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Listen for the signed-in user's own `trades` / `friendships` changes (audit
+ * §7 S7, migration 20261012000002) on the user channel MetaContext already
+ * holds, instead of an unfiltered postgres_changes subscription. Also
+ * receives `profiles` / `player_cards` / `player_inventory` if asked.
+ * Returns an unsubscribe function.
+ */
+export function onUserTableChange(tables: string[], cb: (table: string) => void): () => void {
+  const entry = { tables: new Set(tables), cb };
+  userTableListeners.add(entry);
+  return () => {
+    userTableListeners.delete(entry);
+  };
+}
+
+/**
+ * A public screen feed (audit §7 S7, migration 20261012000002): the database
+ * sends one `changed` broadcast per insert/update statement, payload
+ * `{table}` only, to topic `market` (market_listings), `shops` (player_shops,
+ * shop_listings) or `news` (news_posts, serialized_supply). Debounce the
+ * refetch in the caller. Returns an unsubscribe function.
+ */
+export function subscribeTopic(
+  topic: 'market' | 'shops' | 'news',
+  onChange: (table: string) => void,
+): () => void {
+  const channel = supabase
+    .channel(topic)
+    .on('broadcast', { event: 'changed' }, (msg: { payload?: { table?: string } }) => {
+      const table = msg?.payload?.table;
+      if (typeof table === 'string') onChange(table);
+    })
+    .subscribe();
+  let removed = false;
   return () => {
     if (removed) return;
     removed = true;
@@ -275,6 +321,21 @@ export interface OpenPackResult {
 // ---------------------------------------------------------------------------
 // Card pool
 // ---------------------------------------------------------------------------
+
+/**
+ * The catalog's version (audit §7 S6, migration 20261012000003): a short
+ * string that changes whenever any card template changes. Pair it with
+ * `versionedFetch` (src/lib/cache.ts) so the full catalog is downloaded only
+ * when it changed. Null on any failure.
+ */
+export async function fetchCatalogVersion(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.rpc('get_catalog_version');
+    return !error && typeof data === 'string' && data ? data : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Load the live card pool from the Supabase `cards` table. Returns null on
@@ -585,11 +646,18 @@ export interface MatchTicket {
 export async function beginMatch(
   mode?: 'quick' | 'standard' | 'deep',
   seats?: number,
+  /**
+   * Bot difficulty (audit S-2): recorded on the ticket and used for the
+   * credit multiplier (Easy x0.8, Normal x1, Hard x1.15). Omit it and the
+   * ticket pays like Normal. Anything but easy/normal/hard is not sent.
+   */
+  difficulty?: 'easy' | 'normal' | 'hard',
 ): Promise<{ matchId: string | null; ticket: MatchTicket | null; error: string | null }> {
-  const { data, error } = await supabase.rpc(
-    'begin_match',
-    mode && seats ? { p_mode: mode, p_seats: seats } : {},
-  );
+  const args: Record<string, unknown> = mode && seats ? { p_mode: mode, p_seats: seats } : {};
+  if (difficulty === 'easy' || difficulty === 'normal' || difficulty === 'hard') {
+    args.p_difficulty = difficulty;
+  }
+  const { data, error } = await supabase.rpc('begin_match', args);
   const d = data as {
     match_id?: string;
     started_at?: string;
@@ -2368,7 +2436,15 @@ export interface CardSubmission {
   approved_rarity: string | null;
   created_at: string;
   reviewed_at: string | null;
+  /** Showcase art pipeline (migration 20261012000004): null until approved,
+   * then pending -> published (on Cloudflare Pages) or failed. */
+  art_status?: ArtPipelineStatus | null;
+  art_url?: string | null;
+  art_error?: string | null;
+  art_updated_at?: string | null;
 }
+
+export type ArtPipelineStatus = 'pending' | 'published' | 'failed';
 
 /** A submission as the Creator's review queue sees it — same row plus who
  * sent it, which RLS alone can't join (profiles are self-readable only). */
@@ -2450,7 +2526,7 @@ export async function fetchSubmissionsForReview(
   status: SubmissionStatus | null = null,
   limit = 200,
 ): Promise<CardSubmissionForReview[]> {
-  const { data, error } = await supabase.rpc('get_card_submissions', {
+  const { data, error } = await supabase.rpc('get_card_submissions_v2', {
     p_status: status,
     p_limit: limit,
   });
@@ -2503,6 +2579,30 @@ export async function reviewSubmission(input: {
     p_overrides: input.overrides ?? null,
   });
   return { data: (data as CardSubmission) || null, error: rpcError(error) };
+}
+
+/** Creator-only: put an approved card whose art upload failed back in the
+ * Cloudflare queue (scripts/publish-showcase-art.ts picks it up next run). */
+export async function retrySubmissionArt(id: string): Promise<string | null> {
+  const { error } = await supabase.rpc('creator_retry_submission_art', { p_id: id });
+  return rpcError(error);
+}
+
+/** Creator-only: rewrite one existing card — identity, template.overrides and
+ * the mechanics columns together (creator_update_card). Sending no
+ * `overrides` resets the card to its rolled mechanics. Returns the new
+ * catalog version on success. */
+export async function updateCard(
+  card: Record<string, unknown>,
+): Promise<{ version: string | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('creator_update_card', { p_card: card });
+  return { version: typeof data === 'string' ? data : null, error: rpcError(error) };
+}
+
+/** Creator-only: every live card template, for the card editor's picker. One
+ * read, on demand — not part of any player's load. */
+export async function fetchLiveTemplatesForEditor(): Promise<CardTemplate[] | null> {
+  return fetchCardTemplates();
 }
 
 export async function setSubmissionBan(

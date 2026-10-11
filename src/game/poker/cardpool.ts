@@ -12,7 +12,7 @@
  *
  * MUST NOT import engine.ts.
  */
-import type { CardOverrides, CardTemplate } from '../../types';
+import type { AbilityOverride, CardOverrides, CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
 import type { CardDef, CardSubtype, KwRef, LeaderAbility, PowerType } from './cards';
 import { isPower } from './cards';
@@ -102,6 +102,10 @@ export const REPRINTS: Record<string, CardOverrides> = {
   // Last Stand (Root): a comeback Kindle and a comeback Bloom.
   runeforge_smith: { effect: { kw: 'Kindle' }, mods: [{ kw: 'Last Stand' }] },
   anemone_weaver: { effect: { kw: 'Bloom' }, mods: [{ kw: 'Last Stand' }] },
+  // Snuff (Void, C-1): Events only and ★2+, so the hash still never rolls
+  // it with 8 Void Events in the pool. Two vanilla ★1 Void Events carry it.
+  flesh_to_bone: { tier: 2, effect: { kw: 'Snuff' }, mods: [] },
+  hammerhead_silhouette: { tier: 2, effect: { kw: 'Snuff' }, mods: [] },
 };
 
 // ---------------------------------------------------------------------------
@@ -136,7 +140,9 @@ function colorsOf(c: CardTemplate): Color[] {
 // rarity — a Mythic is more often 3+ than a Common, but not always.
 // ---------------------------------------------------------------------------
 const TIER_PYRAMID = [35, 28, 20, 12, 5];
-const RARITY_BIAS = 0.1;
+/** Audit F-7: 0.1 gave Full-Art cards a 52 % chance of ★4–5 against 14 % for
+ * Commons, so every ★5 slot went to high rarities. */
+const RARITY_BIAS = 0.04;
 
 export function rollTier(seed: string, rarity?: string): number {
   const rt = RARITY_TIER[rarity ?? 'Common'] ?? 0;
@@ -166,7 +172,7 @@ const MIN_TIER: Partial<Record<EffectKeyword, number>> = {
   Pass: 2,
   Rerun: 2,
   Mimic: 2,
-  Snuff: 3,
+  Snuff: 2,
   Lock: 2,
   Entropic: 3,
   Bounty: 2,
@@ -278,6 +284,9 @@ function mapPower(c: CardTemplate, o: CardOverrides = {}): CardDef {
     mods,
   };
   def.keywords = [effect.kw, ...mods.map((m) => m.kw)];
+  // A colour override is printed, not re-rolled: the effect and mods above
+  // came from the generated colours, exactly as the Creator's preview shows.
+  if (o.colors) def.colors = [...o.colors];
   def.text = o.text ?? powerText(def);
   return def;
 }
@@ -377,9 +386,42 @@ function ability(
   };
 }
 
+function abilityText(a: LeaderAbility): string {
+  const sign = a.nerve > 0 ? `+${a.nerve}` : `${a.nerve}`;
+  const cost = a.chipCost ? `, pay ${fmtUnits(a.chipCost)}` : '';
+  return `${sign} nerve${cost}: ${keywordLabel(a.effect.kw as Keyword, a.effect.n)}.`;
+}
+
+/** A hand-set Leader ability, priced by the generator's rules: a numbered
+ * keyword defaults to its amount at `tier` (spend 4, build 2), and a build
+ * ability (nerve > 0) pays `buildCost` unless it is a Straddle. */
+export function abilityFromOverride(o: AbilityOverride, tier: number): LeaderAbility {
+  const n = KEYWORD_SPECS[o.kw]?.numbered ? (o.n ?? tierN(o.kw, tier)) : undefined;
+  const effect: KwRef = n === undefined ? { kw: o.kw } : { kw: o.kw, n };
+  const chipCost =
+    o.nerve > 0 && o.kw !== 'Straddle' ? buildCost(o.kw as EffectKeyword) : undefined;
+  const a: LeaderAbility = { nerve: o.nerve, effect, chipCost, text: '' };
+  a.text = abilityText(a);
+  return a;
+}
+
 function mapLeader(c: CardTemplate, o: CardOverrides = {}): CardDef {
   const seed = seedOf(c);
-  const colors = colorsOf(c);
+  const rolled = colorsOf(c);
+  const colors = o.colors ? [...o.colors] : rolled;
+  if (o.abilities) {
+    const abilities = [
+      abilityFromOverride(o.abilities[0], 4),
+      abilityFromOverride(o.abilities[1], 2),
+    ];
+    return leaderDef(c, o, colors, abilities);
+  }
+  // Generated abilities roll from the generated colours (a colour-only
+  // override reprints the identity without re-rolling the abilities).
+  return leaderDef(c, o, colors, rolledAbilities(c, seed, rolled));
+}
+
+function rolledAbilities(c: CardTemplate, seed: string, colors: Color[]): LeaderAbility[] {
   // A hand-rebuilding ability costs 3 nerve, anything else 2: the old coin
   // flip between the two left a Leader paying 3 for a weak ability while
   // another paid 2 for a revive.
@@ -390,7 +432,15 @@ function mapLeader(c: CardTemplate, o: CardOverrides = {}): CardDef {
     minus.text = minus.text.replace(/^-2 nerve/, '-3 nerve');
   }
   const plus = ability(seed, 'leader-plus', colors[1] ?? colors[0], 2, 1, true, forced[1]);
-  const abilities = [minus, plus];
+  return [minus, plus];
+}
+
+function leaderDef(
+  c: CardTemplate,
+  o: CardOverrides,
+  colors: Color[],
+  abilities: LeaderAbility[],
+): CardDef {
   return {
     id: c.id,
     name: c.name,
@@ -407,7 +457,7 @@ function mapLeader(c: CardTemplate, o: CardOverrides = {}): CardDef {
 }
 
 function mapLocation(c: CardTemplate, o: CardOverrides = {}): CardDef {
-  const rule = locationRuleFor(seedOf(c));
+  const rule = o.rule ? { ...o.rule } : locationRuleFor(seedOf(c));
   return {
     id: c.id,
     name: c.name,
@@ -416,7 +466,7 @@ function mapLocation(c: CardTemplate, o: CardOverrides = {}): CardDef {
     set: c.set,
     image: c.image,
     flavor: c.flavor,
-    colors: colorsOf(c),
+    colors: o.colors ? [...o.colors] : colorsOf(c),
     rule,
     keywords: [],
     text: o.text ?? `${ruleName(rule)}: ${ruleText(rule)}`,

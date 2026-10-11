@@ -22,12 +22,15 @@ import { PopButton } from './ui';
 import { SafeImage } from './SafeImage';
 import { decodeDeckCode, encodeDeckCode, takeChallengeDeck } from './deckcode';
 import { quickbuildIds } from './deckEdits';
-import { utcDayKey } from './cardOfTheDay';
+import { setBuildWith, utcDayKey } from './cardOfTheDay';
+import { weeklyFeatured } from './weeklyFeatured';
 import { loadMatchHistory, summarizeMatchHistory } from './matchHistory';
 import {
   CPU_DIFFICULTIES,
   loadCpuDifficulty,
   saveCpuDifficulty,
+  rewardDifficulty,
+  REWARD_MULT_LABEL,
   type CpuDifficultyId,
 } from './matchPrefs';
 import { usePersistedState } from './usePersistedState';
@@ -36,12 +39,15 @@ import { DeckMeta } from './DeckMeta';
 const POOL_MAP = () => new Map(POOL.map((c) => [c.id, c]));
 
 /** A deck code as a pseudo deck row (no id: it is never saved). */
-function rowFromCode(code: string): { row: DeckRow; mode: ModeId } | { error: string } {
+function rowFromCode(
+  code: string,
+): { row: DeckRow; mode: ModeId; format?: FormatId } | { error: string } {
   const d = decodeDeckCode(code, POOL_MAP());
   if ('error' in d) return d;
   const leader = POOL_BY_ID[d.leaderId];
   return {
     mode: d.mode,
+    format: d.format,
     row: {
       id: `code:${fnv(code.trim())}`,
       name: `${leader?.name ?? 'Deck'} (code)`,
@@ -78,9 +84,12 @@ export function PlayScreen({
   onStart,
   onBack,
   practice = false,
+  onBuild,
 }: {
   onStart: (setup: PlaySetup) => void;
   onBack: () => void;
+  /** Q19: open the deck builder (after `setBuildWith`). */
+  onBuild?: () => void;
   /** Arrived from a How to Play "Try it": offer the guided first game. */
   practice?: boolean;
 }) {
@@ -94,6 +103,7 @@ export function PlayScreen({
   const fmt: FormatId = FORMAT_IDS.includes(format) ? format : 'open';
   const tableSeats = Math.max(MIN_SEATS, Math.min(MAX_SEATS, Number(seats) || MAX_SEATS));
   const twist = weeklyMutator();
+  const featured = useMemo(() => weeklyFeatured(POOL), []);
   const base = {
     mode: m.id,
     seats: tableSeats,
@@ -167,6 +177,32 @@ export function PlayScreen({
           </div>
         )}
 
+        {featured.leader && (
+          <div
+            className="ink-border-sm bg-[var(--c-paper)] shadow-hard-black-xs px-3 py-2 mb-4 max-w-2xl flex flex-wrap items-center gap-3"
+            data-testid="featured-week"
+          >
+            <span className="heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-0.5">
+              FEATURED THIS WEEK
+            </span>
+            <span className="fs-sm font-black">
+              {featured.leader.name}
+              {featured.location ? ` · ${featured.location.name}` : ''}
+            </span>
+            {onBuild && !guest && (
+              <button
+                onClick={() => {
+                  setBuildWith(featured.leader!.id);
+                  onBuild();
+                }}
+                className="btn-pop heading-font text-xs px-3 py-1.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm ml-auto"
+              >
+                NEW DECK ▸
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-6 mb-6">
           <div>
             <h2 className="heading-font text-sm mb-1.5">FORMAT</h2>
@@ -206,9 +242,12 @@ export function PlayScreen({
                     saveCpuDifficulty(d.id);
                   }}
                   className={pick(difficulty === d.id)}
-                  title={d.blurb}
+                  title={`${d.blurb} · credits ${REWARD_MULT_LABEL[rewardDifficulty(d.id)]}`}
                 >
                   {d.label}
+                  <span className="ml-1 opacity-70">
+                    {REWARD_MULT_LABEL[rewardDifficulty(d.id)]}
+                  </span>
                 </button>
               ))}
             </div>
@@ -358,7 +397,13 @@ function PracticeTable({
     if (code.trim()) {
       const r = rowFromCode(code);
       if ('error' in r) return setErr(`Your deck: ${r.error}`);
-      me = { ...base, mode: r.mode, kind: 'custom', deck: r.row };
+      me = {
+        ...base,
+        mode: r.mode,
+        ...(r.format ? { format: r.format } : {}),
+        kind: 'custom',
+        deck: r.row,
+      };
     } else me = { ...base, kind: 'random' };
     const ghosts: NonNullable<PlaySetup['ghosts']> = [];
     for (const line of vs.split(/\s+/).filter(Boolean)) {

@@ -8,6 +8,7 @@ import { PopButton } from './ui';
 import { RARITY_CHIP } from './rarity';
 import { RARITIES } from '../types';
 import { cn } from '../lib/utils';
+import { weeklyFeatured } from './weeklyFeatured';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 // Deck Box picks are capped at Rare or below — enforced again server-side
@@ -38,6 +39,8 @@ export function LeaderPicker({
   onPick: (leaderId: string) => void;
   onClose: () => void;
 }) {
+  // Q19: the week's featured Leader is flagged (no reward yet — R7).
+  const featuredId = weeklyFeatured(POOL_LEADERS).leader?.id;
   const deckBoxLeaders = POOL_LEADERS.filter(
     (l) => RARITIES.indexOf(l.rarity || 'Common') <= DECK_BOX_MAX_RARITY_IDX,
   );
@@ -128,6 +131,11 @@ export function LeaderPicker({
                     >
                       {(leader.rarity || 'Common').toUpperCase()}
                     </span>
+                    {leader.id === featuredId && (
+                      <span className="absolute bottom-1 left-1 right-1 text-center fs-xs font-black px-1 ink-border-sm bg-[var(--c-ink)] text-[var(--c-yellow)]">
+                        FEATURED THIS WEEK
+                      </span>
+                    )}
                   </div>
                   <div className="px-2 pb-2">
                     <div className="heading-font text-xs truncate">{leader.name}</div>

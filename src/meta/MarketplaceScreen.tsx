@@ -18,7 +18,7 @@ import {
   MarketListing,
   PublicProfile,
   MARKET_FEE,
-  subscribeTable,
+  subscribeTopic,
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
 import { usePersistedState } from './usePersistedState';
@@ -177,7 +177,8 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   // action forced a reload.
   useEffect(() => {
     let timer: number | undefined;
-    const off = subscribeTable('market_listings', () => {
+    // S7: one broadcast per statement on the public `market` topic.
+    const off = subscribeTopic('market', () => {
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         void reload();
@@ -281,160 +282,173 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
       <div
         key={l.id}
         className={cn(
-          'ink-border-md shadow-hard-black-sm p-3 flex gap-3',
+          'ink-border-md shadow-hard-black-sm flex flex-col',
           mine || hasMyBid ? 'bg-[var(--c-yellow)]/25' : 'bg-[var(--c-paper)]',
         )}
       >
-        <div className="shrink-0">
-          <CardFace def={def} size={size} foil={l.foil} />
-        </div>
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="heading-font text-xs truncate">{def.name}</span>
-            <span
-              className={cn(
-                'fs-xs font-black px-1',
-                RARITY_CHIP[def.rarity || 'Common'] || RARITY_CHIP.Common,
-              )}
-            >
-              {(def.rarity || 'Common').toUpperCase()}
-            </span>
-            {l.foil && (
-              <span className="fs-xs font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">
-                FOIL ✦
-              </span>
+        {/* U46: one status bar along the top — yellow yours, green leading,
+            red outbid — instead of a row of same-yellow tags. */}
+        {(mine || hasMyBid || outbid) && (
+          <div
+            data-testid="listing-status"
+            className={cn(
+              'heading-font fs-xs px-3 py-0.5 border-b-2 border-[var(--c-ink)]',
+              outbid
+                ? 'bg-[var(--c-red)] text-white'
+                : hasMyBid && highBidder
+                  ? 'bg-[#22C55E] text-[var(--c-ink)]'
+                  : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
             )}
-            {l.quantity > 1 && <span className="fs-xs font-black">×{l.quantity}</span>}
-            {mine && (
-              <span className="fs-xs font-black px-1 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm">
-                YOUR LISTING
-              </span>
-            )}
-            {hasMyBid && !outbid && (
-              <span className="fs-xs font-black px-1 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm">
-                {highBidder ? 'YOUR BID · LEADING' : 'YOUR BID'}
-              </span>
-            )}
+          >
+            {outbid
+              ? l.cpu_leading
+                ? `OUTBID BY ${(l.cpu_bidder_name ?? 'A CPU').toUpperCase()}`
+                : 'OUTBID'
+              : mine
+                ? 'YOUR LISTING'
+                : highBidder
+                  ? 'YOUR BID · LEADING'
+                  : 'YOUR BID'}
           </div>
-          <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
-            {isAuction ? 'AUCTION' : 'FIXED PRICE'} · Seller:{' '}
-            {l.seller === userId ? (
-              sellerName
-            ) : (
-              <PlayerLink
-                id={l.seller}
-                name={sellerName}
-                role={sellers.get(l.seller)?.role}
-                className="font-bold"
-              />
-            )}
+        )}
+        <div className="p-3 flex gap-3 flex-1">
+          <div className="shrink-0">
+            <CardFace def={def} size={size} foil={l.foil} />
           </div>
-          <div className="flex items-center gap-2 mt-1 fs-xs font-bold">
-            <Clock className="w-3 h-3" /> {timeLeft(l.ends_at)}
-          </div>
-          <div className="mt-auto pt-2 flex flex-wrap items-center gap-2">
-            {isAuction ? (
-              <>
-                <span className="flex items-center gap-1 heading-font text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm">
-                  <Gavel className="w-3 h-3" />
-                  {l.current_bid != null
-                    ? fmtCredits(l.current_bid)
-                    : `Start ${fmtCredits(l.price)}`}
-                </span>
-                <span className="fs-xs font-bold text-[var(--c-steel)]">
-                  {l.bid_count ?? 0} bid{(l.bid_count ?? 0) === 1 ? '' : 's'}
-                  {highBidder ? ' · YOU LEAD' : ''}
-                  {l.cpu_leading && l.cpu_bidder_name ? ` · ${l.cpu_bidder_name} (CPU) leads` : ''}
-                </span>
-                {outbid && (
-                  <span className="fs-xs font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">
-                    {l.cpu_leading
-                      ? `OUTBID BY ${(l.cpu_bidder_name ?? 'A CPU').toUpperCase()}`
-                      : 'OUTBID'}
-                  </span>
-                )}
-              </>
-            ) : (
-              <span className="flex items-center gap-1 heading-font text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm">
-                <Coins className="w-3 h-3" /> {fmtCredits(l.price)}
-              </span>
-            )}
-            {isAuction && l.buyout != null && (
-              <span className="fs-xs font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
-                Buyout <Credits amount={l.buyout} />
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {/* Timed-out-but-unsettled listings show the SETTLING badge for
-                the owner too — the CANCEL button previously stayed live here
-                and could only error once server-side settlement ran. */}
-            {l.status === 'active' && timedOut ? (
-              <span className="fs-xs font-black px-1.5 py-1 ink-border-sm self-start bg-[var(--c-steel)] text-[var(--c-paper)]">
-                ENDED — SETTLING…
-              </span>
-            ) : mine && l.status === 'active' ? (
-              <PopButton
-                color="steel"
-                disabled={busy || l.bid_count > 0}
-                onClick={async () => {
-                  if (!(await askConfirm('Cancel this listing? Your cards will be returned.')))
-                    return;
-                  run(() => cancelListing(l.id), 'Listing cancelled — cards returned.');
-                }}
-                title={l.bid_count > 0 ? 'Auctions with bids cannot be cancelled' : undefined}
-              >
-                CANCEL LISTING
-              </PopButton>
-            ) : !mine && l.status === 'active' ? (
-              <>
-                {isAuction && (
-                  <PopButton
-                    color="black"
-                    // Already the top bidder: bidding again would only refund
-                    // your own hold and re-hold a larger amount against
-                    // yourself for no competitive gain. Disable and say so.
-                    disabled={busy || !profile || highBidder || timedOut}
-                    title={highBidder ? "You're already the top bidder" : undefined}
-                    onClick={() => {
-                      setBidAmount(minBidFor(l));
-                      setBidFor(l);
-                    }}
-                  >
-                    {highBidder ? 'TOP BID ✓' : 'BID ▸'}
-                  </PopButton>
-                )}
-                {(l.listing_type === 'fixed' || l.buyout != null) && (
-                  <PopButton
-                    color="yellow"
-                    disabled={
-                      busy ||
-                      !profile ||
-                      timedOut ||
-                      profile.credits < (isAuction ? (l.buyout ?? 0) : l.price)
-                    }
-                    onClick={async () => {
-                      const price = isAuction ? (l.buyout ?? 0) : l.price;
-                      if (!(await askConfirm(`Buy this listing for ${fmtCredits(price)}?`))) return;
-                      run(() => buyListing(l.id), 'Purchase complete!');
-                    }}
-                  >
-                    BUY <Credits amount={isAuction ? l.buyout! : l.price} />
-                  </PopButton>
-                )}
-              </>
-            ) : (
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="heading-font text-xs truncate">{def.name}</span>
               <span
                 className={cn(
-                  'fs-xs font-black px-1.5 py-1 ink-border-sm self-start',
-                  l.status === 'sold'
-                    ? 'bg-[#22C55E] text-[#052E12]'
-                    : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                  'fs-xs font-black px-1',
+                  RARITY_CHIP[def.rarity || 'Common'] || RARITY_CHIP.Common,
                 )}
               >
-                {(l.status || 'UNKNOWN').toUpperCase()}
+                {(def.rarity || 'Common').toUpperCase()}
               </span>
-            )}
+              {l.foil && (
+                <span className="fs-xs font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">
+                  FOIL ✦
+                </span>
+              )}
+              {l.quantity > 1 && <span className="fs-xs font-black">×{l.quantity}</span>}
+            </div>
+            <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
+              {isAuction ? 'AUCTION' : 'FIXED PRICE'} · Seller:{' '}
+              {l.seller === userId ? (
+                sellerName
+              ) : (
+                <PlayerLink
+                  id={l.seller}
+                  name={sellerName}
+                  role={sellers.get(l.seller)?.role}
+                  className="font-bold"
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-1 fs-xs font-bold">
+              <Clock className="w-3 h-3" /> {timeLeft(l.ends_at)}
+            </div>
+            <div className="mt-auto pt-2 flex flex-wrap items-center gap-2">
+              {isAuction ? (
+                <>
+                  <span className="flex items-center gap-1 heading-font text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm">
+                    <Gavel className="w-3 h-3" />
+                    {l.current_bid != null
+                      ? fmtCredits(l.current_bid)
+                      : `Start ${fmtCredits(l.price)}`}
+                  </span>
+                  <span className="fs-xs font-bold text-[var(--c-steel)]">
+                    {l.bid_count ?? 0} bid{(l.bid_count ?? 0) === 1 ? '' : 's'}
+                    {highBidder ? ' · YOU LEAD' : ''}
+                    {l.cpu_leading && l.cpu_bidder_name
+                      ? ` · ${l.cpu_bidder_name} (CPU) leads`
+                      : ''}
+                  </span>
+                </>
+              ) : (
+                <span className="flex items-center gap-1 heading-font text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm">
+                  <Coins className="w-3 h-3" /> {fmtCredits(l.price)}
+                </span>
+              )}
+              {isAuction && l.buyout != null && (
+                <span className="fs-xs font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
+                  Buyout <Credits amount={l.buyout} />
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {/* Timed-out-but-unsettled listings show the SETTLING badge for
+                the owner too — the CANCEL button previously stayed live here
+                and could only error once server-side settlement ran. */}
+              {l.status === 'active' && timedOut ? (
+                <span className="fs-xs font-black px-1.5 py-1 ink-border-sm self-start bg-[var(--c-steel)] text-[var(--c-paper)]">
+                  ENDED — SETTLING…
+                </span>
+              ) : mine && l.status === 'active' ? (
+                <PopButton
+                  color="steel"
+                  disabled={busy || l.bid_count > 0}
+                  onClick={async () => {
+                    if (!(await askConfirm('Cancel this listing? Your cards will be returned.')))
+                      return;
+                    run(() => cancelListing(l.id), 'Listing cancelled — cards returned.');
+                  }}
+                  title={l.bid_count > 0 ? 'Auctions with bids cannot be cancelled' : undefined}
+                >
+                  CANCEL LISTING
+                </PopButton>
+              ) : !mine && l.status === 'active' ? (
+                <>
+                  {isAuction && (
+                    <PopButton
+                      color="black"
+                      // Already the top bidder: bidding again would only refund
+                      // your own hold and re-hold a larger amount against
+                      // yourself for no competitive gain. Disable and say so.
+                      disabled={busy || !profile || highBidder || timedOut}
+                      title={highBidder ? "You're already the top bidder" : undefined}
+                      onClick={() => {
+                        setBidAmount(minBidFor(l));
+                        setBidFor(l);
+                      }}
+                    >
+                      {highBidder ? 'TOP BID ✓' : 'BID ▸'}
+                    </PopButton>
+                  )}
+                  {(l.listing_type === 'fixed' || l.buyout != null) && (
+                    <PopButton
+                      color="yellow"
+                      disabled={
+                        busy ||
+                        !profile ||
+                        timedOut ||
+                        profile.credits < (isAuction ? (l.buyout ?? 0) : l.price)
+                      }
+                      onClick={async () => {
+                        const price = isAuction ? (l.buyout ?? 0) : l.price;
+                        if (!(await askConfirm(`Buy this listing for ${fmtCredits(price)}?`)))
+                          return;
+                        run(() => buyListing(l.id), 'Purchase complete!');
+                      }}
+                    >
+                      BUY <Credits amount={isAuction ? l.buyout! : l.price} />
+                    </PopButton>
+                  )}
+                </>
+              ) : (
+                <span
+                  className={cn(
+                    'fs-xs font-black px-1.5 py-1 ink-border-sm self-start',
+                    l.status === 'sold'
+                      ? 'bg-[#22C55E] text-[#052E12]'
+                      : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                  )}
+                >
+                  {(l.status || 'UNKNOWN').toUpperCase()}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

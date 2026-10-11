@@ -11,7 +11,7 @@ import {
   createNewsPost,
   deleteNewsPost,
   fetchPublicProfiles,
-  subscribeTable,
+  subscribeTopic,
 } from '../lib/supabase';
 import { ENTRIES } from './ChangelogScreen';
 import { RARITY_CHIP } from './rarity';
@@ -143,14 +143,12 @@ export function NewsCenterScreen({
       window.clearTimeout(timer);
       timer = window.setTimeout(load, 600);
     };
-    const offPosts = subscribeTable('news_posts', bump);
-    // The pull feed is built from serialized_supply (world-readable), not the
-    // per-owner player_serialized_cards table.
-    const offSerial = subscribeTable('serialized_supply', bump);
+    // S7: the `news` topic covers news_posts and serialized_supply (the pull
+    // feed), one broadcast per statement.
+    const off = subscribeTopic('news', bump);
     return () => {
       window.clearTimeout(timer);
-      offPosts();
-      offSerial();
+      off();
     };
     // `load` is a stable closure over refs/setters recreated each render;
     // re-subscribing on every render would churn the socket.

@@ -44,6 +44,7 @@ beforeEach(() => {
     localStorage: {
       getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
       setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
     },
   };
 });
@@ -243,5 +244,20 @@ describe('action guards (S-7, S-12)', () => {
     expect(needsAllInConfirm('half', 49, 100)).toBe(false);
     expect(potOddsPct(10, 30)).toBe(25);
     expect(potOddsPct(0, 30)).toBe(0);
+  });
+});
+
+describe('bet presets (S-8)', () => {
+  test('defaults, editable rows and a fixed pre-flop POT', async () => {
+    const m = await import('./matchPrefs');
+    window.localStorage.removeItem(m.BET_PRESETS_KEY);
+    expect(m.presetButtons('postflop').map((b) => b.label)).toEqual(['⅓', '½', '¾', 'POT']);
+    expect(m.presetButtons('preflop').map((b) => b.label)).toEqual(['2×', '2.5×', '3×', 'POT']);
+    m.saveBetPresets({ preflop: [2.2, 4], postflop: [0.25, 2 / 3, 1.5] });
+    expect(m.presetButtons('preflop').map((b) => b.label)).toEqual(['2.2×', '4×', 'POT']);
+    expect(m.presetButtons('postflop').map((b) => b.label)).toEqual(['¼', '⅔', '150%']);
+    window.localStorage.setItem(m.BET_PRESETS_KEY, '{"preflop":["x"],"postflop":[99]}');
+    expect(m.loadBetPresets()).toEqual(m.DEFAULT_BET_PRESETS);
+    m.saveBetPresets(null);
   });
 });

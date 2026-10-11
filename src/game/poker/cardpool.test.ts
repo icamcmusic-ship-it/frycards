@@ -1,4 +1,7 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { deriveEdited } from '../../meta/cardEditor';
+import type { CardOverrides, CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
 import {
   LEADER_ABILITY_OVERRIDES,
@@ -11,6 +14,7 @@ import {
 import { FROZEN_COLORS } from './frozenColors';
 import { CHIP_KEYWORDS, KEYWORD_SPECS, keywordAllowed } from './keywords';
 import { LEADER_COLORS } from './colors';
+import { ruleName, ruleText } from './locations';
 
 describe('card pool', () => {
   it('keeps every card and its identity', () => {
@@ -113,6 +117,79 @@ describe('Leader abilities', () => {
     for (const l of POOL_LEADERS) {
       const minus = l.abilities![0];
       expect(minus.nerve, l.name).toBe(rebuild.includes(minus.effect.kw) ? -3 : -2);
+    }
+  });
+});
+
+describe('Creator overrides: colors, abilities, rule', () => {
+  const sha = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
+  const leader = GENERATED_CARDS.find((c) => c.type === 'Leader')!;
+  const location = GENERATED_CARDS.find((c) => c.type === 'Location')!;
+  const unit = GENERATED_CARDS.find((c) => c.type === 'Unit')!;
+
+  it('leaves cards without overrides unchanged (pool fingerprint)', () => {
+    // Fingerprint of the bundled catalog before these overrides existed.
+    expect(sha(GENERATED_CARDS.map(deriveCardMechanics))).toBe(
+      'f78b93049217342a02c92a948033eb9776066385abf9d4a4bad535f8f8a5b10e',
+    );
+  });
+
+  it('a colors override wins, without re-rolling the effect', () => {
+    const base = deriveCardMechanics(unit);
+    const colors = base.colors.includes('Ember') ? (['Tide'] as const) : (['Ember'] as const);
+    const d = deriveCardMechanics({ ...unit, overrides: { colors: [...colors] } });
+    expect(d.colors).toEqual(colors);
+    expect(d.effect).toEqual(base.effect);
+    expect(d.mods).toEqual(base.mods);
+    expect(deriveEdited({ ...unit, overrides: { colors: [...colors] } })).toEqual(d);
+  });
+
+  it('a Leader abilities override wins and matches the editor', () => {
+    const overrides: CardOverrides = {
+      colors: ['Ember'],
+      abilities: [
+        { kw: 'Windfall', nerve: -3 },
+        { kw: 'Straddle', nerve: 1 },
+      ],
+    };
+    const d = deriveCardMechanics({ ...leader, overrides });
+    expect(d.colors).toEqual(['Ember']);
+    expect(d.abilities!.map((a) => a.effect.kw)).toEqual(['Windfall', 'Straddle']);
+    expect(d.abilities!.map((a) => a.nerve)).toEqual([-3, 1]);
+    expect(d.abilities![1].chipCost).toBeUndefined();
+    expect(d.keywords).toEqual(['Windfall', 'Straddle']);
+    expect(d.text).toBe(d.abilities!.map((a) => a.text).join(' '));
+    expect(deriveEdited({ ...leader, overrides })).toEqual(d);
+  });
+
+  it('a Location rule override wins', () => {
+    const rule = { id: 'highStakes' as const, param: 2 };
+    const d = deriveCardMechanics({ ...location, overrides: { rule } });
+    expect(d.rule).toEqual(rule);
+    expect(d.text).toBe(`${ruleName(rule)}: ${ruleText(rule)}`);
+    expect(deriveEdited({ ...location, overrides: { rule } })).toEqual(d);
+  });
+
+  it('deleting the override restores the rolled card exactly', () => {
+    for (const [t, overrides] of [
+      [unit, { colors: ['Void', 'Light'] }],
+      [
+        leader,
+        {
+          abilities: [
+            { kw: 'Windfall', nerve: -3 },
+            { kw: 'Straddle', nerve: 1 },
+          ],
+        },
+      ],
+      [location, { rule: { id: 'openHand' } }],
+    ] as [CardTemplate, CardOverrides][]) {
+      const rolled = deriveCardMechanics(t);
+      const edited: CardTemplate = { ...t, overrides };
+      expect(deriveCardMechanics(edited)).not.toEqual(rolled);
+      delete edited.overrides;
+      expect(deriveCardMechanics(edited)).toEqual(rolled);
+      expect(deriveCardMechanics({ ...t, overrides: {} })).toEqual(rolled);
     }
   });
 });

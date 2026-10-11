@@ -215,6 +215,17 @@ export function loadCpuDifficulty(): CpuDifficultyId {
   }
 }
 
+/** The reward tier a bot difficulty pays at (S-2): SHARK pays like HARD. */
+export function rewardDifficulty(id: CpuDifficultyId): 'easy' | 'normal' | 'hard' {
+  return id === 'shark' ? 'hard' : id;
+}
+/** Credit multiplier label per difficulty: "×0.8", "×1", "×1.15". */
+export const REWARD_MULT_LABEL: Record<'easy' | 'normal' | 'hard', string> = {
+  easy: '×0.8',
+  normal: '×1',
+  hard: '×1.15',
+};
+
 export function saveCpuDifficulty(id: CpuDifficultyId): void {
   if (!CPU_DIFFICULTIES.some((d) => d.id === id)) return;
   try {
@@ -422,19 +433,74 @@ export const PRE_ACTIONS_KEY = 'frycards:pre-actions';
 export const loadPreActions = () => loadFlag(PRE_ACTIONS_KEY, true);
 export const savePreActions = (on: boolean) => saveFlag(PRE_ACTIONS_KEY, on);
 
-/** S-8: bet-size presets. Pre-flop in big blinds, post-flop as a share of the pot. */
-export const PREFLOP_PRESETS: { label: string; bb?: number; pot?: number }[] = [
-  { label: '2×', bb: 2 },
-  { label: '2.5×', bb: 2.5 },
-  { label: '3×', bb: 3 },
-  { label: 'POT', pot: 1 },
+/** S-8 (editable): the player's own preset rows. Pre-flop values are big
+ * blinds (a POT button always follows), post-flop values a share of the pot
+ * (1 = POT). Up to four per row. */
+export interface BetPresetRows {
+  preflop: number[];
+  postflop: number[];
+}
+export const DEFAULT_BET_PRESETS: BetPresetRows = {
+  preflop: [2, 2.5, 3],
+  postflop: [1 / 3, 0.5, 0.75, 1],
+};
+export const BET_PRESETS_KEY = 'frycards:bet-presets';
+const clampRow = (row: unknown, lo: number, hi: number, fb: number[]): number[] => {
+  if (!Array.isArray(row)) return fb;
+  const out = row
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n >= lo && n <= hi)
+    .slice(0, 4);
+  return out.length ? out : fb;
+};
+export function loadBetPresets(): BetPresetRows {
+  try {
+    const raw = window.localStorage.getItem(BET_PRESETS_KEY);
+    if (!raw) return DEFAULT_BET_PRESETS;
+    const v = JSON.parse(raw) as Partial<BetPresetRows>;
+    return {
+      preflop: clampRow(v.preflop, 1, 50, DEFAULT_BET_PRESETS.preflop),
+      postflop: clampRow(v.postflop, 0.1, 3, DEFAULT_BET_PRESETS.postflop),
+    };
+  } catch {
+    return DEFAULT_BET_PRESETS;
+  }
+}
+export function saveBetPresets(rows: BetPresetRows | null): void {
+  try {
+    if (!rows) window.localStorage.removeItem(BET_PRESETS_KEY);
+    else window.localStorage.setItem(BET_PRESETS_KEY, JSON.stringify(rows));
+  } catch {
+    /* ignore */
+  }
+}
+const FRACTIONS: [number, string][] = [
+  [1 / 4, '¼'],
+  [1 / 3, '⅓'],
+  [1 / 2, '½'],
+  [2 / 3, '⅔'],
+  [3 / 4, '¾'],
+  [1, 'POT'],
 ];
-export const POSTFLOP_PRESETS: { label: string; bb?: number; pot?: number }[] = [
-  { label: '⅓', pot: 1 / 3 },
-  { label: '½', pot: 0.5 },
-  { label: '¾', pot: 0.75 },
-  { label: 'POT', pot: 1 },
-];
+/** Button label for a preset value. */
+export function presetLabel(street: 'preflop' | 'postflop', v: number): string {
+  if (street === 'preflop') return `${+v.toFixed(2)}×`;
+  const f = FRACTIONS.find(([n]) => Math.abs(n - v) < 0.005);
+  if (f) return f[1];
+  return `${Math.round(v * 100)}%`;
+}
+/** The rows as the table's buttons. */
+export function presetButtons(
+  street: 'preflop' | 'postflop',
+  rows: BetPresetRows = loadBetPresets(),
+): { label: string; bb?: number; pot?: number }[] {
+  return street === 'preflop'
+    ? [
+        ...rows.preflop.map((bb) => ({ label: presetLabel('preflop', bb), bb })),
+        { label: 'POT', pot: 1 },
+      ]
+    : rows.postflop.map((pot) => ({ label: presetLabel('postflop', pot), pot }));
+}
 
 /** S-12: the share of the final pot a call must win to break even. */
 export function potOddsPct(toCall: number, pot: number): number {

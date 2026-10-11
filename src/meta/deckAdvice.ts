@@ -341,3 +341,33 @@ export function deriveDeckAdvice(
     suggestions,
   };
 }
+
+/**
+ * Gap fillers (audit Q10): for the first low tier bucket, or else the first
+ * empty effect theme, up to `n` candidate cards that fit — legal colour, the
+ * right tier or theme, and accepted by `canAdd` (the editor's own add rules
+ * and free copies). Candidates come in the caller's order.
+ */
+export function gapFillers(
+  advice: Pick<DeckAdvice, 'curve' | 'themes'>,
+  candidates: readonly CardDef[],
+  identity: readonly Color[] | undefined,
+  canAdd: (c: CardDef) => boolean,
+  n = 3,
+): { why: string; cards: CardDef[] } | null {
+  const ok = (c: CardDef) =>
+    isPower(c) && (!identity || isColorLegal(c, [...identity])) && canAdd(c);
+  const low = advice.curve.find((b) => b.status === 'low');
+  if (low) {
+    const cards = candidates.filter((c) => ok(c) && (c.tier ?? 1) === low.tier).slice(0, n);
+    if (cards.length) return { why: `More ${low.label} cards`, cards };
+  }
+  for (const { theme, count } of advice.themes) {
+    if (count > 0) continue;
+    const cards = candidates
+      .filter((c) => ok(c) && !!c.effect && theme.keywords.includes(c.effect.kw as EffectKeyword))
+      .slice(0, n);
+    if (cards.length) return { why: `Add ${theme.label.toLowerCase()} (${theme.wants})`, cards };
+  }
+  return null;
+}

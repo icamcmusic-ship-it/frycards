@@ -26,6 +26,7 @@ vi.mock('./lib/supabase', () => ({
   beginMatch: mocks.beginMatch,
   recordMatchPlacement: mocks.recordMatchPlacement,
   fetchCardTemplates: () => Promise.resolve(null),
+  fetchCatalogVersion: () => Promise.resolve(null),
   supabase: {},
 }));
 
@@ -102,8 +103,8 @@ describe('M8: leaving while the reward is being recorded', () => {
     expect(onRematch).not.toHaveBeenCalled();
     expect(onExit).not.toHaveBeenCalled();
     expect(mocks.beginMatch).toHaveBeenCalledTimes(1);
-    // The ticket records the table's mode and seats (A21).
-    expect(mocks.beginMatch).toHaveBeenCalledWith('quick', 3);
+    // The ticket records the table's mode, seats (A21) and difficulty (S-2).
+    expect(mocks.beginMatch.mock.calls[0].slice(0, 2)).toEqual(['quick', 3]);
     // Paid by place, with the table size and mode.
     expect(mocks.recordMatchPlacement).toHaveBeenCalledWith(
       2,

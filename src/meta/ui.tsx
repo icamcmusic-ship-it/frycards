@@ -534,3 +534,38 @@ export function UnavailableShowcaseTile({
     </div>
   );
 }
+
+/** U73: the one empty state — an ink-bordered panel, an icon, one sentence
+ * and (optionally) one call to action. */
+export function EmptyState({
+  icon,
+  text,
+  sub,
+  action,
+  className,
+}: {
+  icon?: React.ReactNode;
+  text: React.ReactNode;
+  sub?: React.ReactNode;
+  action?: { label: string; onClick: () => void };
+  className?: string;
+}) {
+  return (
+    <div
+      data-testid="empty-state"
+      className={cn(
+        'ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] text-[var(--c-ink)] p-5 flex flex-col items-center gap-2.5 text-center',
+        className,
+      )}
+    >
+      {icon && <span className="text-[var(--c-steel)]">{icon}</span>}
+      <div className="font-bold text-sm">{text}</div>
+      {sub && <div className="fs-xs font-bold text-[var(--c-steel)]">{sub}</div>}
+      {action && (
+        <PopButton color="yellow" onClick={action.onClick}>
+          {action.label}
+        </PopButton>
+      )}
+    </div>
+  );
+}

@@ -447,6 +447,16 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     { id: 'profile_avatar', label: 'AVATARS' },
   ];
 
+  // U41: two groups, so seven tabs never wrap into three rows on a phone.
+  const COSMETIC_TABS: Tab[] = ['card_back', 'profile_banner', 'profile_avatar'];
+  const group: 'packs' | 'cosmetics' = COSMETIC_TABS.includes(tab) ? 'cosmetics' : 'packs';
+  const groupTabs = tabs.filter((t) => COSMETIC_TABS.includes(t.id) === (group === 'cosmetics'));
+  const pickTab = (id: Tab) => {
+    setTab(id);
+    setError('');
+    setNotice('');
+  };
+
   const cosmeticItems = shopItems.filter((s) => s.item_type === tab && !s.is_season_pass_exclusive);
 
   return (
@@ -454,16 +464,34 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       <MetaHeader title="FRY CARDS STORE" onBack={onBack} />
 
       <div className="p-5 max-w-6xl mx-auto">
+        <div className="flex gap-2 mb-2" role="group" aria-label="Store group">
+          {(
+            [
+              ['packs', 'PACKS', 'packs'],
+              ['cosmetics', 'COSMETICS', 'card_back'],
+            ] as const
+          ).map(([id, label, first]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={group === id}
+              onClick={() => group !== id && pickTab(first)}
+              className={`btn-pop heading-font fs-xs px-3 min-h-[32px] ink-border-sm ${
+                group === id
+                  ? 'bg-[var(--c-ink)] text-[var(--c-yellow)]'
+                  : 'bg-[var(--c-paper)] text-[var(--c-ink)]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <Tabs
           className="mb-4"
           ariaLabel="Store sections"
-          tabs={tabs}
+          tabs={groupTabs}
           value={tab}
-          onChange={(id) => {
-            setTab(id);
-            setError('');
-            setNotice('');
-          }}
+          onChange={pickTab}
         />
         {error && (
           <div className="mb-4">

@@ -30,6 +30,7 @@ import { CurrencyBar } from './CurrencyBar';
 import { RoleBadge } from './RoleBadge';
 import { ACCOUNT_ONLY_SCREENS, MetaScreen } from './routes';
 import { isCpuLocked } from './cpuAccess';
+import type { PlaySetup } from '../components/PokerMatch';
 import { usePersistedState } from './usePersistedState';
 import {
   claimDailyLogin,
@@ -265,8 +266,11 @@ export function MainMenu({
   onNavigate,
   onRematch,
   rematchLabel,
+  onPlaySetup,
 }: {
   onNavigate: (s: MetaScreen) => void;
+  /** Q5: start a prepared table (Card of the Day: PLAY WITH IT). */
+  onPlaySetup?: (setup: PlaySetup) => void;
   /** U22: sit straight back down at the last table setup. */
   onRematch?: () => void;
   rematchLabel?: string;
@@ -651,7 +655,10 @@ export function MainMenu({
         ))}
       </div>
 
-      <CardOfTheDay onBuild={guest ? undefined : () => onNavigate('decks')} />
+      <CardOfTheDay
+        onBuild={guest ? undefined : () => onNavigate('decks')}
+        onPlay={cpuLocked ? undefined : onPlaySetup}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { minPaidHands, ordinal, placementReward } from './rewards';
+import { DIFFICULTY_REWARD_MULT, minPaidHands, ordinal, placementReward } from './rewards';
 
 describe('placement rewards', () => {
   it('pays 100/66/45/28/19/15 at six seats in Standard (F-5)', () => {
@@ -28,6 +28,16 @@ describe('placement rewards', () => {
     expect(placementReward(2, 6, 'standard', 17).credits).toBe(0);
     expect(placementReward(2, 6, 'standard', 18).credits).toBe(66);
     expect(placementReward(1, 2, 'standard', 1).credits).toBe(55);
+  });
+  it('difficulty scales credits only (S-2): Easy x0.8, Normal x1, Hard x1.15', () => {
+    expect(placementReward(1, 6, 'standard', undefined, 'easy').credits).toBe(80);
+    expect(placementReward(1, 6, 'standard', undefined, 'normal').credits).toBe(100);
+    expect(placementReward(1, 6, 'standard', undefined, 'hard').credits).toBe(115);
+    expect(placementReward(1, 2, 'standard', undefined, 'hard').credits).toBe(63);
+    expect(placementReward(1, 6, 'standard', undefined, 'easy').xp).toBe(60);
+    expect(placementReward(1, 6, 'standard', undefined, 'hard').bpXp).toBe(50);
+    expect(placementReward(2, 6, 'standard', 17, 'hard').credits).toBe(0);
+    expect(Object.keys(DIFFICULTY_REWARD_MULT)).toEqual(['easy', 'normal', 'hard']);
   });
   it('ordinals', () => {
     expect([1, 2, 3, 4, 11, 22].map(ordinal)).toEqual(['1st', '2nd', '3rd', '4th', '11th', '22nd']);

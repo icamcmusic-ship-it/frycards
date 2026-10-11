@@ -164,8 +164,11 @@ same stack; chips in play never change (powers move chips, never create them).
 - **Old decks** from the 60-card game, and their share links, are invalid in
   every mode. The collection itself is untouched.
 - **Card mechanics** are generated from a hash of each card's id, type and
-  rarity, so a rebalance ships as a code change. Rarity gently biases the tier
-  roll and otherwise affects novelty, not power.
+  rarity, so a rebalance ships as a code change. Rarity only slightly biases
+  the tier roll (a Full-Art card is a little likelier to be ★4–5 than a
+  Common) and otherwise affects novelty, not power. A few cards carry
+  hand-set mechanics instead (reprints for the newest keywords and for
+  Snuff), and a Creator override always wins over both.
 
 ---
 

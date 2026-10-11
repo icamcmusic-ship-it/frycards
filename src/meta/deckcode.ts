@@ -1,10 +1,14 @@
 /**
  * Shareable one-line deck codes for FryCards Poker.
  *
- * Format: FRY2:<mode>:<leaderId>:<cardId>[*n][,<cardId>[*n]...]
+ * Format: FRY2:<mode>[+<format>]:<leaderId>:<cardId>[*n][,<cardId>[*n]...]
  *
  *  - `mode` is the table format the list is built for (quick / standard /
  *    deep), so a shared deck opens in the format it was made for.
+ *  - `+<format>` (optional) is the deck format (R6: singleton, pauper, mono,
+ *    lowstakes). Open decks leave it off, so every code made before it
+ *    existed — and every open deck's code since — is byte-identical and
+ *    still decodes.
  *  - The body holds the deck list exactly as `decks.card_ids` stores it: one
  *    Location plus the power cards. The Leader travels in its own slot.
  *  - Card ids contain only [a-z0-9_-], so ':' ',' '*' are safe separators.
@@ -17,6 +21,7 @@
  * field, so this works for both the CardTemplate catalog and the CardDef pool.
  */
 import { MODES, MODE_IDS, type ModeId } from '../game/poker/constants';
+import { FORMAT_IDS, type FormatId } from '../game/poker/formats';
 
 const PREFIX = 'FRY2';
 /** The retired MTG-style game's code prefix. */
@@ -35,6 +40,7 @@ export function encodeDeckCode(
   leaderId: string,
   cardIds: string[],
   mode: ModeId = 'standard',
+  format?: FormatId,
 ): string {
   const counts = new Map<string, number>();
   for (const id of cardIds) counts.set(id, (counts.get(id) || 0) + 1);
@@ -42,10 +48,23 @@ export function encodeDeckCode(
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) // not localeCompare: the code must not vary by locale
     .map(([id, n]) => (n > 1 ? `${id}*${n}` : id))
     .join(',');
-  return `${PREFIX}:${mode}:${leaderId}:${body}`;
+  const slot = format && format !== 'open' ? `${mode}+${format}` : mode;
+  return `${PREFIX}:${slot}:${leaderId}:${body}`;
 }
 
-export type DecodedDeck = { leaderId: string; cardIds: string[]; mode: ModeId };
+/** The code without its deck format: the key a deck's record is kept under,
+ * whichever format it was played in. */
+export function stripDeckFormat(code: string): string {
+  return code.replace(/^(FRY2:[a-z]+)\+[a-z]+:/, '$1:');
+}
+
+export type DecodedDeck = {
+  leaderId: string;
+  cardIds: string[];
+  mode: ModeId;
+  /** Present only when the code names a deck format. */
+  format?: FormatId;
+};
 
 export function decodeDeckCode(
   code: string,
@@ -57,7 +76,12 @@ export function decodeDeckCode(
   if (parts.length !== 4 || parts[0] !== PREFIX) {
     return { error: 'Not a valid deck code (expected FRY2:<format>:<leader>:<cards>).' };
   }
-  const [, modeId, leaderId, body] = parts;
+  const [, slot, leaderId, body] = parts;
+  const [modeId, formatId, ...extra] = slot.split('+');
+  if (extra.length || (formatId !== undefined && !(FORMAT_IDS as string[]).includes(formatId)))
+    return {
+      error: `Unknown deck format: ${formatId ?? slot} (expected ${FORMAT_IDS.join(', ')}).`,
+    };
   if (!isModeId(modeId))
     return { error: `Unknown format: ${modeId} (expected ${MODE_IDS.join(', ')}).` };
   const mode = MODES[modeId];
@@ -95,7 +119,9 @@ export function decodeDeckCode(
     if (cardIds.length > LIST_MAX)
       return { error: `Too many cards in the deck (no format holds more than ${LIST_MAX}).` };
   }
-  return { leaderId, cardIds, mode: modeId };
+  return formatId && formatId !== 'open'
+    ? { leaderId, cardIds, mode: modeId, format: formatId as FormatId }
+    : { leaderId, cardIds, mode: modeId };
 }
 
 // ---------------------------------------------------------------------------

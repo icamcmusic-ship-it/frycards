@@ -78,3 +78,29 @@ export async function cachedFetch<T>(
     throw err;
   }
 }
+
+/**
+ * Version-checked cache (audit §7 S6): returns the cached value while
+ * `version` matches the one stored with it, otherwise runs `fetcher` and
+ * stores the result under that version. With `version === null` (the version
+ * check failed) a cached copy younger than `fallbackTtlMs` is used, as with
+ * `cachedFetch`. A failed fetch falls back to any cached copy.
+ */
+export async function versionedFetch<T>(
+  key: string,
+  version: string | null,
+  fetcher: () => Promise<T>,
+  fallbackTtlMs: number,
+): Promise<T> {
+  const hit = readCache<{ ver: string; data: T }>(key);
+  if (hit && version !== null && hit.data.ver === version) return hit.data.data;
+  if (hit && version === null && hit.ageMs < fallbackTtlMs) return hit.data.data;
+  try {
+    const fresh = await fetcher();
+    writeCache(key, { ver: version ?? '', data: fresh });
+    return fresh;
+  } catch (err) {
+    if (hit) return hit.data.data;
+    throw err;
+  }
+}

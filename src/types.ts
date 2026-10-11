@@ -41,7 +41,24 @@ export type CardOverrides = Partial<{
   mods: import('./game/poker/cards').KwRef[];
   subtype: import('./game/poker/cards').CardSubtype;
   text: string;
+  /** Colour identity. Printed as-is; the roll (effect pools, Leader
+   * abilities) still uses the generated colours unless those are set too. */
+  colors: import('./game/poker/colors').Color[];
+  /** A Leader's two nerve abilities, [spend, build]. */
+  abilities: [AbilityOverride, AbilityOverride];
+  /** A Location's rule template and parameter. */
+  rule: import('./game/poker/cards').LocationRule;
+  /** Informational: the Creator skipped the roll for every field. */
+  manual: boolean;
 }>;
+
+/** One hand-set Leader ability (see `abilityFromOverride` in cardpool.ts). */
+export interface AbilityOverride {
+  kw: import('./game/poker/keywords').Keyword;
+  n?: number;
+  /** Spend ability: -1..-5; build ability: +1..+3. */
+  nerve: number;
+}
 
 /** The override fields the Creator's editor exposes, in the order it shows
  * them. Anything not listed here stays generated. */

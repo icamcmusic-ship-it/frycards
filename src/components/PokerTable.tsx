@@ -108,8 +108,7 @@ import {
   loadPreActions,
   needsAllInConfirm,
   potOddsPct,
-  PREFLOP_PRESETS,
-  POSTFLOP_PRESETS,
+  presetButtons,
   loadTimerMode,
   saveAmountsInBB,
   saveAutoDeal,
@@ -125,6 +124,8 @@ import {
 import { loadMatchHistory, placeOf, recordMatch } from '../meta/matchHistory';
 import { askConfirm } from '../meta/confirm';
 import { useReducedMotion } from '../meta/useMotionMode';
+import { ChipFlights } from './ChipFlights';
+import { SfxBurst, type Sfx } from './SfxBurst';
 import { CardFace } from './CardFaceV4';
 import { Card3DInspector } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
@@ -174,6 +175,8 @@ export interface PokerTableProps {
   shareLine?: (place: number, seats: number, hands: number) => string;
   /** The human's deck as a share code, for match history. */
   humanDeckCode?: string;
+  /** Reward tier of the bot difficulty (S-2); omitted pays like Normal. */
+  rewardTier?: 'easy' | 'normal' | 'hard';
 }
 
 export type MatchReport = {
@@ -389,6 +392,8 @@ function Felt({ def, reduced }: { def: CardDef | null; reduced: boolean }) {
             'radial-gradient(ellipse at center, rgba(8,40,30,0.35) 0%, rgba(4,20,16,0.75) 70%, rgba(0,0,0,0.9) 100%)',
         }}
       />
+      {/* U75: the menu's halftone, faint, on the felt's rim — one comic world. */}
+      <div className="felt-halftone absolute inset-0" />
     </div>
   );
 }
@@ -515,6 +520,7 @@ export function PokerTable({
   rewardHoldUntil = null,
   unrewarded = false,
   tableTag,
+  rewardTier,
   shareLine,
   humanDeckCode,
 }: PokerTableProps) {
@@ -548,6 +554,18 @@ export function PokerTable({
   const [raiseSel, setRaiseTo] = useState(0);
   const [bankMs, setBankMs] = useState(() => TIMER_PRESETS[loadTimerMode()].bankMs);
   const [bubbles, setBubbles] = useState<Record<number, Bubble>>({});
+  // U72: one comic burst at a time for the big moments.
+  const [sfx, setSfx] = useState<Sfx | null>(null);
+  const sfxSeq = useRef(0);
+  const burst = useCallback((text: string, tone?: Sfx['tone']) => {
+    sfxSeq.current += 1;
+    setSfx({ id: sfxSeq.current, text, tone });
+  }, []);
+  useEffect(() => {
+    if (!sfx) return;
+    const t = window.setTimeout(() => setSfx((x) => (x?.id === sfx.id ? null : x)), 700);
+    return () => window.clearTimeout(t);
+  }, [sfx]);
   const narrow = useIsNarrow();
   const feltRef = useRef<HTMLDivElement>(null);
   const [felt, setFelt] = useState({ w: 0, h: 0 });
@@ -597,29 +615,41 @@ export function PokerTable({
   const lastActAt = useRef(0);
   /** Apply an action. `quiet` (bots, timers) never shows the red notice: a
    * bot's illegal move is not the player's mistake. */
-  const dispatch = useCallback((action: Action, quiet = false) => {
-    const prev = matchRef.current;
-    try {
-      const next = applyAction(prev, action);
-      actionsRef.current.push(action);
-      matchRef.current = next;
-      setMatch(next);
-      setSeq(actionsRef.current.length);
-      if (!quiet) setNotice(null);
-      const b = bubbleFor(prev, next, action);
-      if (b && 'seat' in action && typeof action.seat === 'number') {
-        const seat = action.seat;
-        setBubbles((bs) => ({ ...bs, [seat]: b }));
+  const dispatch = useCallback(
+    (action: Action, quiet = false) => {
+      const prev = matchRef.current;
+      try {
+        const next = applyAction(prev, action);
+        actionsRef.current.push(action);
+        matchRef.current = next;
+        setMatch(next);
+        setSeq(actionsRef.current.length);
+        if (!quiet) setNotice(null);
+        const b = bubbleFor(prev, next, action);
+        if (b && 'seat' in action && typeof action.seat === 'number') {
+          const seat = action.seat;
+          setBubbles((bs) => ({ ...bs, [seat]: b }));
+          if (b.kind === 'allin') burst('ALL IN!', 'red');
+        }
+        // U72: a hand that reaches showdown.
+        if (
+          next.hand?.done &&
+          !prev.hand?.done &&
+          next.hand.result &&
+          !next.hand.result.uncontested
+        )
+          burst('SHOWDOWN!');
+        return true;
+      } catch (e) {
+        if (e instanceof IllegalAction) {
+          if (!quiet) setNotice(e.message);
+          return false;
+        }
+        throw e;
       }
-      return true;
-    } catch (e) {
-      if (e instanceof IllegalAction) {
-        if (!quiet) setNotice(e.message);
-        return false;
-      }
-      throw e;
-    }
-  }, []);
+    },
+    [burst],
+  );
 
   const [spot, setSpot] = useState<Spot | null>(null);
 
@@ -899,8 +929,9 @@ export function PokerTable({
           at: Date.now(),
           hold: latest.target === HUMAN && pauseOnTarget && !busted,
         });
+      if (latest.seat !== HUMAN && latest.target === HUMAN) burst('AT YOU!', 'red');
     }
-  }, [view, pauseOnTarget, busted]);
+  }, [view, pauseOnTarget, busted, burst]);
   const [inspectFromSpot, setInspectFromSpot] = useState(false);
   useEffect(() => {
     // Held spots wait for a tap; an open inspector holds any spot.
@@ -976,7 +1007,7 @@ export function PokerTable({
     const now = matchRef.current;
     const openPlace = now.seats.filter((x) => !x.busted).length;
     const n = now.seats.length;
-    const pay = placementReward(openPlace, n, now.mode, now.handNo);
+    const pay = placementReward(openPlace, n, now.mode, now.handNo, rewardTier);
     const need = minPaidHands(n);
     const payLine = unrewarded
       ? 'This is a practice table: nothing is paid either way.'
@@ -1320,6 +1351,7 @@ export function PokerTable({
               {h && (
                 <div
                   key={`${h.no}-${h.street}`}
+                  data-pot
                   className="pot-bump relative bg-black/70 rounded-full px-3 py-0.5 heading-font text-sm text-[var(--c-yellow)] whitespace-nowrap"
                 >
                   POT <Chips chips={Math.max(0, potTotal(h))} />
@@ -1386,6 +1418,29 @@ export function PokerTable({
                   </span>
                 );
               })}
+
+            <SfxBurst sfx={sfx} />
+
+            {/* U7: bets slide into the pot, the pot slides to the winner(s). */}
+            {h && (
+              <ChipFlights
+                feltRef={feltRef}
+                handNo={h.no}
+                streetKey={`${h.no}-${h.street}`}
+                bets={h.streetBet}
+                done={!!h.done}
+                winners={Array.from(
+                  new Set<number>((h.result?.pots ?? []).flatMap((p) => p.winners)),
+                )}
+                betAt={(i) =>
+                  narrow || !positions[i]
+                    ? (positions[i] ?? [50, 100])
+                    : betPosition(positions[i], boardTop)
+                }
+                seatAt={(i) => (i === HUMAN && narrow ? [50, 100] : (positions[i] ?? [50, 100]))}
+                reduced={reduced}
+              />
+            )}
 
             {/* Cast spotlight v2: docked by the caster, an arrow to the target,
                 and what it did (U4). Click the card for details — never on hover. */}
@@ -1507,6 +1562,7 @@ export function PokerTable({
             unrewarded={unrewarded}
             shareLine={shareLine}
             deckCode={humanDeckCode}
+            rewardTier={rewardTier}
           />
         )}
         {/* The coach sits above everything (z-70), so it steps aside while a
@@ -2021,6 +2077,16 @@ function SeatPopover({
         This hand: cast {castsBy} · targeted {castsAt} ·{' '}
         {h?.units.filter((u) => u.seat === seat).length ?? 0} unit(s) out
       </div>
+      {/* U9: which units, by name. */}
+      {!!h?.units.some((u) => u.seat === seat) && (
+        <div className="text-[var(--c-steel)] truncate">
+          Units:{' '}
+          {h.units
+            .filter((u) => u.seat === seat)
+            .map((u) => u.def.name)
+            .join(', ')}
+        </div>
+      )}
       <ul className="mt-1 max-h-32 overflow-y-auto list-disc pl-4">
         {lines.length ? lines.map((l, k) => <li key={k}>{l}</li>) : <li>Nothing yet.</li>}
       </ul>
@@ -2526,7 +2592,7 @@ function HumanPanel({
                   className="flex-1 accent-[var(--c-yellow)]"
                   aria-label="Raise amount (pot limit)"
                 />
-                {(h!.street === 'preflop' ? PREFLOP_PRESETS : POSTFLOP_PRESETS).map((p) => (
+                {presetButtons(h!.street === 'preflop' ? 'preflop' : 'postflop').map((p) => (
                   <button
                     key={p.label}
                     onClick={() =>
@@ -3124,7 +3190,7 @@ function HandResultBanner({
   // follows the name, not the seat index — never "alice win".
   const nameOf = (i: number) => (i === HUMAN ? 'You' : match.seats[i].name);
   return (
-    <div className="bg-black/85 ink-border-sm rounded px-3 py-1.5 text-center max-w-[420px]">
+    <div className="banner-halftone bg-black/85 ink-border-sm rounded px-3 py-1.5 text-center max-w-[420px]">
       {r.pots.map((p, i) => {
         const solo = p.winners.length === 1;
         const you = solo && p.winners[0] === HUMAN;
@@ -3313,7 +3379,9 @@ function GameOver({
   unrewarded,
   shareLine,
   deckCode,
+  rewardTier,
 }: {
+  rewardTier?: 'easy' | 'normal' | 'hard';
   match: Match;
   conceded: boolean;
   onExit: () => void;
@@ -3346,7 +3414,7 @@ function GameOver({
         return rest;
       })()
     : live;
-  const preview = placementReward(place, match.seats.length, match.mode, match.handNo);
+  const preview = placementReward(place, match.seats.length, match.mode, match.handNo, rewardTier);
   const [nowTs, setNowTs] = useState(0);
   useEffect(() => {
     if (heldUntil === null) return;

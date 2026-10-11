@@ -48,10 +48,11 @@ import { usePersistedState } from './usePersistedState';
 import { POOL_BY_ID, POOL } from '../game/poker/cardpool';
 import { CardDef } from '../game/poker/cards';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
-import { GradedSlab } from './GradedSlab';
+import { SlabCase3D, SLAB3D_CSS, SLAB_CASE_W, SLAB_CASE_H, SLAB_MAX_PITCH } from './SlabCase3D';
 import { GradedCard, GRADING_SERVICE_BY_ID, fetchGradedCards, fmtGrade } from './grading';
 import {
   DEFAULT_POSE,
+  MAX_PITCH,
   MAX_ZOOM,
   MIN_ZOOM,
   Pose,
@@ -79,23 +80,16 @@ const SPIN_STEPS: { label: string; dps: number }[] = [
 export type ShowroomSubject =
   { kind: 'card'; cardId: string; foil?: boolean } | { kind: 'slab'; gradedId: string };
 
-function SlabObject({ g }: { g: GradedCard }) {
-  return (
-    <div className="origin-center">
-      <GradedSlab g={g} size="full" />
-    </div>
-  );
-}
-
-/** Slab geometry, mirroring GradedSlab's own `full` tier maths — the room
- * needs the object's real footprint to build the six-sided solid around it. */
-const SLAB_PAD_FULL = 14;
-function slabBox(): { w: number; h: number } {
-  const face = CARD_SIZES.full;
-  // padding ×2 + label block + card + cert strip. Measured against the
-  // rendered slab rather than guessed; a few px of slack here only affects
-  // where the acrylic edge sits.
-  return { w: face.w + SLAB_PAD_FULL * 2, h: face.h + SLAB_PAD_FULL * 2 + 74 };
+/** The slab in the room: its own solid (SlabCase3D) — a thick acrylic case
+ * with walls on all four sides, a back, a recessed well and its effects
+ * wrapped round the whole object. */
+function slabSubject(g: GradedCard) {
+  return {
+    w: SLAB_CASE_W,
+    h: SLAB_CASE_H,
+    maxPitch: SLAB_MAX_PITCH,
+    render: (p: Pose) => <SlabCase3D g={g} yaw={p.yaw} pitch={p.pitch} />,
+  };
 }
 
 type ShowroomSource = 'mine' | 'all' | 'slabs';
@@ -103,8 +97,11 @@ type ShowroomSource = 'mine' | 'all' | 'slabs';
 export function ShowroomScreen({
   onBack,
   initial,
+  initialPose,
 }: {
   onBack: () => void;
+  /** Starting camera (the preview harness photographs set angles). */
+  initialPose?: Partial<Pose>;
   /** Deep link from the Collection ("VIEW IN 3D") or the Grading Lab. */
   initial?: ShowroomSubject;
 }) {
@@ -114,7 +111,7 @@ export function ShowroomScreen({
   const [subject, setSubject] = useState<ShowroomSubject>(
     () => initial ?? { kind: 'card', cardId: '' },
   );
-  const [pose, setPose] = useState<Pose>(DEFAULT_POSE);
+  const [pose, setPose] = useState<Pose>(() => ({ ...DEFAULT_POSE, ...initialPose }));
   const [spinIdx, setSpinIdx] = useState(0);
   const [search, setSearch] = useState('');
   // The tab is remembered between visits. A deep link to a slab opens the
@@ -208,15 +205,22 @@ export function ShowroomScreen({
   const room = roomForRarity(def?.rarity);
 
   // ---- controls -----------------------------------------------------------
-  const nudge = useCallback((d: Partial<Pose>) => {
-    setPose((p) =>
-      clampPose({
-        yaw: p.yaw + (d.yaw ?? 0),
-        pitch: p.pitch + (d.pitch ?? 0),
-        zoom: p.zoom * (d.zoom ?? 1),
-      }),
-    );
-  }, []);
+  const maxPitch = shown.kind === 'slab' ? SLAB_MAX_PITCH : MAX_PITCH;
+  const nudge = useCallback(
+    (d: Partial<Pose>) => {
+      setPose((p) =>
+        clampPose(
+          {
+            yaw: p.yaw + (d.yaw ?? 0),
+            pitch: p.pitch + (d.pitch ?? 0),
+            zoom: p.zoom * (d.zoom ?? 1),
+          },
+          maxPitch,
+        ),
+      );
+    },
+    [maxPitch],
+  );
   const reset = useCallback(() => {
     setPose(DEFAULT_POSE);
     setSpinIdx(0);
@@ -289,7 +293,7 @@ export function ShowroomScreen({
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-ink)] text-[var(--c-paper)] flex flex-col">
-      <style>{SHOWROOM_CSS}</style>
+      <style>{SHOWROOM_CSS + SLAB3D_CSS}</style>
 
       <div className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5 border-b-4 border-[var(--c-yellow)]">
         <PopButton onClick={onBack} color="yellow">
@@ -314,15 +318,7 @@ export function ShowroomScreen({
             spinSpeed={spin.dps}
             scaleHint={shown.kind === 'slab' ? 1.35 : 1}
             className="w-full h-[52vh] min-h-[320px] sm:h-[62vh]"
-            slab={
-              slab
-                ? {
-                    node: <SlabObject g={slab} />,
-                    ...slabBox(),
-                    edge: GRADING_SERVICE_BY_ID[slab.service].slab.frame,
-                  }
-                : undefined
-            }
+            slab={slab ? slabSubject(slab) : undefined}
           />
         ) : (
           <div className="w-full h-[52vh] min-h-[320px] sm:h-[62vh] flex items-center justify-center text-center px-6">

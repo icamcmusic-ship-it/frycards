@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouteTab } from './useHashRouter';
 import { askConfirm } from './confirm';
-import { Users, UserPlus, ArrowLeftRight, Search, Coins, X, Trophy } from 'lucide-react';
+import { ActionMenu } from './ActionMenu';
+import { Users, UserPlus, ArrowLeftRight, Search, Coins, X, Trophy, Ellipsis } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   fetchFriendships,
@@ -22,9 +23,9 @@ import {
   TradeCardItem,
   PlayerCard,
   CardsLeaderboardEntry,
-  subscribeTable,
+  onUserTableChange,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
+import { MetaHeader, PopButton, Notice, Credits, Tabs, EmptyState } from './ui';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/poker/cardpool';
 import { sellableSplit } from './sellable';
@@ -229,12 +230,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
         reload().catch(() => setLoadError(true));
       }, 400);
     };
-    const offFriends = subscribeTable('friendships', bump);
-    const offTrades = subscribeTable('trades', bump);
+    // S7: the user channel MetaContext holds carries this user's own rows.
+    const off = onUserTableChange(['friendships', 'trades'], bump);
     return () => {
       window.clearTimeout(timer);
-      offFriends();
-      offTrades();
+      off();
     };
   }, [reload, userId]);
 
@@ -316,33 +316,52 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
     friendshipId: string,
     other: PublicProfile | undefined,
     labelled = false,
-  ) => (
-    <>
-      <PopButton
-        color="yellow"
-        disabled={busy || !other}
-        onClick={() => other && setTradePartner(other)}
-      >
-        <span className="flex items-center gap-1">
-          <ArrowLeftRight className="w-3 h-3" /> TRADE
-        </span>
-      </PopButton>
-      <PopButton
-        color="red"
-        disabled={busy}
-        ariaLabel={`Remove ${other?.username || 'this player'} from friends`}
-        onClick={async () => {
-          if (await askConfirm(`Remove ${other?.username || 'this player'} from your friends?`))
-            run(() => removeFriend(friendshipId), 'Friend removed.');
-        }}
-      >
-        <span className="flex items-center gap-1">
-          <X className="w-3.5 h-3.5" />
-          {labelled && 'REMOVE FRIEND'}
-        </span>
-      </PopButton>
-    </>
-  );
+  ) => {
+    const removeAsk = async () => {
+      if (await askConfirm(`Remove ${other?.username || 'this player'} from your friends?`))
+        run(() => removeFriend(friendshipId), 'Friend removed.');
+    };
+    return (
+      <>
+        <PopButton
+          color="yellow"
+          disabled={busy || !other}
+          onClick={() => other && setTradePartner(other)}
+        >
+          <span className="flex items-center gap-1">
+            <ArrowLeftRight className="w-3 h-3" /> TRADE
+          </span>
+        </PopButton>
+        {labelled ? (
+          <PopButton
+            color="red"
+            disabled={busy}
+            ariaLabel={`Remove ${other?.username || 'this player'} from friends`}
+            onClick={() => void removeAsk()}
+          >
+            <span className="flex items-center gap-1">
+              <X className="w-3.5 h-3.5" />
+              REMOVE FRIEND
+            </span>
+          </PopButton>
+        ) : (
+          // U53: the destructive action sits behind ⋯, not beside TRADE.
+          <ActionMenu
+            ariaLabel={`More actions for ${other?.username || 'this player'}`}
+            label={<Ellipsis className="w-4 h-4" aria-hidden />}
+            items={[
+              {
+                id: 'remove',
+                label: 'Remove friend',
+                disabled: busy,
+                onSelect: () => void removeAsk(),
+              },
+            ]}
+          />
+        )}
+      </>
+    );
+  };
 
   const tradeCard = (t: Trade) => {
     const isIncoming = t.recipient === userId;
@@ -731,12 +750,14 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     </div>
                   )}
                   {!loading && friendProfiles.length === 0 && (
-                    <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
-                      <p className="mb-2">No friends yet — find a player and send a request.</p>
-                      <PopButton color="yellow" onClick={() => searchRef.current?.focus()}>
-                        FIND PLAYERS ▸
-                      </PopButton>
-                    </div>
+                    <EmptyState
+                      icon={<Users className="w-7 h-7" aria-hidden />}
+                      text="No friends yet — find a player and send a request."
+                      action={{
+                        label: 'FIND PLAYERS ▸',
+                        onClick: () => searchRef.current?.focus(),
+                      }}
+                    />
                   )}
                 </div>
 

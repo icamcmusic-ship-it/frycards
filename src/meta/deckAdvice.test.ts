@@ -183,3 +183,23 @@ describe('deriveDeckAdvice', () => {
     expect(advice.suggestions).toEqual([]);
   });
 });
+
+describe('gapFillers (Q10)', () => {
+  it('fills the first low tier with addable, legal cards (max 3)', async () => {
+    const { gapFillers } = await import('./deckAdvice');
+    const mk = (id: string, tier: number) =>
+      ({ id, name: id, type: 'Unit', tier, colors: [] }) as never;
+    const advice = {
+      curve: [{ tier: 1, label: 'Tier 1', status: 'low' }],
+      themes: [],
+    } as never;
+    const res = gapFillers(
+      advice,
+      [mk('a', 1), mk('b', 2), mk('c', 1), mk('d', 1), mk('e', 1)],
+      undefined,
+      (c) => c.id !== 'c',
+    );
+    expect(res?.cards.map((c) => c.id)).toEqual(['a', 'd', 'e']);
+    expect(gapFillers({ curve: [], themes: [] } as never, [], undefined, () => true)).toBeNull();
+  });
+});

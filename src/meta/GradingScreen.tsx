@@ -44,9 +44,19 @@ import {
   Sparkles,
   Ticket,
   X,
+  Hourglass,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { MetaHeader, PopButton, Notice, Credits, Vouchers, ProgressBar, Tabs } from './ui';
+import {
+  MetaHeader,
+  PopButton,
+  Notice,
+  Credits,
+  Vouchers,
+  ProgressBar,
+  Tabs,
+  EmptyState,
+} from './ui';
 import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
 import { CardFace } from '../components/CardFaceV4';
@@ -104,12 +114,16 @@ function turnaroundProgress(g: GradedCard, now: number): number {
   return Math.max(0, Math.min(1, (now - start) / (end - start)));
 }
 
-/** Section heading: "1 · PICK THE CARDS". */
+/** Section heading: "1/4 · PICK THE CARDS" (U51: the funnel's progress). */
+const STEP_COUNT = 4;
 function Step({ n, title, hint }: { n: number; title: string; hint?: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline gap-2 mb-2 mt-5 first:mt-0">
-      <span className="heading-font text-[11px] bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-0.5 ink-border-sm">
-        {n}
+      <span
+        className="heading-font text-[11px] bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-0.5 ink-border-sm"
+        aria-label={`Step ${n} of ${STEP_COUNT}`}
+      >
+        {n}/{STEP_COUNT}
       </span>
       <h2 className="heading-font text-sm">{title}</h2>
       {hint && <span className="fs-xs font-bold text-[var(--c-steel)]">{hint}</span>}
@@ -816,9 +830,11 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
             {gradedLoading ? (
               <p className="text-xs font-bold text-[var(--c-steel)]">Loading…</p>
             ) : pending.length === 0 ? (
-              <p className="text-xs font-bold text-[var(--c-steel)]">
-                Nothing at the graders. Submit some cards!
-              </p>
+              <EmptyState
+                icon={<Hourglass className="w-7 h-7" aria-hidden />}
+                text="Nothing at the graders."
+                action={{ label: 'SUBMIT CARDS ▸', onClick: () => setTab('submit') }}
+              />
             ) : (
               <div className="flex flex-wrap gap-3">
                 {pending.map((g) => (

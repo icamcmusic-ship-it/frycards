@@ -1,0 +1,62 @@
+name: Showcase art
+
+# Moves approved Player Showcase art onto Cloudflare Pages and points each
+# card at it (scripts/publish-showcase-art.ts, docs/CARD_SUBMISSIONS.md).
+#
+# Approval in the app never waits on this: the card is playable at once with
+# the player's original link, and this swaps the URL when it runs. An idle run
+# is one small RPC against Supabase.
+#
+# Needs (Settings > Secrets and variables > Actions):
+#   secrets.ART_PIPELINE_TOKEN     shared token; set its hash in the DB with
+#                                  `select creator_set_art_pipeline_token('...')`
+#   secrets.CLOUDFLARE_API_TOKEN   Cloudflare API token with Pages:Edit
+#   secrets.CLOUDFLARE_ACCOUNT_ID  the Cloudflare account id
+#   vars.SHOWCASE_PAGES_PROJECT    optional (default frycards-showcase)
+#   vars.SHOWCASE_ART_BASE_URL     optional (default https://<project>.pages.dev)
+# Without the token the job exits successfully having done nothing.
+
+on:
+  schedule:
+    - cron: '17 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Two deploys of the same Pages project would race each other.
+  group: showcase-art
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ART_PIPELINE_TOKEN: ${{ secrets.ART_PIPELINE_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SHOWCASE_PAGES_PROJECT: ${{ vars.SHOWCASE_PAGES_PROJECT }}
+      SHOWCASE_ART_BASE_URL: ${{ vars.SHOWCASE_ART_BASE_URL }}
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - name: Skip without a token
+        if: env.ART_PIPELINE_TOKEN == ''
+        run: echo "ART_PIPELINE_TOKEN is not set; nothing to do."
+
+      - uses: actions/checkout@v4
+        if: env.ART_PIPELINE_TOKEN != ''
+
+      - uses: actions/setup-node@v4
+        if: env.ART_PIPELINE_TOKEN != ''
+        with:
+          node-version: 22
+          cache: npm
+
+      - if: env.ART_PIPELINE_TOKEN != ''
+        run: npm ci
+
+      - name: Publish pending showcase art
+        if: env.ART_PIPELINE_TOKEN != ''
+        run: npm run art:showcase

@@ -260,6 +260,7 @@ export function GradedSlab({
   /** Ratio 0…1 of the way through the turnaround — draws a fill on the label
    * of a pending slab instead of a bare clock. */
   progress,
+  embedded,
 }: {
   /** Declared so a `key` on a mapped <GradedSlab> typechecks — React strips it
    * before the props ever reach this function. */
@@ -269,6 +270,9 @@ export function GradedSlab({
   onClick?: () => void;
   selected?: boolean;
   progress?: number;
+  /** Mounted inside the 3D case (SlabCase3D): the case supplies the outer
+   * shadow, glow and premium ring, so the plate drops its own. */
+  embedded?: boolean;
 }) {
   const def = POOL_BY_ID[g.card_id];
   const svc = GRADING_SERVICE_BY_ID[g.service];
@@ -321,13 +325,15 @@ export function GradedSlab({
         border: '3px solid var(--c-ink)',
         // The acrylic itself: the service's colour under a vertical sheen.
         backgroundImage: `linear-gradient(150deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.06) 26%, rgba(0,0,0,0.16) 60%, rgba(255,255,255,0.18) 100%), ${prem ? prem.shell : svc.slab.frame}`,
-        boxShadow: prem
-          ? `inset 0 2px 0 rgba(255,255,255,0.7), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6), 0 0 ${premium === 'gem' ? 18 : 10}px ${premium === 'gem' ? 'rgba(240,196,25,0.75)' : premium === 'mintplus' ? 'rgba(185,139,255,0.6)' : 'rgba(110,200,255,0.55)'}`
-          : 'inset 0 2px 0 rgba(255,255,255,0.55), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6)',
+        boxShadow: embedded
+          ? 'inset 0 2px 0 rgba(255,255,255,0.55), inset 0 -3px 6px rgba(0,0,0,0.45)'
+          : prem
+            ? `inset 0 2px 0 rgba(255,255,255,0.7), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6), 0 0 ${premium === 'gem' ? 18 : 10}px ${premium === 'gem' ? 'rgba(240,196,25,0.75)' : premium === 'mintplus' ? 'rgba(185,139,255,0.6)' : 'rgba(110,200,255,0.55)'}`
+            : 'inset 0 2px 0 rgba(255,255,255,0.55), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6)',
       }}
     >
       {/* Premium ring: a turning conic border on MINT and up. */}
-      {prem && (
+      {prem && !embedded && (
         <div
           className="slab-ring absolute pointer-events-none"
           style={{
@@ -343,6 +349,7 @@ export function GradedSlab({
         />
       )}
       {premium === 'gem' &&
+        !embedded &&
         [
           [8, 18],
           [88, 40],

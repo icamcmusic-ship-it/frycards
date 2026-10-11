@@ -68,11 +68,22 @@
  * `--invariants` exits 1 only on an engine fault (a bot action the engine
  * refused, a match that never ends, chips not conserved) — the CI gate, which
  * must not fail on a balance miss.
+ *
+ * Ablation (audit C-5): `--ablate <cardId|name>[,<cardId|name>…]` skips the
+ * report and, for each card, plays the same 6-seat seeds twice: seat 0's deck
+ * holds `--copies` (default 2) of the card, then the same deck with those
+ * copies swapped for a vanilla ★1 of the same type (Foresee 1, no modifiers).
+ * The paired difference in seat 0's results is the card's own worth, free of
+ * the "cast only when ahead" selection that biases the card band.
+ * `--straddle-eq X` replaces the bot's fair-share Straddle rule with a fixed
+ * equity threshold (BOT.straddleEquity) for any run, so the cast policy can be
+ * ablated too; `--straddle-edge X` moves the fair-share margin.
  */
 import { writeFileSync } from 'node:fs';
 import { botAction, botRng } from '../src/game/poker/bot';
-import { POOL_LEADERS } from '../src/game/poker/cardpool';
-import { MODES, type ModeId } from '../src/game/poker/constants';
+import { POOL, POOL_LEADERS } from '../src/game/poker/cardpool';
+import type { CardDef, KwRef } from '../src/game/poker/cards';
+import { BOT, MODES, type ModeId } from '../src/game/poker/constants';
 import { buildDeck, type DeckDef } from '../src/game/poker/deck';
 import {
   applyInPlace,
@@ -137,6 +148,10 @@ const STRICT = process.argv.includes('--strict');
 /** CI gate: exit 1 on an ENGINE fault only (a refused bot action, chips
  * created or destroyed, a match that never ends) — never on a balance miss. */
 const INVARIANTS = process.argv.includes('--invariants');
+const ABLATE = arg('ablate');
+const COPIES = Math.max(1, Number(arg('copies') ?? 2));
+if (arg('straddle-eq') !== undefined) BOT.straddleEquity = Number(arg('straddle-eq'));
+if (arg('straddle-edge') !== undefined) BOT.straddleEdge = Number(arg('straddle-edge'));
 
 // ---------------------------------------------------------------------------
 // Driver: runBots with per-action and per-hand hooks
@@ -244,6 +259,90 @@ console.log(
   `FryCards Poker balance report — mode ${MODE}, ${MATCHES} matches per suite, seed ${SEED}, ` +
     `${POOL_LEADERS.length} Leaders.`,
 );
+
+// ---------------------------------------------------------------------------
+// Ablation (C-5): the same seeds with a card and with a vanilla stand-in
+// ---------------------------------------------------------------------------
+function vanillaOf(def: CardDef): CardDef {
+  const effect: KwRef = { kw: 'Foresee', n: 1 };
+  return { ...def, tier: 1, effect, mods: [], keywords: ['Foresee'], text: 'Foresee 1.' };
+}
+
+function withCard(deck: DeckDef, card: CardDef, copies: number): DeckDef {
+  // Swap out the last `copies` powers of the same type (else any type).
+  const powers = [...deck.powers];
+  let left = copies;
+  for (let i = powers.length - 1; i >= 0 && left > 0; i--)
+    if (powers[i].type === card.type && powers[i].id !== card.id) {
+      powers[i] = card;
+      left--;
+    }
+  for (let i = powers.length - 1; i >= 0 && left > 0; i--)
+    if (powers[i].id !== card.id) {
+      powers[i] = card;
+      left--;
+    }
+  return { ...deck, powers };
+}
+
+function runAblation(spec: string) {
+  for (const key of spec
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)) {
+    const card = POOL.find((c) => c.id === key || c.name.toLowerCase() === key.toLowerCase());
+    if (!card) {
+      console.error(`--ablate: no card "${key}"`);
+      process.exit(2);
+    }
+    const vanilla = vanillaOf(card);
+    const res = { with: { win: 0, above: 0, casts: 0 }, without: { win: 0, above: 0, casts: 0 } };
+    let paired = 0;
+    for (let i = 0; i < MATCHES; i++) {
+      const seed = ((SEED + 13) * 2246822519 + i * 3266489917) | 0;
+      for (const variant of ['with', 'without'] as const) {
+        const setup = cpuTableSetup({ seed, mode: MODE, seats: 6, skill: EVEN });
+        setup.seats[0].deck = withCard(
+          setup.seats[0].deck,
+          variant === 'with' ? card : vanilla,
+          COPIES,
+        );
+        const m = play(setup, seed ^ 0x1b873593, {
+          afterHand(_mm, h) {
+            for (const c of h.casts)
+              if (c.seat === 0 && !c.leader && c.def.id === card.id && c.status === 'resolved')
+                res[variant].casts++;
+          },
+        });
+        if (winnerOf(m) === 0) res[variant].win++;
+        const place = m.placements ? m.placements.indexOf(0) : -1;
+        if (place >= 0) res[variant].above += (5 - place) / 5;
+      }
+      paired++;
+    }
+    const w = res.with;
+    const wo = res.without;
+    const dWin = (w.win - wo.win) / paired;
+    const dAbove = (w.above - wo.above) / paired;
+    console.log(
+      `ABLATE ${card.name} (${card.id}; ${card.text}) ×${COPIES} in seat 0, ${MODE}, ${paired} paired seeds, ` +
+        `straddle ${BOT.straddleEquity === null ? `fair share + ${BOT.straddleEdge}` : `eq > ${BOT.straddleEquity}`}`,
+    );
+    console.log(
+      `  with:    wins ${pct(w.win / paired)}  above-a-seat ${pct(w.above / paired)}  resolved casts ${(w.casts / paired).toFixed(2)}/match`,
+    );
+    console.log(`  vanilla: wins ${pct(wo.win / paired)}  above-a-seat ${pct(wo.above / paired)}`);
+    console.log(
+      `  Δ (card − vanilla): wins ${pts(dWin)} pts, above-a-seat ${pts(dAbove)} pts ` +
+        `(SE of a paired win Δ ≈ ${(Math.sqrt(0.3 / paired) * 100).toFixed(1)} pts)`,
+    );
+  }
+}
+
+if (ABLATE) {
+  runAblation(ABLATE);
+  process.exit(0);
+}
 
 // ---------------------------------------------------------------------------
 // 1. Skill gap

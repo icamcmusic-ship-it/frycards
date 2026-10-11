@@ -52,9 +52,6 @@ export const MAX_PITCH = 80;
  * read as a plane. This is a deliberate stylization — thick enough to see the
  * solid turn over, thin enough to still be a card. */
 const CARD_THICKNESS = 9;
-/** The acrylic case is genuinely a chunky object, so the slab keeps a much
- * heavier edge. */
-const SLAB_THICKNESS = 34;
 /** Vertical room the HUD strip needs at the bottom of the stage — subtracted
  * from the fit budget so the controls never sit on top of the object. */
 const HUD_RESERVE = 84;
@@ -217,10 +214,10 @@ export function facingSide(yaw: number): 'front' | 'back' | 'edge' {
   return y > 90 && y < 270 ? 'back' : 'front';
 }
 
-export function clampPose(p: Pose): Pose {
+export function clampPose(p: Pose, maxPitch: number = MAX_PITCH): Pose {
   return {
     yaw: p.yaw,
-    pitch: Math.max(-MAX_PITCH, Math.min(MAX_PITCH, p.pitch)),
+    pitch: Math.max(-maxPitch, Math.min(maxPitch, p.pitch)),
     zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, p.zoom)),
   };
 }
@@ -486,7 +483,15 @@ export function Showroom3D({
   serial?: { number: number; cap: number };
   /** When present, this React tree stands in the room instead of a bare card
    * face — the slab, with its own width/height. */
-  slab?: { node: React.ReactNode; w: number; h: number; edge: string };
+  slab?: {
+    w: number;
+    h: number;
+    /** Draws the whole solid (faces, walls, effects) for the current pose —
+     * the slab is its own geometry (SlabCase3D), not a six-faced card. */
+    render: (pose: Pose) => React.ReactNode;
+    /** A heavier object gets a tighter tilt range. */
+    maxPitch?: number;
+  };
   pose: Pose;
   /** MUST be referentially stable across renders (a `useState` setter, or a
    * `useCallback`): the momentum/auto-spin rAF loop closes over it, and a
@@ -523,9 +528,24 @@ export function Showroom3D({
   const fit = useMemo(() => {
     if (!box || box.w === 0 || box.h === 0) return 1;
     // HUD_RESERVE keeps the controls strip off the object at 1.00×.
-    return Math.min(1, (box.h - HUD_RESERVE) / h, (box.w * 0.9) / w);
-  }, [box, w, h]);
-  const thickness = slab ? SLAB_THICKNESS : CARD_THICKNESS;
+    // A slab's depth and halo add to its silhouette once it turns, so it
+    // fits with a little more air than a bare card.
+    const air = slab ? 1.08 : 1;
+    return Math.min(1, (box.h - HUD_RESERVE) / (h * air), (box.w * 0.9) / (w * air));
+  }, [box, w, h, slab]);
+  const thickness = CARD_THICKNESS;
+  const maxPitch = slab?.maxPitch ?? MAX_PITCH;
+  const maxPitchRef = useRef(maxPitch);
+  useEffect(() => {
+    maxPitchRef.current = maxPitch;
+  }, [maxPitch]);
+  // A slab is a heavy object: it turns a little slower under the finger and
+  // coasts to a stop sooner, so it feels sturdy rather than flicked paper.
+  const heavy = !!slab;
+  const heavyRef = useRef(heavy);
+  useEffect(() => {
+    heavyRef.current = heavy;
+  }, [heavy]);
   const back = getCardBackImage();
 
   // ---- drag + momentum ----------------------------------------------------
@@ -557,15 +577,19 @@ export function Showroom3D({
       const coasting = Math.abs(v.yaw) > 0.5 || Math.abs(v.pitch) > 0.5;
       if (spinning || coasting) {
         onPose((p) =>
-          clampPose({
-            ...p,
-            yaw: p.yaw + v.yaw * dt + spin.current * dt,
-            pitch: p.pitch + v.pitch * dt,
-          }),
+          clampPose(
+            {
+              ...p,
+              yaw: p.yaw + v.yaw * dt + spin.current * dt,
+              pitch: p.pitch + v.pitch * dt,
+            },
+            maxPitchRef.current,
+          ),
         );
         // Exponential decay: ~95% of the velocity survives each 1/60s frame,
-        // so a flick coasts for about a second before it settles.
-        const decay = Math.pow(0.06, dt);
+        // so a flick coasts for about a second before it settles (a slab,
+        // heavier, settles in about two thirds of that).
+        const decay = Math.pow(heavyRef.current ? 0.02 : 0.06, dt);
         v.yaw *= decay;
         v.pitch *= decay;
         if (!coasting) {
@@ -600,8 +624,11 @@ export function Showroom3D({
     // 0.55°/px horizontally: a 650px drag is one full revolution, which is
     // about the width of the stage — "swipe across the card to turn it right
     // around" is the gesture this is tuned for.
-    vel.current = { yaw: dx * 12, pitch: -dy * 9 };
-    onPose((p) => clampPose({ ...p, yaw: p.yaw + dx * 0.55, pitch: p.pitch - dy * 0.42 }));
+    const k = heavy ? 0.8 : 1;
+    vel.current = { yaw: dx * 12 * k, pitch: -dy * 9 * k };
+    onPose((p) =>
+      clampPose({ ...p, yaw: p.yaw + dx * 0.55 * k, pitch: p.pitch - dy * 0.42 * k }, maxPitch),
+    );
   };
 
   const endDrag = (e: React.PointerEvent) => {
@@ -615,7 +642,7 @@ export function Showroom3D({
     // wheel passively, so the zoom is applied and the page is left alone by
     // the stage's own `overscroll-contain` instead.
     const factor = Math.exp(-e.deltaY * 0.0016);
-    onPose((p) => clampPose({ ...p, zoom: p.zoom * factor }));
+    onPose((p) => clampPose({ ...p, zoom: p.zoom * factor }, maxPitch));
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
@@ -626,7 +653,9 @@ export function Showroom3D({
       pinch.current = { dist, zoom: pose.zoom };
       return;
     }
-    onPose((p) => clampPose({ ...p, zoom: pinch.current!.zoom * (dist / pinch.current!.dist) }));
+    onPose((p) =>
+      clampPose({ ...p, zoom: pinch.current!.zoom * (dist / pinch.current!.dist) }, maxPitch),
+    );
   };
 
   const { yaw, pitch, zoom } = pose;
@@ -674,15 +703,15 @@ export function Showroom3D({
           }}
         >
           <div style={{ position: 'relative', width: w, height: h, transformStyle: 'preserve-3d' }}>
-            <Solid
-              w={w}
-              h={h}
-              thickness={thickness}
-              edge={slab?.edge ?? 'linear-gradient(90deg,#f4efe2,#cbc4b2)'}
-              front={
-                slab ? (
-                  slab.node
-                ) : (
+            {slab ? (
+              slab.render(pose)
+            ) : (
+              <Solid
+                w={w}
+                h={h}
+                thickness={thickness}
+                edge="linear-gradient(90deg,#f4efe2,#cbc4b2)"
+                front={
                   <div className="relative premium-boost">
                     <CardFace def={def} size="full" foil={foil} serial={serial} />
                     {/* Rim light — a hard edge highlight that swings with the
@@ -714,28 +743,26 @@ export function Showroom3D({
                       />
                     )}
                   </div>
-                )
-              }
-              back={
-                <div
-                  className={cn(
-                    'w-full h-full rounded-[6px] border-4 border-[var(--c-ink)] overflow-hidden',
-                    !back && !slab && 'classic-black-back',
-                  )}
-                  style={
-                    slab
-                      ? { background: slab.edge }
-                      : back
+                }
+                back={
+                  <div
+                    className={cn(
+                      'w-full h-full rounded-[6px] border-4 border-[var(--c-ink)] overflow-hidden',
+                      !back && 'classic-black-back',
+                    )}
+                    style={
+                      back
                         ? {
                             backgroundImage: `url(${back})`,
                             backgroundSize: 'cover',
                             backgroundPosition: 'center',
                           }
                         : undefined
-                  }
-                />
-              }
-            />
+                    }
+                  />
+                }
+              />
+            )}
             <Motes theme={theme} radius={Math.max(w, h) * 0.78} reduced={reduced} />
           </div>
         </div>

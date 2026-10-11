@@ -11,8 +11,7 @@ import {
   Waves,
 } from 'lucide-react';
 import { SYSTEM_THEMES, THEMES, type ThemeChoice } from './themes';
-import { PopButton, Notice } from './ui';
-import { CurrencyBar } from './CurrencyBar';
+import { PopButton, Notice, MetaHeader } from './ui';
 import { useMeta } from './MetaContext';
 import { resetAccount, setHideSerializedAnnouncements } from '../lib/supabase';
 import {
@@ -50,8 +49,16 @@ import {
   type HandSort,
   loadHandSort,
   saveHandSort,
+  type BetPresetRows,
+  DEFAULT_BET_PRESETS,
+  loadBetPresets,
+  saveBetPresets,
+  presetLabel,
 } from './matchPrefs';
 import { restartCoach } from './coachPractice';
+import { usePersistedState } from './usePersistedState';
+import { MODES, MODE_IDS, MAX_SEATS, MIN_SEATS, type ModeId } from '../game/poker/constants';
+import { FORMATS, FORMAT_IDS, type FormatId } from '../game/poker/formats';
 
 /** Once every 7 days for everyone except `creator` (Fry) — mirrors the
  * server-side cooldown in `reset_account()` so the button can grey itself out
@@ -107,6 +114,17 @@ export function SettingsScreen({
   const [preActions, setPreActions] = useState(loadPreActions);
   const [allIn, setAllIn] = useState(loadAllInConfirm);
   const [handSort, setHandSort] = useState<HandSort>(loadHandSort);
+  // S-10: the default table — the very keys TAKE A SEAT remembers.
+  const [tableMode, setTableMode] = usePersistedState<ModeId>('frycards:play-mode', 'standard');
+  const [tableSeats, setTableSeats] = usePersistedState<number>('frycards:play-seats', MAX_SEATS);
+  const [tableFormat, setTableFormat] = usePersistedState<FormatId>('frycards:play-format', 'open');
+  // S-8: editable bet-preset rows.
+  const [presets, setPresets] = useState<BetPresetRows>(loadBetPresets);
+  const editPreset = (street: keyof BetPresetRows, i: number, v: number) => {
+    const next = { ...presets, [street]: presets[street].map((x, j) => (j === i ? v : x)) };
+    setPresets(next);
+    saveBetPresets(next);
+  };
   // Two-step reset: the first press arms it, the second (within 6s) fires.
   const [resetArmed, setResetArmed] = useState(false);
   const pickSpeed = (idx: number) => {
@@ -183,19 +201,9 @@ export function SettingsScreen({
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      {/* flex-wrap + min-w-0, the same idiom as the privacy row below: at the
-          browser's 200% font size on a 375px phone this row measured 388px
-          wide in CI (the `text-xl` heading is rem-based and doubles), pushing
-          the whole screen sideways. Letting the row break and the heading
-          shrink costs nothing at normal size and is the v29 fix for exactly
-          this shape. */}
-      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
-        <PopButton onClick={onBack} color="yellow">
-          &lt; MENU
-        </PopButton>
-        <h1 className="heading-font text-xl text-[var(--c-yellow)] min-w-0">SETTINGS</h1>
-        <CurrencyBar className="ml-auto" />
-      </div>
+      {/* U62: the shared header, so the wallet sits where every other screen
+          puts it. */}
+      <MetaHeader title="SETTINGS" onBack={onBack} />
 
       <div className="p-6 max-w-4xl mx-auto">
         {/* Color Theme Section: a single row of swatches (11 full-width cards
@@ -354,8 +362,8 @@ export function SettingsScreen({
           <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
             <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
               How well the bots at your table play — how they read their hands and when they bet and
-              cast. Takes effect from your next match; rewards are the same at every level. Saved
-              locally.
+              cast. Takes effect from your next match; credits pay ×0.8 on Easy, ×1 on Normal and
+              ×1.15 on Hard and Shark. Saved locally.
             </p>
             <div className="flex flex-wrap gap-2">
               {CPU_DIFFICULTIES.map((d) => (
@@ -541,6 +549,100 @@ export function SettingsScreen({
               >
                 {coachQueued ? 'NEXT MATCH ✓' : 'REPLAY COACH'}
               </PopButton>
+            </div>
+          </div>
+        </div>
+
+        {/* S-10 default table + S-8 bet presets */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Bot className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">DEFAULT TABLE</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4 flex flex-col gap-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] max-w-md">
+              What TAKE A SEAT starts on. Changing it there changes it here too.
+            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="heading-font text-sm">LENGTH</div>
+              <div className="flex flex-wrap gap-2">
+                {MODE_IDS.map((id) => (
+                  <PopButton
+                    key={id}
+                    color={tableMode === id ? 'yellow' : 'steel'}
+                    ariaPressed={tableMode === id}
+                    onClick={() => setTableMode(id)}
+                  >
+                    {MODES[id].label.toUpperCase()}
+                  </PopButton>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="heading-font text-sm">SEATS</div>
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: MAX_SEATS - MIN_SEATS + 1 }, (_, i) => MIN_SEATS + i).map(
+                  (n) => (
+                    <PopButton
+                      key={n}
+                      color={tableSeats === n ? 'yellow' : 'steel'}
+                      ariaPressed={tableSeats === n}
+                      ariaLabel={`${n} seats`}
+                      onClick={() => setTableSeats(n)}
+                    >
+                      {n}
+                    </PopButton>
+                  ),
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="heading-font text-sm">DECK FORMAT</div>
+              <div className="flex flex-wrap gap-2">
+                {FORMAT_IDS.map((id) => (
+                  <PopButton
+                    key={id}
+                    color={tableFormat === id ? 'yellow' : 'steel'}
+                    ariaPressed={tableFormat === id}
+                    title={FORMATS[id].blurb}
+                    onClick={() => setTableFormat(id)}
+                  >
+                    {FORMATS[id].label.toUpperCase()}
+                  </PopButton>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="heading-font text-sm">BET PRESETS</div>
+                <PopButton
+                  color="steel"
+                  onClick={() => {
+                    setPresets(DEFAULT_BET_PRESETS);
+                    saveBetPresets(null);
+                  }}
+                >
+                  RESET
+                </PopButton>
+              </div>
+              <p className="text-[11px] font-bold text-[var(--c-steel)] max-w-md">
+                The quick-size buttons beside the raise slider. Pre-flop in big blinds (a POT button
+                always follows); after the flop as a share of the pot.
+              </p>
+              <PresetRow
+                label="PRE-FLOP (× BB)"
+                values={presets.preflop}
+                options={[1.5, 2, 2.2, 2.5, 3, 3.5, 4, 5]}
+                fmt={(v) => presetLabel('preflop', v)}
+                onChange={(i, v) => editPreset('preflop', i, v)}
+              />
+              <PresetRow
+                label="POST-FLOP (POT)"
+                values={presets.postflop}
+                options={[0.25, 1 / 3, 0.5, 2 / 3, 0.75, 1, 1.5, 2]}
+                fmt={(v) => presetLabel('postflop', v)}
+                onChange={(i, v) => editPreset('postflop', i, v)}
+              />
             </div>
           </div>
         </div>
@@ -773,5 +875,44 @@ function OptionLabel({ label, blurb }: { label: string; blurb: string }) {
       <span>{label}</span>
       <span className="fs-xs font-bold normal-case opacity-75">{blurb}</span>
     </span>
+  );
+}
+
+/** S-8: one editable preset row — a select per button. */
+function PresetRow({
+  label,
+  values,
+  options,
+  fmt,
+  onChange,
+}: {
+  label: string;
+  values: number[];
+  options: number[];
+  fmt: (v: number) => string;
+  onChange: (i: number, v: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="fs-xs font-black w-32">{label}</span>
+      {values.map((v, i) => {
+        const opts = options.some((o) => Math.abs(o - v) < 0.005) ? options : [...options, v];
+        return (
+          <select
+            key={i}
+            aria-label={`${label} preset ${i + 1}`}
+            value={String(opts.find((o) => Math.abs(o - v) < 0.005))}
+            onChange={(e) => onChange(i, Number(e.target.value))}
+            className="ink-border-sm bg-[var(--c-paper)] text-[var(--c-ink)] fs-xs font-black px-1 min-h-[36px]"
+          >
+            {opts.map((o) => (
+              <option key={o} value={String(o)}>
+                {fmt(o)}
+              </option>
+            ))}
+          </select>
+        );
+      })}
+    </div>
   );
 }

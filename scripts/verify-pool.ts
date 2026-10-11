@@ -53,8 +53,9 @@
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { GENERATED_CARDS } from '../src/game/generated-cards';
-import { POOL_BY_ID } from '../src/game/poker/cardpool';
-import { mechanicsFromDef } from '../src/meta/submissions';
+import { deriveCardMechanics } from '../src/game/poker/cardpool';
+import { deriveEdited } from '../src/meta/cardEditor';
+import { SHOWCASE_SET, mechanicsFromDef } from '../src/meta/submissions';
 import type { CardTemplate } from '../src/types';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
@@ -148,11 +149,19 @@ for (const r of rows) {
 // 2. Live template set vs the bundled fallback the sims run on.
 const live = new Map(rows.filter((r) => r.template).map((r) => [r.id, r.template!]));
 const bundled = new Map(GENERATED_CARDS.map((c) => [c.id, c]));
+const liveOnly: string[] = [];
+const warnings: string[] = [];
 
 for (const [id, t] of live) {
   const b = bundled.get(id);
   if (!b) {
-    problems.push(`${id}: live-only — missing from generated-cards.ts (run npm run fetch:cards)`);
+    // Player Showcase cards are minted live by an in-app approval and are
+    // never in the bundle until someone runs fetch:cards. They are checked
+    // against their own live template in step 3, which is all the client
+    // runs; the bundle is only the offline fallback and the sims' catalog.
+    if (t.set === SHOWCASE_SET) liveOnly.push(id);
+    else
+      problems.push(`${id}: live-only — missing from generated-cards.ts (run npm run fetch:cards)`);
     continue;
   }
   const a = digest(id, t.type, t.rarity);
@@ -199,8 +208,11 @@ const canonical = (v: unknown): unknown =>
         )
     : v;
 for (const r of rows) {
-  const c = POOL_BY_ID[r.id];
-  if (!c) continue; // covered by the live-only check above
+  if (!r.template) continue; // reported in step 1
+  // Derive from the LIVE template — exactly what every client runs — so an
+  // in-app Creator edit (template.overrides) is not reported as drift
+  // against the stale bundled copy.
+  const c = deriveCardMechanics(r.template);
   // The same mapping db:sync and the Creator tools write.
   const want = mechanicsFromDef(c);
   if (norm(r.keywords) !== want.keywords)
@@ -235,6 +247,11 @@ for (const r of rows) {
 console.log(
   `Live catalog: ${rows.length} cards. Bundled catalog: ${GENERATED_CARDS.length} cards.`,
 );
+if (liveOnly.length)
+  console.log(
+    `${liveOnly.length} live-only Player Showcase card(s) (allowed): ${liveOnly.join(', ')}`,
+  );
+for (const w of warnings) console.warn(`  warning: ${w}`);
 if (problems.length === 0) {
   console.log(
     'Pool parity OK — template, rarity column, bundled catalog and the derived ' +

@@ -392,6 +392,11 @@ createRoot(document.getElementById('root')!).render(
       <ShowroomScreen
         onBack={() => undefined}
         initial={{ kind: 'slab', gradedId: 'preview-graded-vault-0' }}
+        // `&yaw=35&pitch=-20` photographs the case from a set angle.
+        initialPose={{
+          yaw: Number(params.get('yaw') ?? 0),
+          pitch: Number(params.get('pitch') ?? 0),
+        }}
       />
     ) : screen === 'grading' ? (
       <GradingScreen onBack={() => undefined} />

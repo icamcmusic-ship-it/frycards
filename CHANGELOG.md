@@ -53,6 +53,24 @@ recent entries. This file is the archive; that screen is not.
   missions and a new catalogue, the broadcast feed and batched quicksell
   (see `docs/BACKEND_PENDING.md` for what still needs applying).
 
+### v35.3 addendum — the card pool reprint (audit §3.3/§3.4)
+
+- **The generated pool is reprinted.** Void and Light get their identity
+  back: Burn, Snuff, Lock, Entropic and Call Out (the only answer to Feint)
+  roll far more often, and Snuff may print from ★2. Kindle no longer floods
+  Ember (28 → 20 of 233 powers); Straddle and Tax take its place. Two plain
+  Void Events (Flesh to Bone, Hammerhead Silhouette) are reprinted as ★2
+  Snuffs. Rarity now biases a card's tier much less: Full-Art cards are
+  ★4–5 44 % of the time (was 52 %), Super-Rares 11 % (was 33 %). Hand-set
+  reprints and Creator overrides still win over the generator.
+- **CPU straddles.** Bots straddle any hand that beats its fair share of the
+  table, not only premium hands. The "Cruel Effervescence is too strong"
+  flag was the bot casting it only with monsters: swapped for a blank card
+  on the same seeds, it is worth −2 to +0.5 points.
+- **Sim harness**: `--ablate <card>` plays the same seeds with the card and
+  with a blank stand-in; `--straddle-eq` / `--straddle-edge` ablate the bot's
+  Straddle policy.
+
 ### v35.2 — Bloom, Erode and fairer Leaders
 
 - **Two new keywords** fill the thinnest colours, both gated to their colour:

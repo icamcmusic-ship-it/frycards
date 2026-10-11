@@ -134,6 +134,7 @@ const CollectionTile = React.memo(function CollectionTile({
   narrow,
   wished,
   isNew,
+  spare,
   onInspect,
 }: {
   def: CardDef;
@@ -145,6 +146,8 @@ const CollectionTile = React.memo(function CollectionTile({
   wished: boolean;
   /** Owned now but not at the last visit to the Collection. */
   isNew?: boolean;
+  /** U37/U36: copies free to quicksell (not deck-locked or Serialized). */
+  spare?: number;
   onInspect: (def: CardDef, foil: boolean, serial?: { number: number; cap: number }) => void;
 }) {
   const size = narrow ? 'standard' : 'full';
@@ -174,7 +177,7 @@ const CollectionTile = React.memo(function CollectionTile({
         foil={kind === 'foil'}
         serial={serial}
         dimmed={kind === 'normal' && count === 0}
-        badge={isNew ? '● NEW' : wished ? '♥ WISH' : undefined}
+        badge={isNew ? '● NEW' : wished ? '♥ WISH' : spare ? `${spare} SPARE` : undefined}
         onClick={onClick}
       />
     </div>
@@ -1289,6 +1292,7 @@ export function CollectionScreen({
                 serialCap={e.serial?.cap}
                 narrow={narrow}
                 wished={wishlist.has(e.def.id)}
+                spare={e.kind === 'normal' ? spareByCard.get(e.def.id) : undefined}
                 isNew={e.kind !== 'serialized' && newIds.has(e.def.id)}
                 onInspect={openInspector}
               />

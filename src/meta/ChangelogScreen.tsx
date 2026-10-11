@@ -11,12 +11,41 @@ interface ChangelogEntry {
 // players actually care about (new features, balance headlines), not every
 // internal playtest data point tracked in the full file.
 //
-// This screen holds the TWO most recent updates only. It is a "what changed
-// since you last played" board, not an archive: `CHANGELOG.md` is the complete
-// history and stays complete. When a release adds an entry here, the oldest of
-// the three comes out. NewsCenterScreen reads ENTRIES[0] for its headline, so
-// the newest entry must stay first.
+// This board covers everything since the FryCards Poker launch (v35), one
+// entry per round, newest first. `CHANGELOG.md` is the complete history.
+// NewsCenterScreen reads ENTRIES[0] for its headline, so the newest entry must
+// stay first.
 export const ENTRIES: ChangelogEntry[] = [
+  {
+    version: 'Polish & Balance (v35.4)',
+    date: 'October 2026',
+    items: [
+      'DIFFICULTY PAYS. Credits now scale with CPU difficulty: Easy \u00d70.8, Normal \u00d71, Hard and SHARK \u00d71.15. TAKE A SEAT shows the multiplier and the game over screen previews it.',
+      'NEW LOOKS. Five new colour themes plus a dark INK theme. Starting stacks are whole numbers: 480, 800 or 1,280 chips (30 / 50 / 80 big blinds) for Quick, Standard and Deep.',
+      'CHIPS MOVE. Bets slide into the pot at the end of each street and the pot slides to the winner (off under Reduced motion). Big moments \u2014 ALL IN, SHOWDOWN, a cast at you, a big pull \u2014 get comic sound-effect bursts.',
+      'BALANCE PASS. Smarter CPU players, many powers retuned and four new keywords. Card keyword weights and rarity were rebalanced, so some cards\u2019 powers have changed.',
+      'MISSIONS. Missions rotate on a schedule, poker missions track hands won, showdowns, big pots, knockouts and casts, and new collection missions reward growing your collection.',
+      'YOUR SETTINGS. Edit your own BET PRESETS and pick a DEFAULT TABLE in Settings.',
+      'MORE TO PLAY WITH. PLAY WITH IT on the Card of the Day, a weekly FEATURED LEADER and Location, and challenge links.',
+      'DECK BUILDER. Gap-filler suggestions with an ADD button, unowned cards you can wishlist (plus ADD MISSING TO WISHLIST), power-hand odds against a Location, and deck codes that remember their deck format. On a phone the deck name gets its own row with AUTO quick-build.',
+      'COLLECTION AND STORE. One badge style for counts, serials and foils, a SPARE badge on Collection tiles, PACKS / COSMETICS tabs in the Store, and a pack summary that counts NEW cards. Removing a card from a deck offers UNDO.',
+      'CARD FACES. Small cards (deck pool, grading, showroom) drop the flavour text so the rules stay readable; tap any card to read all of it.',
+    ],
+  },
+  {
+    version: 'The Audit Round (v35.3)',
+    date: 'October 2026',
+    items: [
+      'MATCH BUGS FIXED. No inspector popping up on hover, no double-click acting twice, response windows that cannot stall the table, a raise slider that reaches all-in, CPU players that never freeze the table, Veil that really hides its target, the match seed hidden until the match ends, and many rules edge cases settled.',
+      'FOLLOW THE CPU. Each seat shows its last action in a speech burst. One seat at a time is marked ON THE CLOCK with a draining think arc. A ticker lists what just happened, and a cast spotlight docks by the caster and says what the card did. You can pause and step through CPU turns, and tap any seat for a recap of what it did this hand.',
+      'TABLE SETTINGS. Table timers: STANDARD (the default), RELAXED or OFF. Auto-deal; pause when a power targets you (on by default); amounts in big blinds; don\u2019t fold when check is free; confirm big bets; pre-action buttons (CHECK / FOLD, CHECK, CALL ANY); bet presets by street; pot odds in the helper line; and a SHARK difficulty.',
+      'FAIRER REWARDS. Payouts scale with table size, and a finish below 1st pays after enough hands have been played. A finished match\u2019s reward survives a reload.',
+      'GAME OVER. Your match in numbers, your place against last match, and SHARE RESULT with the seed and deck code. Match History adds REPLAY SEED, streaks and splits by Leader, mode and opponent.',
+      'MORE WAYS TO PLAY. Deck formats (Singleton, Pauper, Monochrome, Low Stakes) picked on TAKE A SEAT; a weekly rule twist (Deep Stacks, Slow Blinds, Full Hands, Steady Nerve); RANDOM FROM MY CARDS; the DAILY TABLE, the same deal for everyone; practice tables for any deck code with friends\u2019 decks as opponents; named CPU players; and REMATCH with your last setup.',
+      'DECK BUILDER. Format badges, records and notes per deck, auto names, Location fit, text export, saved versions, sample decks and in-app confirms.',
+      'MENUS. A big PLAY button and grouped tiles on the main menu, a real FryCards back on face-down playing cards, a Battle Pass season strip, clearer grading (fee, slab value and net gain), and lots of smaller screen fixes.',
+    ],
+  },
   {
     version: 'FryCards Poker (v35)',
     date: 'October 2026',
@@ -25,24 +54,10 @@ export const ENTRIES: ChangelogEntry[] = [
       'YOUR DECK BENDS THE POKER. A deck is a Leader, one Location and 16, 24 or 36 power cards: Units \u2605, Items \u2699 and Events \u03df. Casting is public \u2014 everyone sees the card \u2014 and its chips go into the pot, so every cast is also a bluff. Peek at a hole card, redraw your own, drain a rival\u2019s stack, or fake it with a Feint.',
       'LOCATIONS ARE THE TABLE\u2019S WEATHER. Every seat\u2019s Location joins a shared rotation with a two-hand forecast: Bomb Pot, Pineapple, Fog, Happy Hour, Tilt Zone and twelve more, plus a Plain Table each cycle.',
       'NERVE AND LEADERS. Every seat has a public nerve meter. Your Leader\u2019s two abilities spend or build it, once per hand. Hit zero and you tilt: your Leader locks and powers cost more.',
+      'EARLY TUNING. Two new keywords, Bloom and Erode; fairer Leaders; and CPU players that read hands better.',
       'REWARDS PAY BY PLACE. Finish 1st for 100 credits in Standard, down to 40 for last \u2014 never by chip count. Quick pays half, Deep one and a half.',
-      'YOUR COLLECTION IS SAFE. Every card keeps its rarity, name, art and flavor text \u2014 and flavor text is now always shown on the card. Old 60-card decks and deck links no longer work: build a new deck in the Deck Builder.',
+      'YOUR COLLECTION IS SAFE. Every card keeps its rarity, name, art and flavor text. Old 60-card decks and deck links no longer work: build a new deck in the Deck Builder.',
       'NEW TO POKER? How to Play now teaches Hold\u2019em from zero (hand ranks, betting rounds, blinds, pot-limit, side pots), and your first practice game has a coach that explains one idea at a time. Playing cards by Kenney (kenney.nl).',
-    ],
-  },
-  {
-    version: 'The Shop Floor (v31)',
-    date: 'October 2026',
-    items: [
-      'ECONOMY REBALANCED — QUICKSELL PRICES ARE LOWER, ON PURPOSE. Opening a Booster Pack and quickselling everything paid back about 141% of the pack’s price, and a Booster Box about 177% — the packs were printing credits. Quicksell is now Common 4, Uncommon 10, Rare 40, Super-Rare 120, Ultra-Rare 300, Full-Art 500, Alt-Art 900, Mythic 1,500 (foils still ×2.5). Nothing you own was taken away; selling it back to the game pays less.',
-      'LEVELS COME MUCH FASTER. Each level needs 2.5× less XP than before, and every account was moved up to its new level and paid the rewards for the levels it skipped. A level-up now pays 75 credits (plus 10 vouchers every 5th level). Player Shops unlock at level 20 instead of 50.',
-      'NEW: THE SHOP FLOOR. CPU customers now walk into your Player Shop about every 90 minutes and ask to buy one of your listings — or offer a card from their binder in trade. Accept, turn them away, or haggle once: push past what they will pay and they may walk out.',
-      'NEW: CPU COLLECTORS BID ON AUCTIONS. Usually up to about +25% over quicksell, sometimes far less, now and then far more. Their winning bids count toward a card’s market price.',
-      'GRADED SLABS GOT A LOT MORE INTERESTING. Click a slab in your Collection for its full details — grade, service, condition, value — and to sell, crack, view in 3D, or pin up to three to your profile. Low grades now LOOK low: soft corners, whitened edges, creases, a cracked case. MINT, MINT+ and GEM MINT come back in holo, prism and gold cases.',
-      'NEW: WEEKLY BINGO. A fresh 5×5 card of collection goals every Monday, under Missions. Squares fill themselves as you collect \u2014 open packs, trade, grade \u2014 and every row, column or diagonal pays 120 credits. Fill the whole card for 750 credits and 5 vouchers.',
-      'NEW: CPU DIFFICULTY. Pick EASY, NORMAL or HARD in Settings. Easy misses attacks and blocks and never holds an answer; Hard plans two turns of combat and always keeps a reaction up. Rewards are the same at every level.',
-      'BALANCE: SENTINEL OF THE NETHER PIT IS BACK IN THE GAME. Its removal ability costs 2 Resolve again instead of 3. The extra point was added when our testing read Sentinel as the strongest Leader; measured properly on nine deck recipes it was the weakest. Nothing else changed: a fresh 16,000-game check found no keyword far enough out of line to touch.',
-      'SETTINGS: HAND ORDER can be set from Settings now, and the MOTION setting finally reaches the match board, card effects, the Showroom and pack opening — REDUCED calms them all, and FULL overrides your device’s setting.',
     ],
   },
 ];

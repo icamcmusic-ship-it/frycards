@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { describe, test, expect } from 'vitest';
 import { encodeDeckCode, decodeDeckCode, RETIRED_CODE_ERROR } from './deckcode';
 import { CardTemplate } from '../types';
 import { MODES } from '../game/poker/constants';
@@ -100,4 +100,22 @@ test('anything that is not a FryCards code is ignored', async () => {
   expect(deckCodeFromSearch('')).toBeNull();
   expect(deckCodeFromSearch('?deck=nope')).toBeNull();
   expect(deckCodeFromSearch('?other=FRY2:standard:x:y')).toBeNull();
+});
+
+describe('deck format in the code', () => {
+  test('open decks keep the old code; a format round-trips; old codes still decode', async () => {
+    const { encodeDeckCode, decodeDeckCode, stripDeckFormat } = await import('./deckcode');
+    const { POOL } = await import('../game/poker/cardpool');
+    const db = new Map(POOL.map((c) => [c.id, c]));
+    const leader = POOL.find((c) => c.type === 'Leader')!;
+    const loc = POOL.find((c) => c.type === 'Location')!;
+    const plain = encodeDeckCode(leader.id, [loc.id], 'quick');
+    expect(encodeDeckCode(leader.id, [loc.id], 'quick', 'open')).toBe(plain);
+    const fmt = encodeDeckCode(leader.id, [loc.id], 'quick', 'singleton');
+    expect(fmt.startsWith('FRY2:quick+singleton:')).toBe(true);
+    expect(decodeDeckCode(fmt, db)).toMatchObject({ mode: 'quick', format: 'singleton' });
+    expect(decodeDeckCode(plain, db)).not.toHaveProperty('format');
+    expect(stripDeckFormat(fmt)).toBe(plain);
+    expect(decodeDeckCode(plain.replace('quick', 'quick+bogus'), db)).toHaveProperty('error');
+  });
 });

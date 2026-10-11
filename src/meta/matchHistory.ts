@@ -18,6 +18,7 @@
  * diverges from the match the player left.
  */
 import { winRatePct } from '../lib/utils';
+import { stripDeckFormat } from './deckcode';
 
 export const MATCH_HISTORY_KEY = 'frycards:match-history';
 /** Rolling window. Enough to find "the one from earlier", small enough to
@@ -53,6 +54,9 @@ export interface MatchRecord {
   opponents?: string[];
   /** A table label: "Replay", "Daily 2026-10-11", "Practice"… */
   tag?: string;
+  /** Daily Table (Q15): this was the day's first attempt — the one that
+   * counts; retries are kept but unmarked. */
+  firstOfDay?: boolean;
   /** Paid nothing by design (replay, pasted deck, daily, practice). */
   unrewarded?: boolean;
   /** The engine's tally for the human (Q16). */
@@ -100,9 +104,16 @@ export function loadMatchHistory(): MatchRecord[] {
   }
 }
 
+/** True when `tag` is a Daily Table tag no stored record carries yet. */
+export function isFirstDailyAttempt(tag: string | undefined, history: MatchRecord[]): boolean {
+  return !!tag && tag.startsWith('Daily ') && !history.some((r) => r.tag === tag);
+}
+
 export function recordMatch(record: MatchRecord): void {
   if (typeof window === 'undefined') return;
-  const next = [record, ...loadMatchHistory()].slice(0, MATCH_HISTORY_LIMIT);
+  const prev = loadMatchHistory();
+  const rec = isFirstDailyAttempt(record.tag, prev) ? { ...record, firstOfDay: true } : record;
+  const next = [rec, ...prev].slice(0, MATCH_HISTORY_LIMIT);
   try {
     window.localStorage.setItem(MATCH_HISTORY_KEY, JSON.stringify(next));
   } catch {
@@ -170,7 +181,7 @@ export function summarizeMatchHistory(records: MatchRecord[]): HistorySummary {
     const place = placeOf(r);
     places += place;
     if (place === 1) wins++;
-    const key = r.humanDeck ?? `label:${r.humanLabel}`;
+    const key = r.humanDeck ? stripDeckFormat(r.humanDeck) : `label:${r.humanLabel}`;
     const d = decks.get(key) ?? { key, label: r.humanLabel, games: 0, wins: 0, places: 0 };
     d.games++;
     d.places += place;
