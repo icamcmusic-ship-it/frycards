@@ -15,7 +15,6 @@ import { RARITIES, type CardTemplate, type CardType, type Rarity } from '../type
 import { askConfirm } from './confirm';
 import {
   CARD_TYPES,
-  EXTENDED_ENGINE_KEYS,
   SUBTYPES_BY_TYPE,
   deriveEdited,
   describeEdits,
@@ -96,7 +95,6 @@ export function CardEditorPanel({
   const manual = !!ov.manual;
 
   const reseeded = t.id !== initial.id || t.type !== initial.type || t.rarity !== initial.rarity;
-  const engineGap = EXTENDED_ENGINE_KEYS.filter((k) => pruned?.[k] !== undefined);
 
   const set = <K extends keyof ExtendedOverrides>(k: K, v: ExtendedOverrides[K]) =>
     setOv((o) => ({ ...o, [k]: v }));
@@ -469,11 +467,6 @@ export function CardEditorPanel({
           );
         })}
 
-        {engineGap.length > 0 && (
-          <Notice
-            text={`${engineGap.join(', ')}: saved and shown here, but the game engine does not apply these overrides yet (docs/CARD_SUBMISSIONS.md, "Engine support").`}
-          />
-        )}
         {problems.length > 0 && (
           <ul className="fs-xs font-bold text-[var(--c-red)] list-disc pl-4">
             {problems.map((p) => (

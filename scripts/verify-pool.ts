@@ -54,7 +54,7 @@ import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { GENERATED_CARDS } from '../src/game/generated-cards';
 import { deriveCardMechanics } from '../src/game/poker/cardpool';
-import { EXTENDED_ENGINE_KEYS, deriveEdited } from '../src/meta/cardEditor';
+import { deriveEdited } from '../src/meta/cardEditor';
 import { SHOWCASE_SET, mechanicsFromDef } from '../src/meta/submissions';
 import type { CardTemplate } from '../src/types';
 
@@ -213,19 +213,6 @@ for (const r of rows) {
   // in-app Creator edit (template.overrides) is not reported as drift
   // against the stale bundled copy.
   const c = deriveCardMechanics(r.template);
-  const ext = Object.keys(r.template.overrides ?? {}).filter((k) =>
-    (EXTENDED_ENGINE_KEYS as readonly string[]).includes(k),
-  );
-  if (ext.length) {
-    // colors / abilities / rule overrides are written by the Creator editor
-    // but cardpool.ts does not honour them yet (docs/CARD_SUBMISSIONS.md,
-    // "Engine support"). The columns follow the editor; the game does not.
-    warnings.push(`${r.id}: overrides ${ext.join(', ')} are not applied by the engine yet`);
-    const e = mechanicsFromDef(deriveEdited(r.template));
-    if (norm(r.rules_text) !== norm(e.rules_text))
-      problems.push(`${r.id}: cards.rules_text does not match the Creator's edit`);
-    continue;
-  }
   // The same mapping db:sync and the Creator tools write.
   const want = mechanicsFromDef(c);
   if (norm(r.keywords) !== want.keywords)

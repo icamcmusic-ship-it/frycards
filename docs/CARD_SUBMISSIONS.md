@@ -182,25 +182,23 @@ submission) and the **CARD EDITOR** tab (any live card). Logic:
   template overrides and the mechanics columns are written together. It returns
   the new `get_catalog_version()`, which the template change has already moved.
 
-### Engine support (needed in `src/game/poker/cardpool.ts`)
+### Engine support (`src/game/poker/cardpool.ts`)
 
-`deriveCardMechanics` honours `tier`, `effect`, `mods`, `subtype` and `text`
-overrides. It does **not** yet read `colors`, `abilities` or `rule`; the
-editor applies them through `applyExtendedOverrides` (preview, mechanics
-columns, verify:pool), but the in-game pool still prints the rolled values,
-and verify:pool prints a warning for any card that uses them. The engine-side
-change is small, in `mapCard` / `colorsOf` / `mapLeader` / `mapLocation`:
+`deriveCardMechanics` honours every key the editor saves: `tier`, `effect`,
+`mods`, `subtype`, `text`, and `colors`, `abilities`, `rule`
+(all typed on `CardOverrides` in `src/types.ts`).
 
-```ts
-// colorsOf(c, o): if (o.colors?.length) return [...o.colors];
-// mapLeader: if (o.abilities) build both abilities from o.abilities
-//            (same ability() text/chipCost rules; see cardEditor.toAbility)
-// mapLocation: const rule = o.rule ?? locationRuleFor(seedOf(c));
-```
+- `colors` is printed as-is. The roll (a power's effect and mods, a Leader's
+  generated abilities) still uses the generated colours, so a colour-only
+  edit does not re-roll anything — the same card the editor previews.
+- `abilities` replaces both Leader abilities via `abilityFromOverride`
+  (spend at tier 4, build at tier 2, `buildCost` on a build that is not a
+  Straddle); `text` is rebuilt from them unless `text` is set.
+- `rule` replaces the Location's rolled rule; `text` follows it.
 
-and adding `colors`, `abilities`, `rule` to `CardOverrides` in `src/types.ts`.
-Once that lands, `applyExtendedOverrides` becomes a no-op on already-applied
-fields and `EXTENDED_ENGINE_KEYS` can be emptied.
+Deleting an override restores the rolled card exactly, and a card without
+overrides derives exactly as before (`cardpool.test.ts`).
+`applyExtendedOverrides` now only re-applies values the engine already set.
 
 ## Tests
 

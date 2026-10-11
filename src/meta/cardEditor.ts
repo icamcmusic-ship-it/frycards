@@ -13,49 +13,32 @@
  *   manual     informational: the Creator skipped the roll for every field
  *
  * They are layered over the derived card by `applyExtendedOverrides`, which
- * the editor preview, the mechanics columns and verify:pool use. The game
- * client builds its pool in cardpool.ts (owned by the engine), which does not
- * read these three keys yet; see "Engine support" in the doc for the exact
- * patch. Until it lands, verify:pool flags any card that uses them.
+ * the editor preview, the mechanics columns and verify:pool use. cardpool.ts
+ * honours the same keys (docs/CARD_SUBMISSIONS.md, "Engine support"), so on a
+ * card from `deriveCardMechanics` this layer re-applies identical values.
  *
  * Read-only use of src/game/poker exports only.
  */
 import {
   RARITIES,
+  type AbilityOverride,
   type CardOverrides,
   type CardTemplate,
   type CardType,
   type Rarity,
 } from '../types';
-import { buildCost, deriveCardMechanics, powerText } from '../game/poker/cardpool';
+import { abilityFromOverride, deriveCardMechanics, powerText } from '../game/poker/cardpool';
 import { isPower, type CardDef, type CardSubtype, type KwRef } from '../game/poker/cards';
-import type { LeaderAbility, LocationRule, LocationRuleId } from '../game/poker/cards';
-import { COLORS, type Color } from '../game/poker/colors';
-import {
-  CHIP_KEYWORDS,
-  KEYWORD_SPECS,
-  fmtUnits,
-  keywordAllowed,
-  keywordLabel,
-  tierN,
-  type Keyword,
-} from '../game/poker/keywords';
+import type { LocationRuleId } from '../game/poker/cards';
+import { COLORS } from '../game/poker/colors';
+import { CHIP_KEYWORDS, KEYWORD_SPECS, keywordAllowed, type Keyword } from '../game/poker/keywords';
 import { LOCATION_TEMPLATES, ruleName, ruleText } from '../game/poker/locations';
 import { mechanicsFromDef, type CardUpsertPayload } from './submissions';
 
-export interface AbilityOverride {
-  kw: Keyword;
-  n?: number;
-  /** Spend ability: -1..-5; build ability: +1..+3. */
-  nerve: number;
-}
+export type { AbilityOverride };
 
-export type ExtendedOverrides = CardOverrides & {
-  colors?: Color[];
-  abilities?: [AbilityOverride, AbilityOverride];
-  rule?: LocationRule;
-  manual?: boolean;
-};
+/** Kept as an alias: every key the editor writes is now on `CardOverrides`. */
+export type ExtendedOverrides = CardOverrides;
 
 /** Every key the editor may write, in display order. */
 export const EDITOR_FIELDS = [
@@ -109,23 +92,7 @@ export function pruneExtended(
   return out as ExtendedOverrides;
 }
 
-function abilityText(a: LeaderAbility): string {
-  const sign = a.nerve > 0 ? `+${a.nerve}` : `${a.nerve}`;
-  const cost = a.chipCost ? `, pay ${fmtUnits(a.chipCost)}` : '';
-  return `${sign} nerve${cost}: ${keywordLabel(a.effect.kw as Keyword, a.effect.n)}.`;
-}
-
-function toAbility(o: AbilityOverride, tier: number): LeaderAbility {
-  const n = KEYWORD_SPECS[o.kw]?.numbered ? (o.n ?? tierN(o.kw, tier)) : undefined;
-  const effect: KwRef = n === undefined ? { kw: o.kw } : { kw: o.kw, n };
-  const chipCost =
-    o.nerve > 0 && o.kw !== 'Straddle'
-      ? buildCost(o.kw as Parameters<typeof buildCost>[0])
-      : undefined;
-  const a: LeaderAbility = { nerve: o.nerve, effect, chipCost, text: '' };
-  a.text = abilityText(a);
-  return a;
-}
+const toAbility = abilityFromOverride;
 
 /** Layer the extended keys over an already-derived card. */
 export function applyExtendedOverrides(def: CardDef, o?: ExtendedOverrides | null): CardDef {
@@ -327,9 +294,6 @@ export function buildEditedPayload(t: CardTemplate): CardUpsertPayload {
     ...(overrides ? { overrides: overrides as CardOverrides } : {}),
   };
 }
-
-/** Override keys this module applies that cardpool.ts does not (yet). */
-export const EXTENDED_ENGINE_KEYS = ['colors', 'abilities', 'rule'] as const;
 
 /** Refs back into the "Fuse 1, Veil" form. */
 export function formatRefs(refs: KwRef[] = []): string {
