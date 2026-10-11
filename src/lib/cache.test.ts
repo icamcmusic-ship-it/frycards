@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { CACHE_VERSION, cachedFetch, readCache, writeCache } from './cache';
+import { CACHE_VERSION, cachedFetch, readCache, versionedFetch, writeCache } from './cache';
 
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.useRealTimers());
@@ -66,5 +66,30 @@ describe('visibleInterval', () => {
     stop();
     vi.advanceTimersByTime(5000);
     expect(fn).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('versionedFetch (S6)', () => {
+  test('reuses the cache while the version matches, refetches when it changes', async () => {
+    const fetcher = vi.fn(async () => ['cards']);
+    await versionedFetch('cat', 'v1', fetcher, 1000);
+    await versionedFetch('cat', 'v1', fetcher, 1000);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await versionedFetch('cat', 'v2', fetcher, 1000);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  test('an unknown version falls back to the TTL; a failed fetch to any copy', async () => {
+    vi.useFakeTimers();
+    const fetcher = vi.fn(async () => ['cards']);
+    await versionedFetch('cat', 'v1', fetcher, 1000);
+    expect(await versionedFetch('cat', null, fetcher, 1000)).toEqual(['cards']);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1500);
+    const failing = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    expect(await versionedFetch('cat', null, failing, 1000)).toEqual(['cards']);
+    await expect(versionedFetch('other', 'v1', failing, 1000)).rejects.toThrow('offline');
   });
 });
