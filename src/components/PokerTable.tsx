@@ -108,8 +108,7 @@ import {
   loadPreActions,
   needsAllInConfirm,
   potOddsPct,
-  PREFLOP_PRESETS,
-  POSTFLOP_PRESETS,
+  presetButtons,
   loadTimerMode,
   saveAmountsInBB,
   saveAutoDeal,
@@ -125,6 +124,7 @@ import {
 import { loadMatchHistory, placeOf, recordMatch } from '../meta/matchHistory';
 import { askConfirm } from '../meta/confirm';
 import { useReducedMotion } from '../meta/useMotionMode';
+import { ChipFlights } from './ChipFlights';
 import { CardFace } from './CardFaceV4';
 import { Card3DInspector } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
@@ -1320,6 +1320,7 @@ export function PokerTable({
               {h && (
                 <div
                   key={`${h.no}-${h.street}`}
+                  data-pot
                   className="pot-bump relative bg-black/70 rounded-full px-3 py-0.5 heading-font text-sm text-[var(--c-yellow)] whitespace-nowrap"
                 >
                   POT <Chips chips={Math.max(0, potTotal(h))} />
@@ -1386,6 +1387,27 @@ export function PokerTable({
                   </span>
                 );
               })}
+
+            {/* U7: bets slide into the pot, the pot slides to the winner(s). */}
+            {h && (
+              <ChipFlights
+                feltRef={feltRef}
+                handNo={h.no}
+                streetKey={`${h.no}-${h.street}`}
+                bets={h.streetBet}
+                done={!!h.done}
+                winners={Array.from(
+                  new Set<number>((h.result?.pots ?? []).flatMap((p) => p.winners)),
+                )}
+                betAt={(i) =>
+                  narrow || !positions[i]
+                    ? (positions[i] ?? [50, 100])
+                    : betPosition(positions[i], boardTop)
+                }
+                seatAt={(i) => (i === HUMAN && narrow ? [50, 100] : (positions[i] ?? [50, 100]))}
+                reduced={reduced}
+              />
+            )}
 
             {/* Cast spotlight v2: docked by the caster, an arrow to the target,
                 and what it did (U4). Click the card for details — never on hover. */}
@@ -2526,7 +2548,7 @@ function HumanPanel({
                   className="flex-1 accent-[var(--c-yellow)]"
                   aria-label="Raise amount (pot limit)"
                 />
-                {(h!.street === 'preflop' ? PREFLOP_PRESETS : POSTFLOP_PRESETS).map((p) => (
+                {presetButtons(h!.street === 'preflop' ? 'preflop' : 'postflop').map((p) => (
                   <button
                     key={p.label}
                     onClick={() =>
