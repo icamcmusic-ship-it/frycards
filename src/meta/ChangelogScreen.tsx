@@ -15,8 +15,11 @@ import {
   Layers,
   type LucideIcon,
   Map as MapIcon,
+  Maximize2,
+  Package,
   Palette,
   Repeat,
+  ScrollText,
   Scale,
   ShieldCheck,
   Shuffle,
@@ -27,7 +30,9 @@ import {
   Target,
   Timer,
   Trophy,
+  Upload,
   Wrench,
+  Zap,
 } from 'lucide-react';
 import { PopButton } from './ui';
 import { serializeRoute, type MetaScreen } from './routes';
@@ -82,29 +87,37 @@ export interface ChangelogEntry {
 export const ENTRIES: ChangelogEntry[] = [
   {
     version: '35.6',
-    name: 'Card Variants',
+    name: 'Card Variants & Card Backs',
     date: 'October 2026',
-    tagline: 'Shattered glass and seven elemental overlays, rolled on every pack card.',
+    tagline: 'Shattered glass, seven elemental overlays and nine new card backs.',
     items: [
       {
         title: 'Shattered',
-        body: 'About 1 in 150 pack cards comes out Shattered: split into shards that shift as you move it (they hold still with reduced motion). Worth \u00d76.',
+        body: 'About 1 in 150 pack cards comes out Shattered: split into three or four shards that shift as you move it (they hold still with reduced motion). It is worth six times the plain card, and a variant always gets at least the Super-Rare reveal.',
         category: 'collection',
         icon: Sparkles,
         route: { screen: 'store', label: 'OPEN A PACK' },
+        changes: [
+          { label: 'Shattered odds', before: 'none', after: '1 in 150' },
+          { label: 'Shattered value', before: '\u00d71', after: '\u00d76' },
+        ],
       },
       {
         title: 'Seven elemental overlays',
-        body: 'About 1 in 40 cards of a colour rolls that colour\u2019s overlay: Ember Sparks, Tide Frost, Root Overgrown, Gale Lightning, Light Radiant, Shadow Ink or Void Rift. Worth \u00d73, and a foil variant stacks both.',
+        body: 'About 1 in 40 cards of a colour rolls that colour\u2019s overlay: Ember Sparks, Tide Frost, Root Overgrown, Gale Lightning, Light Radiant, Shadow Ink or Void Rift. A foil variant multiplies both. Pack odds, WHAT\u2019S INSIDE and the pack summary show variants.',
         category: 'collection',
         icon: Palette,
+        changes: [
+          { label: 'Elemental odds', before: 'none', after: '1 in 40' },
+          { label: 'Elemental value', before: '\u00d71', after: '\u00d73' },
+        ],
       },
       {
         title: 'Their own entries',
         body: 'Variants are separate collection tiles with a Variant filter. They sell, list, trade, shelve and grade as themselves (slabs keep the variant), and play in decks as the same card.',
         category: 'collection',
         icon: Layers,
-        route: { screen: 'collection', label: 'SEE YOUR COLLECTION' },
+        route: { screen: 'collection', label: 'FILTER BY VARIANT' },
       },
       {
         title: 'Variant achievements',
@@ -112,13 +125,41 @@ export const ENTRIES: ChangelogEntry[] = [
         category: 'collection',
         icon: Award,
       },
+      {
+        title: 'Nine new card backs',
+        body: 'Salt & Stack, Doodle Deep and Glimmerroot (299), Breach, Ignited Palm and Shh Protocol (499), Hothead Protocol and Hot Hand Ace (799 or 8 vouchers) and Hellfry (1,199 or 12 vouchers).',
+        category: 'collection',
+        icon: Layers,
+        route: { screen: 'store', sub: ['card_back'], label: 'SEE CARD BACKS' },
+      },
+      {
+        title: 'One showcase for cards and slabs',
+        body: 'Graded slabs now pin into your main profile showcase alongside cards, sharing its six slots. The separate graded row is gone; slabs you pinned there moved across.',
+        category: 'collection',
+        icon: Trophy,
+        route: { screen: 'profile', label: 'EDIT YOUR SHOWCASE' },
+      },
+      {
+        title: 'Upload your card art',
+        body: 'Player Showcase submissions take the art file itself: drag it in or pick it (up to 8 MB), check the 5:7 crop preview and watch it upload. Pasting a link still works.',
+        category: 'qol',
+        icon: Upload,
+        route: { screen: 'submissions', label: 'SUBMIT ART' },
+      },
+      {
+        title: 'Showroom fullscreen fixed',
+        body: 'The 3D Showroom\u2019s fullscreen now fills the whole screen instead of leaving the bottom half black.',
+        category: 'qol',
+        icon: Maximize2,
+        route: { screen: 'showroom', label: 'OPEN THE SHOWROOM' },
+      },
     ],
   },
   {
     version: '35.5',
-    name: 'Grading Houses',
+    name: 'Grading Houses & the New Store',
     date: 'October 2026',
-    tagline: 'Three houses, three lanes, one black-and-gold PRISTINE 10.',
+    tagline: 'Three grading houses, a slab market, and packs that open with a bang.',
     items: [
       {
         title: 'Three houses, three lanes',
@@ -135,10 +176,11 @@ export const ENTRIES: ChangelogEntry[] = [
       },
       {
         title: 'AMG Set Registry & Pop Report',
-        body: 'AMG is 150 per card (minimum 3, premium \u00d71.3). Its slabs fill a registry for each colour with one-time milestone bonuses and badges. Its Pop Report adds up to +10% resale on low-pop grades.',
+        body: 'AMG is cheaper per card (minimum 3, bulk breaks). Its slabs fill a registry for each colour with one-time milestone bonuses and badges, and its Pop Report adds up to +10% resale on low-pop grades.',
         category: 'grading',
         icon: BarChart3,
         route: { screen: 'grading', label: 'GRADE A CARD' },
+        changes: [{ label: 'AMG fee per card', before: '180', after: '150' }],
       },
       {
         title: 'Crossover',
@@ -156,15 +198,44 @@ export const ENTRIES: ChangelogEntry[] = [
       },
       {
         title: 'Insurance & trade-ins',
-        body: 'Insure a submission for +25% of the fee: a grade under 7 refunds the base fee (the premium is kept). Trade five slabs under 7 for a free grading at any house. New achievements and missions cover Pristine pulls, crossover upgrades, trade-ins, slab sales, insured saves and registries.',
+        body: 'Insure a submission for +25% of the fee: a grade under 7 refunds the base fee (the premium is kept), and the pay bar shows how often each house would pay out. Trade five slabs under 7 for a free grading at any house. New achievements and missions cover Pristine pulls, crossover upgrades, trade-ins, slab sales, insured saves and registries.',
         category: 'grading',
         icon: ShieldCheck,
+        changes: [{ label: 'Insurance premium', before: '+10%', after: '+25%' }],
       },
       {
         title: 'Loyalty, weekly special & the Collector',
         body: 'Every 10 cards to a house earns a perk, one house grades one colour at half price each week, and each day’s collector pays +15% on quicksell for one house’s slabs.',
         category: 'collection',
         icon: Award,
+      },
+      {
+        title: 'Pack opening with a bang',
+        body: 'Reveals scale with rarity: commons flip fast, Super- and Ultra-Rares dim the room and burst, a Mythic takes the whole screen, and serialized cards get a stamp. The pack shakes before a big pull, the tear follows your finger, foils shimmer as you tilt, and the summary badges NEW, DUPE, SERIAL, FOIL and WISHLIST cards with your haul value and set progress. Reduced motion tones it all down.',
+        category: 'collection',
+        icon: Package,
+        route: { screen: 'store', label: 'OPEN A PACK' },
+      },
+      {
+        title: 'A new Store',
+        body: 'A featured pack up top and a shelf below. Every pack has one BUY & OPEN button with a currency toggle and \u00d71 / \u00d75 / \u00d710, plus SAVE FOR LATER. WHAT\u2019S INSIDE shows the chase cards, the odds and how many you own. One pack a day is 15% off, and limited colour packs can now run for a week.',
+        category: 'collection',
+        icon: Store,
+        route: { screen: 'store', sub: ['packs'], label: 'VISIT THE STORE' },
+        changes: [{ label: 'Daily deal pack', before: 'full price', after: '\u221215%' }],
+      },
+      {
+        title: 'New patch notes',
+        body: 'This screen: a hero for each release, category filters, NEW! stickers on what you haven\u2019t seen, before \u2192 after numbers and TRY IT links.',
+        category: 'qol',
+        icon: ScrollText,
+      },
+      {
+        title: 'Faster start',
+        body: 'Less code loads up front, and the screens you are likely to open next load quietly in the background (or as you hover a menu tile).',
+        category: 'qol',
+        icon: Zap,
+        changes: [{ label: 'Up-front download', before: '228.7 kB', after: '181 kB' }],
       },
     ],
   },
