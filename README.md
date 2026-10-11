@@ -195,6 +195,16 @@ inside the `submit_card` RPC.
   copy quote: below it a set-restricted booster just hands out the same handful
   of cards, so the Showcase booster and the Ultra-Rare community poll both wait
   for it. **The ballot is not built yet** — see `docs/ROADMAP.md`.
+- **Approval is one action and the card is live at once**: it is minted with
+  its rolled mechanics, packable and deck-legal with no redeploy. The art then
+  moves to Cloudflare Pages on its own: the scheduled
+  [`showcase-art`](.github/workflows/showcase-art.yml) Action re-encodes it and
+  swaps `cards.image_url`, and the review queue shows **ART PENDING → ON
+  CLOUDFLARE** (or **ART FAILED** with a retry). It needs three Actions secrets
+  (`ART_PIPELINE_TOKEN`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) and
+  does nothing without them. The `CARD EDITOR` tab hand-sets any live card's
+  game data (MANUAL mode skips the roll; per-field "keep rolled").
+  Full walkthrough: [`docs/CARD_SUBMISSIONS.md`](docs/CARD_SUBMISSIONS.md).
 - The Creator's `BULK ADD` tab imports many cards at once (JSON array, or
   `name | type | rarity | image url | flavor` per line). Rows are validated in
   the client and written one at a time server-side, so a bad row reports itself
