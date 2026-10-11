@@ -28,8 +28,13 @@ import {
   MAX_EXCLUSIONS,
   MODES,
   NERVE,
+  GAMBIT_OWED,
+  LAST_STAND_BB,
+  RESONANT_STEP,
   SECOND_COST_TIER,
+  SOULBOUND_STEP,
   STACK_CAP_SHARE,
+  TAX_MAX_SEATS,
   THRIVING_GROWTH,
   TILT_STEP,
   UNIT,
@@ -216,6 +221,10 @@ export interface Hand {
   stackAtStart: number[];
   casts: CastRecord[];
   units: UnitToken[];
+  /** Overbet: this street's pot multiplier bonus per seat (0 = none). */
+  overbet?: number[];
+  /** Soulbound cards and Weapons used this hand: back to hand at its end. */
+  returning?: { seat: number; uid: string; def: CardDef }[];
   itemGears: number[];
   itemCount: number[];
   eventBolts: number[];
@@ -283,6 +292,10 @@ export interface Match {
   history: { no: number; location: string; summary: string; board: string }[];
   /** Seat indexes, 1st place first, once the match is over. */
   placements: number[] | null;
+  /** Public betting tendencies per seat, counted over the match: every
+   * voluntary fold / check / call / raise, and how many were bets or raises
+   * (what any player at the table could tally; bots read it). */
+  aggro?: { actions: number; raises: number }[];
   capped: boolean;
 }
 
@@ -553,6 +566,7 @@ export function createMatch(setup: MatchSetup): Match {
     history: [],
     placements: null,
     capped: false,
+    aggro: setup.seats.map(() => ({ actions: 0, raises: 0 })),
   };
   const rng = R(m);
   setup.seats.forEach((ss, idx) => {
@@ -657,6 +671,8 @@ function startHand(m: Match): void {
     stackAtStart: m.seats.map((s) => s.stack),
     casts: [],
     units: [],
+    returning: [],
+    overbet: z(),
     itemGears: z(),
     itemCount: z(),
     eventBolts: z(),
@@ -805,7 +821,9 @@ export function betOptions(m: Match, seat: number): BetOptions | null {
   const callAmount = Math.min(owe, s.stack);
   const allInTo = h.streetBet[seat] + s.stack;
   const potAfterCall = potTotal(h) + owe;
-  const maxRaiseTo = Math.min(allInTo, h.currentBet + potAfterCall);
+  // Overbet: this street the raise may be the pot × (1 + N).
+  const over = 1 + (h.overbet?.[seat] ?? 0);
+  const maxRaiseTo = Math.min(allInTo, h.currentBet + Math.round(potAfterCall * over));
   // Siphon / Blessed can shrink the pot below the last raise: the pot limit
   // wins, so the minimum never exceeds the maximum.
   const minRaiseTo = Math.min(maxRaiseTo, allInTo, h.currentBet + Math.max(h.lastRaise, h.bb));
@@ -894,6 +912,9 @@ function act(m: Match, seat: number, kind: 'fold' | 'check' | 'call' | 'raise', 
     }
   }
   h.acted[seat] = true;
+  const tally = (m.aggro ??= m.seats.map(() => ({ actions: 0, raises: 0 })))[seat];
+  tally.actions++;
+  if (kind === 'raise') tally.raises++;
   if (kind === 'raise') openRaiseWindow(m, seat);
   if (!h.pending) advance(m);
 }
@@ -954,6 +975,7 @@ function goToStreet(m: Match, street: Street): void {
   h.streetBet.fill(0);
   h.acted.fill(false);
   h.noReraise?.fill(false);
+  h.overbet?.fill(0);
   h.currentBet = 0;
   h.lastRaise = h.bb;
   if (street === 'flop') {
@@ -1270,7 +1292,7 @@ function finishHand(m: Match): void {
   }
   for (const g of h.gambit) {
     if (!winnersAll.includes(g.seat) && winnersAll.length) {
-      const paid = transfer(m, g.seat, winnersAll[0], g.owed * 2);
+      const paid = transfer(m, g.seat, winnersAll[0], Math.round(g.owed * GAMBIT_OWED));
       gains[g.seat] -= paid;
       gains[winnersAll[0]] += paid;
       if (paid)
@@ -1296,8 +1318,33 @@ function finishHand(m: Match): void {
     }
   }
 
-  // End of hand: Units, Charms and Tools discard; Soulbound and Weapons
-  // already went back to hand when they resolved.
+  // Boat Bonus: a showdown win with a full house or better collects N from
+  // every other seat still in the hand.
+  if (!uncontested) {
+    for (const c of h.casts) {
+      const mod = c.mods.find((x) => x.kw === 'Boat Bonus');
+      if (!mod || c.status !== 'resolved' || c.feinted || !winnersAll.includes(c.seat)) continue;
+      const boards = h.board2 ? [h.board, h.board2] : [h.board];
+      const cat = Math.max(...boards.map((b) => bestHand(h, c.seat, b).category));
+      if (cat < 6) continue;
+      for (const i of live) {
+        if (i === c.seat) continue;
+        const paid = transfer(m, i, c.seat, Math.round((mod.n ?? 1) * UNIT));
+        gains[i] -= paid;
+        gains[c.seat] += paid;
+        if (paid)
+          say(
+            m,
+            `Boat Bonus: ${seatName(m, i)} ${verb(m, i, 'pays', 'pay')} ${seatName(m, c.seat)} ${fmtChips(paid)}.`,
+          );
+      }
+    }
+  }
+
+  // End of hand: Units, Charms and Tools discard; Soulbound cards and
+  // Weapons go back to hand (once a hand — not straight after each use).
+  for (const r of h.returning ?? []) m.seats[r.seat].hand.push({ uid: r.uid, def: r.def });
+  h.returning = [];
   for (const u of h.units) {
     const inst = { uid: u.uid, def: u.def };
     if (hasKw(u.def, 'Soulbound')) m.seats[u.seat].hand.push(inst);
@@ -1426,6 +1473,8 @@ export function castCost(m: Match, seat: number, def: CardDef): CastCost {
   let step = tier;
   if (def.type === 'Item' && unitsOut(h, seat).length === 0) step += ITEM_UNBONDED_STEP;
   if (hasKw(def, 'Surge') && h.castCount[seat] > 0) step -= 1;
+  if (hasKw(def, 'Soulbound')) step += SOULBOUND_STEP;
+  if (hasKw(def, 'Resonant')) step += RESONANT_STEP;
   if (h.rule.id === 'happyHour') step -= 1;
   if (tilted(s)) step += TILT_STEP;
   if (h.buffSeat === seat && !h.buffUsed) step -= 1;
@@ -1433,6 +1482,8 @@ export function castCost(m: Match, seat: number, def: CardDef): CastCost {
   let chips = Math.round(COST_LADDER_UNITS[step] * UNIT);
   let extra = tier >= SECOND_COST_TIER ? 1 : 0;
   let gambitOwed = 0;
+  // Last Stand: no chips while the seat is down to 10 big blinds or less.
+  if (hasKw(def, 'Last Stand') && s.stack <= LAST_STAND_BB * h.bb) chips = 0;
   if (hasKw(def, 'Gambit')) {
     gambitOwed = chips;
     chips = 0;
@@ -1570,7 +1621,7 @@ export function needsOpponentTarget(h: Hand, def: CardDef): boolean {
   return KEYWORD_SPECS[eff.kw].target === 'opponent';
 }
 
-const READ_EFFECTS = new Set<Keyword>(['Peek', 'Mark', 'Reveal']);
+const READ_EFFECTS = new Set<Keyword>(['Peek', 'Mark', 'Reveal', 'Tell']);
 
 function wardedAgainstRead(h: Hand, seat: number): boolean {
   return h.units.some((u) => u.seat === seat && hasKw(u.def, 'Warded'));
@@ -2057,7 +2108,7 @@ function afterResolve(m: Match, rec: CastRecord): void {
   if (!rec.leader && rec.def.type !== 'Unit') {
     const inst = { uid: rec.uid, def: rec.def };
     const back = rec.def.subtype === 'Weapon' || hasModRef(rec, 'Soulbound');
-    if (back && rec.status !== 'snuffed') m.seats[rec.seat].hand.push(inst);
+    if (back && rec.status !== 'snuffed') (h.returning ??= []).push({ seat: rec.seat, ...inst });
     else discardPower(m, rec.seat, inst);
   }
   // Snuffed Units leave the table.
@@ -2157,10 +2208,18 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
       return;
     }
     case 'Tax': {
-      for (let i = 0; i < m.seats.length; i++) {
-        if (i !== seat && inHand(h, i)) payIntoPot(m, i, chips);
-      }
-      say(m, `Tax: every opponent antes ${fmtChips(chips)}.`);
+      // At most three opponents: the three with the most chips in the pot
+      // (ties: the bigger stack). Multiway it was the strongest effect.
+      const payers = h.dealtIn
+        .map((_, i) => i)
+        .filter((i) => i !== seat && inHand(h, i))
+        .sort((a, b) => h.committed[b] - h.committed[a] || m.seats[b].stack - m.seats[a].stack)
+        .slice(0, TAX_MAX_SEATS);
+      for (const i of payers) payIntoPot(m, i, chips);
+      say(
+        m,
+        `Tax: ${payers.length > 1 ? `${payers.length} opponents ante` : `${seatName(m, payers[0] ?? seat)} ${verb(m, payers[0] ?? seat, 'antes', 'ante')}`} ${fmtChips(chips)}.`,
+      );
       return;
     }
     case 'Bounty':
@@ -2325,7 +2384,12 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
       return;
     }
     case 'Blessed': {
-      const got = takeFromPot(m, seat, Math.min(chips, h.powerPaid[seat]));
+      // Only what other powers cost: never its own price.
+      const got = takeFromPot(
+        m,
+        seat,
+        Math.min(chips, Math.max(0, h.powerPaid[seat] - rec.chipsPaid)),
+      );
       h.powerPaid[seat] -= got;
       say(m, `${s.name} ${verb(m, seat, 'is', 'are')} Blessed: ${fmtChips(got)} back.`);
       return;
@@ -2394,6 +2458,34 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
         entropicDiscard(m, t);
       }
       return;
+    case 'Overbet': {
+      if (!h.overbet) h.overbet = m.seats.map(() => 0);
+      h.overbet[seat] = Math.max(h.overbet[seat], n);
+      say(m, `${s.name} may overbet this street — up to ${1 + h.overbet[seat]}× the pot.`);
+      return;
+    }
+    case 'Tell': {
+      if (t === null) return;
+      const known = (c: PCard) => !c.facedown;
+      const cards = [...h.holes[t], ...h.board.filter(known)];
+      const cat =
+        cards.length >= 5
+          ? evaluate(cards).category
+          : h.holes[t].length >= 2 && h.holes[t][0].r === h.holes[t][1].r
+            ? 1
+            : 0;
+      sayTargeted(
+        m,
+        rec,
+        () => `${s.name} ${verb(m, seat, 'reads', 'read')} ${seatName(m, t)}'s tell.`,
+      );
+      say(
+        m,
+        `Tell: ${seatName(m, t)} ${verb(m, t, 'holds', 'hold')} ${CATEGORY_NAMES[cat]}.`,
+        seat,
+      );
+      return;
+    }
   }
 }
 

@@ -72,7 +72,7 @@
 import { writeFileSync } from 'node:fs';
 import { botAction, botRng } from '../src/game/poker/bot';
 import { POOL_LEADERS } from '../src/game/poker/cardpool';
-import { MODES, UNIT, type ModeId } from '../src/game/poker/constants';
+import { MODES, type ModeId } from '../src/game/poker/constants';
 import { buildDeck, type DeckDef } from '../src/game/poker/deck';
 import {
   applyInPlace,

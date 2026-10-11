@@ -15,7 +15,7 @@
  * cap applies to them like anyone.
  */
 import type { CardDef } from './cards';
-import { BOT, MAX_EXCLUSIONS, UNIT } from './constants';
+import { BOT, MAX_EXCLUSIONS, MODES, UNIT } from './constants';
 import {
   betOptions,
   canCast,
@@ -49,6 +49,75 @@ interface Read {
   opponents: number;
   potBB: number;
   stackBB: number;
+  /** Seats still to act after this one on this street (position). */
+  behind: number;
+  /** Rough hands left before the match clock's cap (Infinity early on). */
+  handsToCap: number;
+  /** This seat's rank by stack among the live seats (0 = chip leader). */
+  stackRank: number;
+  alive: number;
+  /** A flush or open-ended straight draw with cards still to come. */
+  draw: boolean;
+  /** Facing an all-in (calling would end the betting for this seat). */
+  facingAllIn: boolean;
+}
+
+/**
+ * How hyper-aggressive a seat has been this match, 0..1, from the public
+ * tally of its bets and raises (`Match.aggro`). The raise share is shrunk
+ * toward a typical 20% until there are enough actions to trust it; a seat
+ * raising half its decisions (shove-or-fold, betting every checked street)
+ * reads 1. Bots raise 0–30% of the time.
+ */
+export function maniac(v: Match, i: number | null): number {
+  if (i === null) return 0;
+  const a = v.aggro?.[i];
+  if (!a) return 0;
+  const share = (a.raises + 0.2 * 8) / (a.actions + 8);
+  return Math.max(0, Math.min(1, (share - 0.28) / 0.17));
+}
+
+/** Seats that still act after `seat` on this street, in betting order. */
+function seatsBehind(v: Match, seat: number): number {
+  const h = v.hand!;
+  const n = v.seats.length;
+  const reverse = h.rule.id === 'reverseOrder';
+  // The last seat to act post-flop is the button (Reverse Order: the seat
+  // after it); pre-flop it is the big blind (or the straddler).
+  const last =
+    h.street === 'preflop'
+      ? (h.straddler ?? h.bbSeat ?? h.button)
+      : reverse
+        ? (h.button + 1) % n
+        : h.button;
+  const dir = reverse ? -1 : 1;
+  let count = 0;
+  for (let k = 1; k < n; k++) {
+    const i = (((seat + dir * k) % n) + n) % n;
+    if (i !== seat && inHand(h, i) && v.seats[i].stack > 0) count++;
+    if (i === last) break;
+  }
+  if (seat === last) return 0;
+  return count;
+}
+
+/** Flush draw (four to a flush using a hole card) or open-ended straight
+ * draw, with at least one card to come. */
+function hasDraw(hole: Card[], board: Card[], boardSize: number): boolean {
+  if (board.length < 3 || board.length >= boardSize || hole.length < 2) return false;
+  const cards = [...hole, ...board];
+  for (let s = 0; s < 4; s++) {
+    if (cards.filter((c) => c.s === s).length === 4 && hole.some((c) => c.s === s)) return true;
+  }
+  const ranks = new Set(cards.map((c) => c.r));
+  if (ranks.has(14)) ranks.add(1);
+  for (let lo = 2; lo <= 10; lo++) {
+    const run = [lo, lo + 1, lo + 2, lo + 3];
+    if (run.every((r) => ranks.has(r)) && !ranks.has(lo - 1) && !ranks.has(lo + 4)) {
+      if (hole.some((c) => run.includes(c.r))) return true;
+    }
+  }
+  return false;
 }
 
 function visibleBoard(v: Match): Card[] {
@@ -155,13 +224,20 @@ export function rangeFloors(v: Match, seat: number): Map<number, number> {
       // Raised before the flop, or put money in on an earlier street.
       if (h.aggressorByStreet.some((a) => a === i)) f = 0.25;
       else if (h.committed[i] - h.streetBet[i] > blind) f = 0.15;
-      // Betting this street: the bigger the bet against the pot, the stronger.
+      // Betting this street: the bigger the bet against the pot, the
+      // stronger. A lone bet into a checked street (a stab) is read weaker
+      // than a raise: anyone can fire at a check.
       if (h.lastAggressor === i && h.streetBet[i] > 0) {
         const size = h.streetBet[i] / Math.max(1, pot - h.streetBet[i]);
-        f = Math.max(f, 0.3 + 0.3 * Math.min(1, size));
+        const raised = h.dealtIn.some(
+          (_, j) =>
+            j !== i && inHand(h, j) && h.streetBet[j] > 0 && h.streetBet[j] < h.streetBet[i],
+        );
+        f = Math.max(f, (raised ? 0.3 : 0.2) + (raised ? 0.3 : 0.2) * Math.min(1, size));
       }
     }
-    if (f > 0) out.set(i, f * reading);
+    // A maniac's bets say less about its hand.
+    if (f > 0) out.set(i, f * reading * (1 - 0.6 * maniac(v, i)));
   }
   return out;
 }
@@ -174,11 +250,29 @@ function read(v: Match, seat: number, rng: Rng): Read {
   let eq = estimateEquity(v, seat, rng, BOT.equityTrials, against, rangeFloors(v, seat));
   // Low skill misjudges its hand.
   eq = Math.max(0, Math.min(1, eq + (rng.next() - 0.5) * (1 - p.skill) * 0.45));
+  const mode = MODES[v.mode];
+  const perHand = v.handNo > 1 ? v.clockMs / (v.handNo - 1) : 40_000;
+  const handsToCap = v.handNo > 1 ? (mode.capMs - v.clockMs) / Math.max(1, perHand) : Infinity;
+  const live = v.seats.filter((s) => !s.busted);
+  const stackRank = live.filter((s) => s.stack > v.seats[seat].stack).length;
+  const hole = h.holes[seat].filter((c) => !isHidden(c));
+  const owe = h.currentBet - h.streetBet[seat];
+  const facingAllIn =
+    owe > 0 &&
+    h.lastAggressor !== null &&
+    h.lastAggressor !== seat &&
+    v.seats[h.lastAggressor].stack === 0;
   return {
     equity: eq,
     opponents,
     potBB: potTotal(h) / h.bb,
     stackBB: v.seats[seat].stack / h.bb,
+    behind: seatsBehind(v, seat),
+    handsToCap,
+    stackRank,
+    alive: live.length,
+    draw: hasDraw(hole, visibleBoard(v), boardSize(v)),
+    facingAllIn,
   };
 }
 
@@ -206,20 +300,29 @@ function powerValue(v: Match, seat: number, def: CardDef, r: Read): number {
     case 'Peek':
     case 'Mark':
     case 'Reveal':
-      return 0.25 * r.potBB + 0.4;
+      // Information is worth more in a bigger pot, but not without limit: a
+      // flat share of the pot made a cheap read fire every hand late on.
+      return 0.15 * Math.min(r.potBB, 12) + 0.3;
     case 'Kindle':
-      return nBB * (0.4 + r.equity);
+      // The drained chips go into a pot this seat wins only `equity` of the
+      // time (the old `0.4 + equity` paid chips into pots it then lost);
+      // plus a little for the nerve hit.
+      return nBB * r.equity + 0.2;
     case 'Erode':
       return nBB;
     case 'Tax':
-      return nBB * r.opponents * r.equity;
+      return nBB * Math.min(3, r.opponents) * r.equity;
     case 'Siphon':
-      return Math.min(nBB, r.potBB);
+      // Taking N out of a pot you would win `equity` of the time.
+      return Math.min(nBB, r.potBB) * (1 - r.equity);
     case 'Blessed':
-      return Math.min(nBB, h.powerPaid[seat] / h.bb);
+      return Math.min(nBB, h.powerPaid[seat] / h.bb) * (1 - r.equity * 0.5);
     case 'Bulwark':
-    case 'Insurance':
       return nBB * (r.equity < 0.6 ? 0.5 : 0.1);
+    case 'Insurance':
+      // Pays only when this seat loses a showdown all-in: worthless unless
+      // the stack is already (or about to be) in the pot.
+      return r.stackBB <= r.potBB || r.facingAllIn ? nBB * (1 - r.equity) * 0.8 : 0;
     case 'Redraw':
     case 'Windfall':
     case 'Exhume':
@@ -263,6 +366,13 @@ function powerValue(v: Match, seat: number, def: CardDef, r: Read): number {
       return castTargets(v, seat, def).some((c) => c.mods.some((x) => x.kw === 'Feint')) ? 1.2 : 0;
     case 'Snuff':
       return 0;
+    case 'Overbet':
+      // Worth it only with a strong hand and chips behind to bet past the pot.
+      return !pre && r.equity > 0.7 && r.stackBB > r.potBB
+        ? n * Math.min(r.potBB, r.stackBB - r.potBB) * (r.equity - 0.5)
+        : 0;
+    case 'Tell':
+      return 0.1 * Math.min(r.potBB, 12) + 0.1;
     default:
       return 0.2;
   }
@@ -316,6 +426,13 @@ function inPlaceGain(v: Match, seat: number, kw: 'Wild' | 'Bloom'): number {
   return sum / can.length;
 }
 
+/** Does this seat already hold a full house or better? */
+function boatMade(v: Match, seat: number): boolean {
+  const hole = v.hand!.holes[seat].filter((c) => !isHidden(c));
+  const board = visibleBoard(v);
+  return hole.length + board.length >= 5 && evaluate([...hole, ...board]).category >= 6;
+}
+
 /** A hole card already blinded. The seat's own view shows it as a hidden
  * placeholder without the `blinded` flag, so check both. */
 const isBlinded = (c: Card & { blinded?: boolean }) => !!c.blinded || isHidden(c);
@@ -330,7 +447,16 @@ function chooseExtraCosts(v: Match, seat: number, uid: string, count: number): E
   // Bluffers love exclusions (they bite only at showdown); flushes are the
   // cheapest category to give up for an unsuited hand.
   const room = Math.max(0, MAX_EXCLUSIONS - h.exclusions[seat].length);
-  const prefer = [5, 4, 3, 2, 1].filter((c) => excl.includes(c)).slice(0, room);
+  // Never give up the category this seat already holds (or anything above
+  // it); among the rest, the least likely to come in goes first.
+  const hole = h.holes[seat].filter((c) => !isHidden(c));
+  const board = visibleBoard(v);
+  const made = hole.length + board.length >= 5 ? evaluate([...hole, ...board]).category : -1;
+  // Categories below the made hand are free to give up; above it, the
+  // rarest go first; the made category itself never.
+  const free = [1, 2, 3, 4, 5].filter((c) => excl.includes(c) && made >= 0 && c < made);
+  const risky = [5, 4, 3, 2, 1].filter((c) => excl.includes(c) && (made < 0 || c > made));
+  const prefer = [...free, ...risky].slice(0, room);
   let shedIdx = 0;
   let debuff = 0;
   while (out.length < count) {
@@ -364,6 +490,10 @@ function tryCast(v: Match, seat: number, r: Read, rng: Rng, inWindow: boolean): 
       const hostileToMe = target.target === seat && KEYWORD_SPECS[target.effect.kw].hostile;
       value = hostileToMe ? 1.5 : (target.chipsPaid / h.bb) * 0.8;
     }
+    // Boat Bonus: paid when this seat wins holding a full house or better.
+    const boat = def.mods?.find((x) => x.kw === 'Boat Bonus');
+    if (boat && boatMade(v, seat))
+      value += (((boat.n ?? 1) * UNIT) / h.bb) * Math.min(3, r.opponents) * r.equity;
     // Bluff-casting: a persona-rate cast regardless of value.
     if (!inWindow && rng.next() < p.bluff * 0.25) value += 0.8;
     const costBB = (cost.chips + cost.gambitOwed * (1 - r.equity)) / h.bb + cost.extra * 0.6;
@@ -394,9 +524,14 @@ function tryLeader(v: Match, seat: number, r: Read, rng: Rng): Action | null {
     const ab = abilities[i];
     const pseudo = leaderPseudoDef(s.leader, i);
     const value = powerValue(v, seat, pseudo, r);
-    // Spend nerve when the ability is worth it; build nerve when running low.
+    // Spend nerve when the ability is clearly worth it and enough is left
+    // to stay off tilt (a big pot can justify going lower). Build nerve only
+    // when the ability is worth its chips, or nerve is nearly gone.
+    const chipBB = ((ab.chipCost ?? 0) * UNIT) / v.hand!.bb;
     const want =
-      ab.nerve < 0 ? value > 0.8 && s.nerve >= -ab.nerve + 1 : s.nerve <= 4 && rng.next() < 0.5;
+      ab.nerve < 0
+        ? value >= 1.2 && (s.nerve >= -ab.nerve + 2 || (r.potBB >= 6 && s.nerve >= -ab.nerve + 1))
+        : s.nerve <= 4 && (value >= chipBB || s.nerve <= 1) && rng.next() < 0.6;
     if (!want) continue;
     let target: number | null = null;
     if (KEYWORD_SPECS[ab.effect.kw].target === 'opponent') {
@@ -449,23 +584,41 @@ function betDecision(v: Match, seat: number, r: Read, rng: Rng): Action {
   const potOdds = o.callAmount / Math.max(1, pot + o.callAmount);
   // Fair share of the pot against the seats contesting it, nudged by tightness.
   const fair = 1 / (r.opponents + 1);
-  const tight = (p.tightness - 0.5) * 0.2;
+  let tight = (p.tightness - 0.5) * 0.2;
   // A blind is not a bet: only a voluntary bet or raise reads as strength.
   const facingRaise = o.callAmount > 0 && h.lastAggressor !== null;
   // Hand reading: a big bet from someone else means a stronger range than a
-  // random hand, so raw equity is discounted by how hard we are pushed.
-  const pressure = facingRaise ? o.callAmount / Math.max(1, pot) : 0;
-  const eq = Math.pow(r.equity, 1 + 1.4 * pressure * (0.3 + 0.7 * p.skill));
+  // random hand. A reading bot already prices that through the opponent's
+  // range floor (`rangeFloors`), so the extra pressure discount shrinks as
+  // reading grows — stacking both made skilled bots fold to any bet.
+  // Against a seat that raises far more than a sane player (a shove-or-fold
+  // or bet-every-check strategy), a reading bot drops most of the discount:
+  // its bets are not strength. Against everyone else, a bet is a bet.
+  const reading = Math.max(0, Math.min(1, (p.skill - 0.3) / 0.6));
+  const wild = facingRaise ? maniac(v, h.lastAggressor) * reading : 0;
+  const pressure = facingRaise ? Math.min(1.5, o.callAmount / Math.max(1, pot)) : 0;
+  const pressureK = 1.4 * (0.3 + 0.7 * p.skill) * (1 - wild) + 0.25 * wild;
+  const eq = Math.pow(r.equity, 1 + pressureK * pressure);
   // Skill is decision quality: a naive bot plays loose and passive (calls
   // light, rarely raises for value, bluffs at random); a skilled one raises
-  // its good hands for value and picks its bluffs.
+  // its good hands for value, picks its bluffs and uses position.
   const naive = 1 - p.skill;
+  // Position: acting last is worth a few points of equity; every seat still
+  // to act behind is a threat.
+  const posAdj = p.skill * (r.behind === 0 ? -0.04 : 0.02 * Math.min(3, r.behind));
+  // The clock: near the cap stacks are ranked as they stand. A chip leader
+  // folds its way in; a short stack has to gamble now.
+  const nearCap = r.handsToCap <= 2.5 && r.alive > 2;
+  const leader = nearCap && r.stackRank < Math.min(3, Math.ceil(r.alive / 2));
+  const desperate = nearCap && r.stackRank >= Math.ceil(r.alive / 2);
+  if (leader) tight += 0.2 * p.skill;
   const strong =
     fair +
     (h.street === 'preflop' ? 0.12 : 0.17) -
     // A skilled bot bets thinner for value: loose callers pay it off.
     p.skill * 0.06 +
     tight +
+    posAdj +
     (facingRaise ? 0.15 : 0) +
     naive * 0.12 -
     (h.street !== 'preflop' && r.opponents === 1 ? p.skill * 0.05 : 0);
@@ -474,36 +627,83 @@ function betDecision(v: Match, seat: number, r: Read, rng: Rng): Action {
     const rounded = Math.round(size / 2) * 2;
     return Math.max(o.minRaiseTo, Math.min(o.maxRaiseTo, rounded));
   };
-  // Short stack: shove-or-fold territory.
-  if (r.stackBB < 10 && o.canRaise && eq > fair + 0.12 + (p.tightness - 0.5) * 0.15) {
+  // One sizing distribution for value and bluffs alike (sizes carry no
+  // tell); skilled bots polarise: the nuts and the bluffs go big.
+  const size = (polar: boolean) =>
+    polar && p.skill >= 0.7 ? 0.75 + rng.next() * 0.25 : 0.45 + rng.next() * 0.55;
+  // Short stack: shove-or-fold territory. Desperate near the cap: wider.
+  const shoveAt = fair + (desperate ? -0.05 : 0.12) + (p.tightness - 0.5) * 0.15;
+  if ((r.stackBB < 10 || (desperate && p.skill >= 0.5)) && o.canRaise && eq > shoveAt) {
     return { type: 'raise', seat, to: o.maxRaiseTo };
   }
   if (o.canRaise && eq > strong) {
-    // Value sizing grows with skill: loose callers pay off big bets.
-    const big = 0.6 + rng.next() * 0.4;
-    const small = 0.35 + rng.next() * 0.3 + p.skill * 0.25;
-    const frac = eq > strong + 0.15 ? big : Math.min(1, small);
-    return { type: 'raise', seat, to: raiseTo(frac) };
+    // Overbet live this street: the nuts can bet past the pot.
+    const over = (h.overbet?.[seat] ?? 0) > 0 && eq > strong + 0.15 ? 1 + h.overbet![seat] : 1;
+    return { type: 'raise', seat, to: raiseTo(size(eq > strong + 0.15) * over) };
+  }
+  // Semi-bluff: a flush or open-ended draw raises (or bets) at a skill- and
+  // persona-scaled rate — a raise from a skilled bot is not always value.
+  if (
+    o.canRaise &&
+    r.draw &&
+    !leader &&
+    rng.next() < (o.canCheck ? 0.15 : 0.08) + p.bluff * p.skill * 0.6
+  ) {
+    return { type: 'raise', seat, to: raiseTo(size(true)) };
+  }
+  // Pre-flop 3-bet bluff from late position with a hand that has blockers
+  // and playability.
+  if (
+    o.canRaise &&
+    h.street === 'preflop' &&
+    facingRaise &&
+    r.behind <= 1 &&
+    p.skill >= 0.6 &&
+    !leader &&
+    eq > fair - 0.12 &&
+    rng.next() < 0.04 + 0.06 * p.skill
+  ) {
+    return { type: 'raise', seat, to: raiseTo(size(true)) };
   }
   // Bluff: a persona-rate stab when checked to with a weak hand. A skilled
-  // bot only bluffs few opponents after the flop.
+  // bot only bluffs few opponents after the flop, more often in position.
   const goodSpot = p.skill < 0.5 || (h.street !== 'preflop' && r.opponents <= 2);
   if (
     o.canRaise &&
     o.canCheck &&
     eq < fair &&
     goodSpot &&
-    rng.next() < p.bluff * (1 - 0.6 * p.skill)
+    !leader &&
+    rng.next() < p.bluff * (1 - 0.3 * p.skill) * (r.behind === 0 ? 1.5 : 1)
   ) {
-    return { type: 'raise', seat, to: raiseTo(0.4 + rng.next() * 0.3) };
+    return { type: 'raise', seat, to: raiseTo(size(true)) };
   }
   if (o.canCheck) return { type: 'check', seat };
   // Pre-flop, unraised: complete the blind with a playable hand.
   if (h.street === 'preflop' && !facingRaise) {
-    return eq > fair - 0.08 + tight ? { type: 'call', seat } : { type: 'fold', seat };
+    return eq > fair - 0.08 + tight + posAdj ? { type: 'call', seat } : { type: 'fold', seat };
   }
-  const margin = (p.tightness - 0.5) * 0.12 - naive * 0.14;
+  // Calling. Placement, not chips: with three or fewer seats left, a call
+  // that risks half the stack needs a little more than the price.
+  const risk = o.callAmount / Math.max(1, v.seats[seat].stack + h.committed[seat]);
+  const icm = r.alive <= 3 && risk >= 0.5 ? 0.04 * (r.alive - 1) * p.skill : 0;
+  const margin = (p.tightness - 0.5) * 0.12 - naive * 0.14 + icm + (leader ? 0.08 : 0);
   if (eq >= potOdds + margin) return { type: 'call', seat };
+  // A drawing hand with the price close enough calls.
+  if (r.draw && eq >= potOdds - 0.06 && !r.facingAllIn) return { type: 'call', seat };
+  // Minimum defence: a skilled bot does not let a lone bet take every pot.
+  // Facing a single bettor post-flop, it defends a hand that beats the
+  // bettor's bluffs often enough (raw equity, before the pressure discount).
+  if (
+    h.street !== 'preflop' &&
+    r.opponents === 1 &&
+    p.skill >= 0.6 &&
+    wild > 0.3 &&
+    !leader &&
+    r.equity >= Math.min(0.5, potOdds + 0.05) &&
+    rng.next() < p.skill * (1 - potOdds)
+  )
+    return { type: 'call', seat };
   return { type: 'fold', seat };
 }
 

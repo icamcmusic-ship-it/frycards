@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MODES, UNIT, type ModeId } from './constants';
+import { MODES, type ModeId } from './constants';
 import { chipsInPlay, replay } from './engine';
 import { cpuTableSetup, simulateMatch } from './sim';
 

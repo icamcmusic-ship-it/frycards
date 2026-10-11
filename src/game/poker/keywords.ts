@@ -50,7 +50,10 @@ export type EffectKeyword =
   | 'Lock'
   | 'Snuff'
   | 'Entropic'
-  | 'Erode';
+  | 'Erode'
+  // Audit 2026-10-11 additions (hand-printed; never rolled by the generator).
+  | 'Overbet'
+  | 'Tell';
 
 export type ModifierKeyword =
   | 'Roulette'
@@ -65,7 +68,9 @@ export type ModifierKeyword =
   | 'Feint'
   | 'Veil'
   | 'Bait'
-  | 'Warded';
+  | 'Warded'
+  | 'Boat Bonus'
+  | 'Last Stand';
 
 export type Keyword = EffectKeyword | ModifierKeyword;
 
@@ -150,10 +155,16 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
       fusable: true,
     },
   ),
-  Tax: E('Tax', 'Ember', 'table', (n) => `Every opponent still in the hand antes ${n} more.`, {
-    stackable: true,
-    fusable: true,
-  }),
+  Tax: E(
+    'Tax',
+    'Ember',
+    'table',
+    (n) => `Up to three opponents still in the hand (most chips in first) ante ${n} more.`,
+    {
+      stackable: true,
+      fusable: true,
+    },
+  ),
   Bounty: E(
     'Bounty',
     'Ember',
@@ -169,7 +180,7 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
   Gambit: M(
     'Gambit',
     'Ember',
-    () => 'Cast for no chips. If you lose the pot, pay double the chip cost to the winner.',
+    () => 'Cast for no chips. If you lose the pot, pay 1.5× the chip cost to the winner.',
   ),
 
   // -- Tide: receiving and flow --
@@ -195,7 +206,7 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
     'self',
     () => 'A random one of your hole cards counts as any suit this hand.',
   ),
-  Resonant: M('Resonant', 'Tide', () => 'The effect resolves twice.'),
+  Resonant: M('Resonant', 'Tide', () => 'The effect resolves twice. Costs one step more.'),
 
   // -- Root: growth and endurance --
   Bloom: E(
@@ -224,7 +235,11 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
     () =>
       'If the hand is all-in before the river, deal the rest of the board twice and split each pot.',
   ),
-  Soulbound: M('Soulbound', 'Root', () => 'Returns to your hand after use.'),
+  Soulbound: M(
+    'Soulbound',
+    'Root',
+    () => 'Returns to your hand when the hand ends. Costs one step more.',
+  ),
 
   // -- Gale: timing and movement --
   Ambush: M('Ambush', 'Gale', () => "Castable during another seat's betting window."),
@@ -288,7 +303,7 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
     'Blessed',
     'Light',
     'self',
-    (n) => `Take back up to ${n} of the chips you paid for powers this hand.`,
+    (n) => `Take back up to ${n} of the chips you paid for your other powers this hand.`,
     { stackable: true },
   ),
 
@@ -359,6 +374,34 @@ export const KEYWORD_SPECS: Record<Keyword, KeywordSpec> = {
     () =>
       "Can't be Snuffed or Called Out. A Warded Unit also keeps your hole cards from being read.",
   ),
+
+  // -- Audit 2026-10-11 additions. Kept last so the generator's weighted
+  // picks over the older keywords are unchanged; KEYWORD_WEIGHT gives them 0,
+  // so they print only on the hand-set cards in cardpool.ts (REPRINTS). --
+  Overbet: E(
+    'Overbet',
+    'Ember',
+    'self',
+    (n) => `This street, your maximum raise is the pot × (1 + ${n}) instead of the pot.`,
+  ),
+  Tell: E(
+    'Tell',
+    'Light',
+    'opponent',
+    () => "Learn the target's best hand category (pair, two pair, …) on the board so far.",
+    { gated: true, hostile: true },
+  ),
+  'Boat Bonus': M(
+    'Boat Bonus',
+    'Ember',
+    (n) =>
+      `If you win at showdown with a full house or better, every other seat still in the hand pays you ${n}.`,
+  ),
+  'Last Stand': M(
+    'Last Stand',
+    'Root',
+    () => 'Costs no chips while you hold 10 big blinds or less.',
+  ),
 };
 
 export const KEYWORDS = Object.keys(KEYWORD_SPECS) as Keyword[];
@@ -412,6 +455,7 @@ export const CHIP_KEYWORDS = new Set<Keyword>([
   'Blessed',
   'Venomous',
   'Erode',
+  'Boat Bonus',
 ]);
 
 /** N for a keyword at a tier (units for chip keywords). */

@@ -77,8 +77,32 @@ function pickKw<T extends Keyword>(
     r -= w[i];
     if (r < 0) return arr[i];
   }
+  // Float slack: the last keyword that can roll at all (a weight-0 keyword
+  // never prints from the generator).
+  for (let i = arr.length - 1; i >= 0; i--) if (w[i] > 0) return arr[i];
   return arr[arr.length - 1];
 }
+
+/**
+ * Hand-set reprints (audit 2026-10-11, §3.6): the new keywords never roll
+ * from the hash (that would reprint the whole pool), so they live on these
+ * cards. Each was a weak or redundant print (Kindle floods Ember; Toll and
+ * Decoy are low-impact). A Creator override on the same card still wins.
+ */
+export const REPRINTS: Record<string, CardOverrides> = {
+  // Overbet (Ember): two of Ember's 30 Kindle cards.
+  kinetic_overflow: { effect: { kw: 'Overbet' }, mods: [{ kw: 'Gambit' }] },
+  clockwork_nautilus: { effect: { kw: 'Overbet' }, mods: [] },
+  // Tell (Light): a Mimic Unit and a ★4 Toll Tool (Toll ★3+ was junk).
+  gearbone_strider: { effect: { kw: 'Tell' }, mods: [] },
+  celestial_attunement: { tier: 2, effect: { kw: 'Tell' }, mods: [] },
+  // Boat Bonus (Ember).
+  pulsating_clam: { effect: { kw: 'Tax' }, mods: [{ kw: 'Boat Bonus' }] },
+  emerald_turtle: { effect: { kw: 'Decoy' }, mods: [{ kw: 'Boat Bonus' }] },
+  // Last Stand (Root): a comeback Kindle and a comeback Bloom.
+  runeforge_smith: { effect: { kw: 'Kindle' }, mods: [{ kw: 'Last Stand' }] },
+  anemone_weaver: { effect: { kw: 'Bloom' }, mods: [{ kw: 'Last Stand' }] },
+};
 
 // ---------------------------------------------------------------------------
 // Colour: frozen from the MTG-style game; new cards fall back to a hash.
@@ -266,7 +290,7 @@ export function powerText(def: CardDef): string {
   if (def.type === 'Unit') bits.push('Stays out as a token until showdown.');
   if (def.type === 'Item') {
     bits.push('Bonds to your Unit (no Unit: a hole card, one step more).');
-    if (def.subtype === 'Weapon') bits.push('Returns to your hand after use.');
+    if (def.subtype === 'Weapon') bits.push('Returns to your hand when the hand ends.');
     if (def.subtype === 'Tool') bits.push('Also marks one opponent hole card.');
   }
   return bits.join(' ');
@@ -313,17 +337,36 @@ function leaderEffects(color: Color, tier: number): EffectKeyword[] {
   );
 }
 
+/** The chip cost of a nerve-building Leader ability, set by its effect (it
+ * used to be a coin flip, which printed "pay 16: Erode 8"): a chip effect
+ * costs its own tier-2 amount up to one unit (16 chips) — never more than it
+ * moves — and anything else half a unit (8 chips). */
+export function buildCost(kw: EffectKeyword): number {
+  return CHIP_KEYWORDS.has(kw) ? Math.min(1, tierN(kw, 2)) : 0.5;
+}
+
+/** Hand-set Leader abilities (an audit rebalance), by Leader id and slot
+ * (0 = spend, 1 = build). Everything else stays generated from the hash. */
+export const LEADER_ABILITY_OVERRIDES: Record<string, Partial<Record<0 | 1, EffectKeyword>>> = {
+  // The weakest Leader in every sim draw: its build was Pass, which
+  // scrambled its own hand for chips. A Straddle builds nerve and pressure.
+  legendary_diver: { 1: 'Straddle' },
+};
+
 function ability(
   seed: string,
   salt: string,
   color: Color,
   tier: number,
   nerve: number,
-  chipCost?: number,
+  build = false,
+  forced?: EffectKeyword,
 ): LeaderAbility {
   const pool = leaderEffects(color, tier);
-  const kw = pool.length > 0 ? pickKw(seed, salt, pool) : 'Redraw';
+  const kw = forced ?? (pool.length > 0 ? pickKw(seed, salt, pool) : 'Redraw');
   const effect: KwRef = { kw, n: numberFor(kw, tier) };
+  // Straddle already puts two big blinds in: no extra price.
+  const chipCost = build && kw !== 'Straddle' ? buildCost(kw) : undefined;
   const sign = nerve > 0 ? `+${nerve}` : `${nerve}`;
   const cost = chipCost ? `, pay ${fmtUnits(chipCost)}` : '';
   return {
@@ -340,19 +383,13 @@ function mapLeader(c: CardTemplate, o: CardOverrides = {}): CardDef {
   // A hand-rebuilding ability costs 3 nerve, anything else 2: the old coin
   // flip between the two left a Leader paying 3 for a weak ability while
   // another paid 2 for a revive.
-  const minus = ability(seed, 'leader-minus', colors[0], 4, -2);
+  const forced = LEADER_ABILITY_OVERRIDES[c.id] ?? {};
+  const minus = ability(seed, 'leader-minus', colors[0], 4, -2, false, forced[0]);
   if (HAND_REBUILDERS.has(minus.effect.kw as EffectKeyword)) {
     minus.nerve = -3;
     minus.text = minus.text.replace(/^-2 nerve/, '-3 nerve');
   }
-  const plus = ability(
-    seed,
-    'leader-plus',
-    colors[1] ?? colors[0],
-    2,
-    1,
-    roll(seed, 'risk', 2) ? 0.5 : 1,
-  );
+  const plus = ability(seed, 'leader-plus', colors[1] ?? colors[0], 2, 1, true, forced[1]);
   const abilities = [minus, plus];
   return {
     id: c.id,
@@ -387,7 +424,7 @@ function mapLocation(c: CardTemplate, o: CardOverrides = {}): CardDef {
 }
 
 function mapCard(c: CardTemplate): CardDef {
-  const o = c.overrides ?? {};
+  const o = { ...REPRINTS[c.id], ...c.overrides };
   switch (c.type) {
     case 'Leader':
       return mapLeader(c, o);
