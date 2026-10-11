@@ -14,6 +14,7 @@ import React from 'react';
 import { EyeOff, Eye, Sparkles } from 'lucide-react';
 import { cardLabel, RANK_CHARS, SUIT_NAMES } from '../game/poker/evaluator';
 import { cn } from '../lib/utils';
+import { getCardBackImage } from '../meta/cardback';
 
 const SPRITES = import.meta.glob('../assets/playing-cards/*.png', {
   eager: true,
@@ -85,6 +86,9 @@ export function PlayingCard({
 }: PlayingCardProps) {
   const hidden = faceDown || blinded || r === 0;
   const src = hidden ? CARD_BACK : cardSprite(r, s);
+  // U16: a face-down card shows the player's equipped card back, or the
+  // ink-on-yellow FryCards back, not the pale pixel sprite.
+  const backArt = hidden ? getCardBackImage() : null;
   const label = hidden
     ? blinded
       ? 'Blinded hole card'
@@ -109,18 +113,52 @@ export function PlayingCard({
       )}
       style={{ width: w, height: h }}
     >
-      <img
-        src={src}
-        alt=""
-        draggable={false}
-        width={w}
-        height={h}
-        className={cn('block w-full h-full', highlight && 'drop-shadow-[0_0_6px_var(--c-yellow)]')}
-        style={{
-          imageRendering: 'pixelated',
-          filter: !hidden && fourColor ? FOUR_COLOR_FILTER[s] : undefined,
-        }}
-      />
+      {hidden ? (
+        <span
+          aria-hidden
+          data-back={backArt ? 'equipped' : 'default'}
+          className={cn(
+            'fc-card-back block w-full h-full overflow-hidden',
+            highlight && 'drop-shadow-[0_0_6px_var(--c-yellow)]',
+          )}
+          style={{
+            borderRadius: Math.max(2, scale * 2),
+            borderWidth: Math.max(1, scale),
+            ...(backArt
+              ? {
+                  backgroundImage: `url(${backArt})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }
+              : null),
+          }}
+        >
+          {!backArt && (
+            <span
+              className="fc-card-back-mark heading-font"
+              style={{ fontSize: Math.max(8, Math.round(w * 0.3)) }}
+            >
+              FC
+            </span>
+          )}
+        </span>
+      ) : (
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          width={w}
+          height={h}
+          className={cn(
+            'block w-full h-full',
+            highlight && 'drop-shadow-[0_0_6px_var(--c-yellow)]',
+          )}
+          style={{
+            imageRendering: 'pixelated',
+            filter: fourColor ? FOUR_COLOR_FILTER[s] : undefined,
+          }}
+        />
+      )}
       {blinded && (
         <span className="absolute inset-0 flex items-center justify-center">
           <EyeOff

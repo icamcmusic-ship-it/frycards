@@ -935,3 +935,34 @@ html[data-scheme='dark'] select:not(.poker-table *) {
     transparent
   );
 }
+
+/* U16: the default FryCards back for face-down playing cards (PlayingCard).
+   Fixed colours: it sits on the table felt in every theme. */
+.fc-card-back {
+  position: relative;
+  border-style: solid;
+  border-color: #111;
+  background-color: #ffd54f;
+  background-image: radial-gradient(rgb(17 17 17 / 0.28) 22%, transparent 24%);
+  background-size: 6px 6px;
+  box-shadow:
+    inset 0 0 0 2px #ffd54f,
+    inset 0 0 0 3px #111;
+}
+.fc-card-back-mark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffd54f;
+  -webkit-text-stroke: 0;
+  text-shadow:
+    1px 1px 0 #111,
+    -1px -1px 0 #111,
+    1px -1px 0 #111,
+    -1px 1px 0 #111,
+    2px 2px 0 #111;
+  transform: rotate(-8deg);
+  letter-spacing: -0.04em;
+}
