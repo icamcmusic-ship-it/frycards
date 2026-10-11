@@ -317,6 +317,28 @@ const screenSig = (page: import('playwright').Page) =>
   page.evaluate(SCREEN_SIG).catch(() => '') as Promise<string>;
 
 /**
+ * Wait until the screen stops changing under its own power before tagging
+ * candidates. v32: `grading` opens on SUBMIT and then, when its mount-time
+ * fetch finds a slab due, switches itself to AT THE GRADERS (U50). On a
+ * loaded box that fetch landed after the walk's fixed 1.1s wait, so the walk
+ * tagged the SUBMIT form, the screen swapped it out, and 220 detached
+ * controls were reported as "Tab never reaches it" — a measurement of a
+ * screen that no longer existed. Network idle covers the dev server's module
+ * loads; three equal signatures 250ms apart cover the state update after.
+ */
+async function settleScreen(page: import('playwright').Page) {
+  await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
+  let prev = await screenSig(page);
+  let same = 0;
+  for (let i = 0; i < 40 && same < 2; i++) {
+    await page.waitForTimeout(250);
+    const sig = await screenSig(page);
+    same = sig === prev ? same + 1 : 0;
+    prev = sig;
+  }
+}
+
+/**
  * Walk an entry's PRELUDE into the state being measured, and say so when it
  * does not land.
  *
@@ -878,6 +900,7 @@ async function keyboard(screen: string) {
   await page.waitForTimeout(700);
   await runPrelude(page, screen, 1280, `${screen} prelude (keyboard)`);
   await page.waitForTimeout(400);
+  await settleScreen(page);
 
   // Tag every candidate so a Tab landing can be identified by index rather
   // than by a selector re-derived per press (which would not survive a screen
