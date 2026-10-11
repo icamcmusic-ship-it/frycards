@@ -14,6 +14,7 @@ import { RARITY_CHIP, RARITY_HEX, rarityGlow, rarityTier } from './rarity';
 import { getCardBackImage } from './cardback';
 import { SafeImage } from './SafeImage';
 import { useMeta } from './MetaContext';
+import { useRouter } from './useHashRouter';
 import { fmtCredits, quicksellPrice } from './economy';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
@@ -896,7 +897,21 @@ function SummaryStage({
 
   // Quicksell straight from the haul — mostly for the common/uncommon
   // clutter a big box tends to dump, without a separate trip to Collection.
-  const { refreshCollection, refreshProfile, profile } = useMeta();
+  const { refreshCollection, refreshProfile, profile, collection } = useMeta();
+  const router = useRouter();
+  // U43: cards new to the collection with this haul — owned no more copies
+  // than this pack just gave (true before and after the collection refresh).
+  const newCount = useMemo(() => {
+    const pulled = new Map<string, number>();
+    for (const p of pulls)
+      if (!p.converted_to_credits) pulled.set(p.card_id, (pulled.get(p.card_id) ?? 0) + 1);
+    const owned = new Map((collection ?? []).map((c) => [c.card_id, c.quantity + c.foil_quantity]));
+    let n = 0;
+    for (const [id, k] of pulled) if ((owned.get(id) ?? 0) <= k) n++;
+    return n;
+    // the haul's own snapshot: recount only when the pulls change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pulls]);
   const [sold, setSold] = useState<Set<number>>(new Set());
   const [sellBusy, setSellBusy] = useState(false);
   const [sellError, setSellError] = useState('');
@@ -1048,6 +1063,7 @@ function SummaryStage({
       <div className="flex flex-wrap justify-center gap-2 mt-3 mb-4">
         <StatTile label="CARDS" value={String(pulls.length)} />
         {foilCount > 0 && <StatTile label="FOILS ✦" value={String(foilCount)} accent="yellow" />}
+        {newCount > 0 && <StatTile label="NEW" value={`×${newCount}`} accent="yellow" />}
         <StatTile
           label="TOP PULL"
           value={(best.rarity || 'Common').toUpperCase()}
@@ -1212,6 +1228,18 @@ function SummaryStage({
         ) : (
           <PopButton color="yellow" disabled={sellBusy} onClick={onDone}>
             DONE ✓
+          </PopButton>
+        )}
+        {router && (
+          <PopButton
+            color="steel"
+            disabled={sellBusy}
+            onClick={() => {
+              onDone();
+              router.navigate('collection');
+            }}
+          >
+            TO COLLECTION ▸
           </PopButton>
         )}
       </div>
