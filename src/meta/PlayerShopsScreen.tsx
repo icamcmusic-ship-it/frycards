@@ -1,6 +1,7 @@
 import { asVariant, type OwnedVariant, VARIANT_META } from './variants';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { counterText, counterValid, counterValue } from './shopCounter';
+import { initials, moodBand, resolvePersona } from './buyers/personas';
 import { useRouter } from './useHashRouter';
 import { askConfirm } from './confirm';
 import {
@@ -3572,46 +3573,89 @@ export function PlayerShopsScreen({ onBack }: { onBack: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// Shop Floor — CPU customers (2026-10-06).
+// Shop Floor — CPU customers (2026-10-06; personas 2026-10-13).
 //
 // A single-player layer on top of the owner's shop: a customer walks in every
 // ~90 minutes (max 3 waiting, 8 a day), picks one of your individual/bundle
-// listings and either offers credits for it or offers a card in trade. You
-// accept, decline, or haggle once. Offers are priced by the server from the
-// cards' quicksell reference — never from your asking price, which only caps
-// what they will pay — so overpricing a listing cannot farm them.
+// listings (sometimes two, as a bundle offer) and offers credits, or a card
+// plus cash in trade. Who walks in is one of 20 personas, weighted by what you
+// stock. You can haggle up to their patience (1–3 counters); a mood meter
+// tracks how reasonable you are. Offers are priced by the server from the
+// cards' reference value — never above your asking price — so overpricing a
+// listing cannot farm them. Dialogue is client-side (./buyers/dialogue, a lazy
+// chunk) and seeded per customer, so a reload shows the same conversation.
 // ---------------------------------------------------------------------------
 
-const PERSONA_EMOJI = [
-  '🧙',
-  '🧔',
-  '👩‍🎤',
-  '🕵️',
-  '🧑‍🚀',
-  '👵',
-  '🤠',
-  '🧛',
-  '🦹',
-  '🧑‍🔬',
-  '🧝',
-  '🐙',
-  '🤖',
-  '👑',
-];
-function personaEmoji(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return PERSONA_EMOJI[h % PERSONA_EMOJI.length];
+type DialogueModule = typeof import('./buyers/dialogue');
+
+function PersonaBadge({
+  id,
+  name,
+  size = 40,
+}: {
+  id?: string | null;
+  name: string;
+  size?: number;
+}) {
+  const p = resolvePersona(id, name);
+  return (
+    <span
+      className="ink-border-sm inline-flex items-center justify-center shrink-0 rounded-full"
+      style={{ width: size, height: size, background: p?.tone ?? 'var(--c-paper)' }}
+      title={p ? `${name} · ${p.archetype}` : name}
+    >
+      <span aria-hidden style={{ fontSize: size * 0.5, lineHeight: 1 }}>
+        {p?.badge ?? initials(name)}
+      </span>
+      <span className="sr-only">{initials(name)}</span>
+    </span>
+  );
 }
-const MOOD_LINE: Record<string, string> = {
-  stingy: '“I know what this is worth. Don’t push your luck.”',
-  browsing: '“This caught my eye. Fair price?”',
-  smitten: '“Oh, I’ve been hunting for this one!”',
-  curious: '“Would you swap for something from my binder?”',
-  eager: '“Trade you — I think you’ll like this.”',
-  shrewd: '“A straight swap. Take it or leave it.”',
-  chatty: '“Pulled this last week, it’s yours for that one.”',
-};
+
+function MoodMeter({ score }: { score: number }) {
+  const band = moodBand(score);
+  const pct = Math.max(0, Math.min(100, score));
+  return (
+    <span className="flex items-center gap-1 fs-xs font-bold">
+      <span
+        role="meter"
+        aria-label="Mood"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        aria-valuetext={band.label}
+        className="ink-border-sm inline-block h-2.5 w-20 bg-[var(--c-paper)] overflow-hidden"
+      >
+        <span
+          className="block h-full motion-safe:transition-[width] motion-safe:duration-300"
+          style={{
+            width: `${pct}%`,
+            background: band.tone === 'var(--c-paper)' ? 'var(--c-steel)' : band.tone,
+          }}
+        />
+      </span>
+      {band.label.toUpperCase()}
+    </span>
+  );
+}
+
+/** Which item remark (foil / variant / slab / Pristine / rarity) fits the listing. */
+function remarkFor(
+  it: SlabItem | undefined,
+): 'foil' | 'variant' | 'slab' | 'pristine' | 'rarity' | null {
+  if (!it) return null;
+  if (it.graded_id) return it.pristine ? 'pristine' : 'slab';
+  if (it.variant) return 'variant';
+  if (it.foil) return 'foil';
+  const r = POOL_BY_ID[it.card_id]?.rarity;
+  return r && rarityTier(r) >= 4 ? 'rarity' : null;
+}
+
+function itemName(cards: { card_id: string; quantity?: number }[] | null | undefined): string {
+  if (!cards?.length) return 'a listing';
+  const first = POOL_BY_ID[cards[0].card_id]?.name ?? 'card';
+  return cards.length > 1 ? `${first} +${cards.length - 1}` : first;
+}
 
 function untilText(iso: string | null): string {
   if (!iso) return '';
@@ -3636,6 +3680,17 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   // Raw text per customer, so the field can be cleared and retyped freely.
   const [counter, setCounter] = useState<Record<string, string>>({});
+  // Lines of customers who just left, kept on screen until the next load.
+  const [farewell, setFarewell] = useState<{ c: ShopCustomer; event: string; v?: number }[]>([]);
+  const [dlg, setDlg] = useState<DialogueModule | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void import('./buyers/dialogue').then((m) => live && setDlg(m));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     const { data, error } = await fetchShopFloor();
@@ -3647,19 +3702,32 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
   }, []);
   useEffect(() => {
     void load();
-    // Re-check every few minutes so a waiting player sees the next arrival.
-    const t = window.setInterval(() => void load(), 3 * 60 * 1000);
-    return () => window.clearInterval(t);
   }, [load]);
+  // No polling: one reload when the next customer is due (arrivals are
+  // computed on read, so this is the only call an idle Shop Floor makes).
+  const nextAt = state?.next_at ?? null;
+  useEffect(() => {
+    if (!nextAt) return;
+    const ms = new Date(nextAt).getTime() - Date.now();
+    if (ms > 6 * 3600_000) return;
+    const t = window.setTimeout(() => void load(), Math.max(5_000, ms + 2_000));
+    return () => window.clearTimeout(t);
+  }, [nextAt, load]);
 
-  const act = async (c: ShopCustomer, action: 'accept' | 'decline' | 'counter') => {
+  const act = async (
+    c: ShopCustomer,
+    action: 'accept' | 'decline' | 'counter' | 'final',
+    value?: number,
+  ) => {
     setBusyId(c.id);
     setErr('');
     setMsg('');
     const { data, error } = await respondShopCustomer(
       c.id,
       action,
-      action === 'counter' ? counterValue(counter[c.id], c.offer_credits) : undefined,
+      action === 'counter' || action === 'final'
+        ? (value ?? counterValue(counter[c.id], c.offer_credits))
+        : undefined,
     );
     if (error) setErr(error);
     else if (data) {
@@ -3667,13 +3735,18 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
         setMsg(
           c.kind === 'buy'
             ? `${c.persona} paid ${fmtCredits(data.credits ?? 0)} credits.`
-            : `Traded with ${c.persona} for ${POOL_BY_ID[data.card_id ?? '']?.name ?? 'a card'}${data.foil ? ' (foil)' : ''}.`,
+            : `Traded with ${c.persona} for ${POOL_BY_ID[data.card_id ?? '']?.name ?? 'a card'}${data.foil ? ' (foil)' : ''}${data.credits ? ` + ${fmtCredits(data.credits)} credits` : ''}.`,
         );
+        setFarewell((f) => [...f, { c, event: 'thanks', v: data.credits }]);
         await onSold();
-      } else if (data.result === 'left') setMsg(`${c.persona} shook their head and walked out.`);
-      else if (data.result === 'final_offer')
-        setMsg(`${c.persona}: “${fmtCredits(data.offer ?? 0)}, final offer.”`);
-      else setMsg(`You turned ${c.persona} away.`);
+      } else if (data.result === 'left') {
+        setMsg(`${c.persona} walked out.`);
+        setFarewell((f) => [...f, { c, event: 'walkout' }]);
+      } else if (data.result === 'declined') {
+        setMsg(`You turned ${c.persona} away.`);
+        setFarewell((f) => [...f, { c, event: 'declined' }]);
+      }
+      setCounter((m) => ({ ...m, [c.id]: '' }));
     }
     await load();
     setBusyId(null);
@@ -3690,16 +3763,37 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
             {state.customers.length < 3 && state.served_24h < SHOP_FLOOR_DAILY_CAP && state.next_at
               ? ` · next in ${untilText(state.next_at)}`
               : ''}
+            {state.regulars ? ` · ${state.regulars} regular${state.regulars === 1 ? '' : 's'}` : ''}
           </span>
         )}
       </div>
       <p className="fs-xs font-bold text-[var(--c-steel)] mb-2">
-        Customers drop by about every 90 minutes and make offers on your individual and bundle
-        listings — around the cards’ quicksell value, never above your asking price. Haggle once:
-        push too hard and they may walk.
+        Customers drop by about every 90 minutes. Each has their own taste, budget and patience:
+        stock what they collect and they offer more. Haggle up to three times — fair counters keep
+        them sweet, greedy ones sour the mood and can send them out the door. Fair deals turn
+        visitors into regulars.
       </p>
       {err && <Notice text={err} />}
       {msg && <Notice text={msg} kind="success" />}
+      {dlg &&
+        farewell.map(({ c, event, v }, i) => (
+          <div key={`${c.id}-${i}`} className="flex items-center gap-2 mb-1 fs-xs font-bold">
+            <PersonaBadge id={c.persona_id} name={c.persona} size={24} />
+            <span className="italic">
+              “
+              {dlg.pickLine(
+                c.persona_id,
+                event as 'thanks' | 'walkout' | 'declined',
+                c.seed ?? 0,
+                'bye',
+                {
+                  offer: v != null ? fmtCredits(v) : undefined,
+                },
+              )}
+              ”
+            </span>
+          </div>
+        ))}
       {state && state.customers.length === 0 && (
         <p className="text-[11px] font-bold py-2">
           The floor is quiet. Keep individual or bundle listings on your shelf to draw customers in.
@@ -3709,81 +3803,152 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
         {state?.customers.map((c) => {
           const item = c.listing_cards[0];
           const def = item ? POOL_BY_ID[item.card_id] : undefined;
+          const item2 = c.bundle_cards?.[0];
+          const def2 = item2 ? POOL_BY_ID[item2.card_id] : undefined;
           const offerDef = c.offer_card_id ? POOL_BY_ID[c.offer_card_id] : undefined;
+          const persona = resolvePersona(c.persona_id, c.persona);
           const busy = busyId === c.id;
+          const ask = c.listing_price + (c.bundle_price ?? 0);
+          const offer = c.offer_credits ?? 0;
           const ctr = counterText(counter[c.id], c.offer_credits);
           const ctrNum = counterValue(counter[c.id], c.offer_credits);
-          // The server only takes a counter above their offer.
-          const ctrValid = counterValid(ctrNum, c.offer_credits);
-          // Quicksell value of what they want — the yardstick both offer
-          // kinds are priced against.
-          const wantValue = c.listing_cards.reduce(
-            (sum, it) =>
-              sum +
-              ((it as SlabItem).graded_id
-                ? slabItemValue(it as SlabItem)
-                : quicksellPrice(POOL_BY_ID[it.card_id]?.rarity, !!it.foil) * (it.quantity ?? 1)),
-            0,
-          );
+          // The server only takes a counter above their offer and up to the ask.
+          const ctrValid = counterValid(ctrNum, c.offer_credits) && ctrNum <= ask;
+          const valueOf = (cards: SlabItem[] | null | undefined) =>
+            (cards ?? []).reduce(
+              (sum, it) =>
+                sum +
+                (it.graded_id
+                  ? slabItemValue(it)
+                  : quicksellPrice(POOL_BY_ID[it.card_id]?.rarity, !!it.foil) *
+                    ((it as { quantity?: number }).quantity ?? 1)),
+              0,
+            );
+          const wantValue =
+            valueOf(c.listing_cards as SlabItem[]) + valueOf(c.bundle_cards as SlabItem[]);
           const offerValue = offerDef ? quicksellPrice(offerDef.rarity, c.offer_foil) : 0;
-          const pctOfAsk = c.listing_price
-            ? Math.round(((c.offer_credits ?? 0) / c.listing_price) * 100)
-            : 0;
-          const chips: [string, number][] = (
+          const left = Math.max(0, (c.patience ?? 1) - (c.rounds ?? 0));
+          const canHaggle = c.kind === 'buy' && !c.haggled && left > 0 && offer < ask;
+          const quick: [string, number][] = (
             [
-              ['+5%', Math.ceil((c.offer_credits ?? 0) * 1.05)],
-              ['+10%', Math.ceil((c.offer_credits ?? 0) * 1.1)],
-              ['+20%', Math.ceil((c.offer_credits ?? 0) * 1.2)],
-              ['ASK', c.listing_price],
+              ['−5%', Math.round(ask * 0.95)],
+              ['MEET HALFWAY', Math.round((offer + ask) / 2)],
+              ['ASK', ask],
             ] as [string, number][]
-          ).filter(([, v]) => v > (c.offer_credits ?? 0) && v <= c.listing_price);
+          ).filter(([, v]) => v > offer && v <= ask);
+          const convo = dlg
+            ? dlg.buildConversation({
+                persona_id: c.persona_id,
+                seed: c.seed ?? 0,
+                kind: c.kind,
+                regular: c.regular,
+                bundle: !!c.bundle_listing_id,
+                opening: offer,
+                event_log: c.event_log,
+                remark: remarkFor(item as SlabItem | undefined),
+                item: def?.name,
+                fmt: (n) => `${fmtCredits(n)} credits`,
+              })
+            : [];
           return (
             <div key={c.id} className="ink-border-sm p-2 flex gap-3 items-start flex-wrap">
-              <div className="text-3xl leading-none" aria-hidden>
-                {personaEmoji(c.persona)}
-              </div>
-              <div className="flex-1 min-w-[180px]">
-                <div className="heading-font text-xs">
-                  {c.persona}{' '}
-                  <span className="fs-xs text-[var(--c-steel)]">
-                    · leaves in {untilText(c.expires_at)}
-                  </span>
+              <div className="flex-1 min-w-[220px]">
+                {/* Persona card */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <PersonaBadge id={c.persona_id} name={c.persona} />
+                  <div className="min-w-0">
+                    <div className="heading-font text-xs">
+                      {c.persona}{' '}
+                      <span className="fs-xs text-[var(--c-steel)]">
+                        · leaves in {untilText(c.expires_at)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                      {persona && (
+                        <span className="heading-font fs-xs px-1.5 ink-border-sm bg-[var(--c-yellow)] text-[var(--c-black)]">
+                          {persona.archetype.toUpperCase()}
+                        </span>
+                      )}
+                      {c.regular && (
+                        <span
+                          className="heading-font fs-xs px-1.5 ink-border-sm bg-[var(--c-paper)]"
+                          title={`Visit ${c.visits ?? 2} — remembers your fair deals`}
+                        >
+                          ★ REGULAR
+                        </span>
+                      )}
+                      <MoodMeter score={c.mood_score ?? 50} />
+                    </div>
+                  </div>
                 </div>
-                <div className="fs-xs italic font-bold">{MOOD_LINE[c.mood] ?? ''}</div>
+
+                {/* Conversation */}
+                <ol
+                  className="mt-2 flex flex-col gap-1 max-h-48 overflow-y-auto pr-1"
+                  aria-label={`Conversation with ${c.persona}`}
+                >
+                  {!dlg && (
+                    <li className="fs-xs font-bold text-[var(--c-steel)]">
+                      {c.persona} is browsing…
+                    </li>
+                  )}
+                  {convo.map((l, i) => (
+                    <li
+                      key={i}
+                      className={cn(
+                        'ink-border-sm px-2 py-1 text-[11px] font-bold max-w-[85%] leading-snug',
+                        l.who === 'them'
+                          ? 'self-start bg-[var(--c-paper)] rounded-[2px_10px_10px_10px]'
+                          : 'self-end bg-[var(--c-yellow)] text-[var(--c-black)] rounded-[10px_2px_10px_10px]',
+                      )}
+                    >
+                      <span className="sr-only">
+                        {l.who === 'them' ? `${c.persona}: ` : 'You: '}
+                      </span>
+                      {l.text}
+                    </li>
+                  ))}
+                </ol>
+
                 <div className="text-[11px] font-bold mt-1">
                   Wants:{' '}
-                  {c.listing_type === 'bundle'
-                    ? `your bundle — ${c.listing_cards
-                        .slice(0, 3)
-                        .map(
-                          (it) =>
-                            `${(it.quantity ?? 1) > 1 ? `${it.quantity}× ` : ''}${POOL_BY_ID[it.card_id]?.name ?? 'card'}`,
-                        )
-                        .join(
-                          ', ',
-                        )}${c.listing_cards.length > 3 ? ` +${c.listing_cards.length - 3} more` : ''}`
-                    : (def?.name ?? 'a listing')}{' '}
+                  {c.bundle_listing_id
+                    ? `${itemName(c.listing_cards)} + ${itemName(c.bundle_cards)} (bundle)`
+                    : c.listing_type === 'bundle'
+                      ? `your bundle — ${itemName(c.listing_cards)}`
+                      : (def?.name ?? 'a listing')}{' '}
                   <span className="text-[var(--c-steel)]">
-                    (listed at {fmtCredits(c.listing_price)} · quicksell {fmtCredits(wantValue)})
+                    (listed at {fmtCredits(ask)} · quicksell {fmtCredits(wantValue)})
                   </span>
                 </div>
                 {c.kind === 'buy' ? (
                   <div className="text-[12px] font-black mt-0.5">
-                    Offers <Credits amount={c.offer_credits ?? 0} />{' '}
+                    Offers <Credits amount={offer} />{' '}
                     <span className="fs-xs text-[var(--c-steel)]">
-                      ({pctOfAsk}% of asking ·{' '}
-                      {wantValue ? (((c.offer_credits ?? 0) / wantValue) * 100).toFixed(0) : '—'}%
-                      of quicksell)
+                      ({ask ? Math.round((offer / ask) * 100) : 0}% of asking
+                      {c.bundle_listing_id ? ' for both' : ''})
                     </span>
-                    {c.haggled && <span className="fs-xs ml-1">(FINAL)</span>}
+                    {c.haggled ? (
+                      <span className="fs-xs ml-1">(FINAL)</span>
+                    ) : (
+                      <span className="fs-xs ml-1 text-[var(--c-steel)]">
+                        · {left} haggle{left === 1 ? '' : 's'} left
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div className="text-[12px] font-black mt-0.5">
                     Offers in trade: {offerDef?.name ?? c.offer_card_id}
-                    {c.offer_foil ? ' ✦ FOIL' : ''}{' '}
+                    {c.offer_foil ? ' ✦ FOIL' : ''}
+                    {c.trade_cash ? (
+                      <>
+                        {' '}
+                        + <Credits amount={c.trade_cash} />
+                      </>
+                    ) : null}{' '}
                     <span className="fs-xs text-[var(--c-steel)]">
-                      ({offerDef?.rarity} · quicksell {fmtCredits(offerValue)} vs your{' '}
-                      {fmtCredits(wantValue)})
+                      ({offerDef?.rarity} · quicksell {fmtCredits(offerValue + (c.trade_cash ?? 0))}{' '}
+                      vs your {fmtCredits(wantValue)})
                     </span>
                   </div>
                 )}
@@ -3791,15 +3956,17 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                   <PopButton color="yellow" disabled={busy} onClick={() => void act(c, 'accept')}>
                     {c.kind === 'buy' ? 'SELL' : 'TRADE'}
                   </PopButton>
-                  {c.kind === 'buy' && !c.haggled && (
-                    <span className="flex items-center gap-1">
+                  {canHaggle && (
+                    <span className="flex items-center gap-1 flex-wrap">
                       <input
                         type="number"
-                        min={(c.offer_credits ?? 0) + 1}
+                        inputMode="numeric"
+                        min={offer + 1}
+                        max={ask}
                         value={ctr}
                         aria-label={`Counter-offer to ${c.persona}`}
                         onChange={(e) => setCounter((m) => ({ ...m, [c.id]: e.target.value }))}
-                        className="w-20 px-1 py-0.5 ink-border-sm text-[11px]"
+                        className="w-20 min-h-[28px] px-1 py-0.5 ink-border-sm text-[11px]"
                       />
                       <PopButton
                         color="black"
@@ -3808,12 +3975,21 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                       >
                         HAGGLE
                       </PopButton>
-                      {chips.map(([label, v]) => (
+                      <button
+                        type="button"
+                        disabled={busy || !ctrValid}
+                        onClick={() => void act(c, 'final')}
+                        className="heading-font fs-xs min-h-[28px] px-2 ink-border-sm bg-[var(--c-paper)] disabled:opacity-50"
+                        title="Take it or leave it: they accept or walk, no meeting halfway"
+                      >
+                        FINAL OFFER
+                      </button>
+                      {quick.map(([label, v]) => (
                         <button
                           key={label}
                           type="button"
                           onClick={() => setCounter((m) => ({ ...m, [c.id]: String(v) }))}
-                          className="heading-font fs-xs px-1.5 py-0.5 ink-border-sm bg-[var(--c-paper)]"
+                          className="heading-font fs-xs min-h-[28px] px-2 ink-border-sm bg-[var(--c-paper)]"
                           title={`Counter at ${fmtCredits(v)}`}
                         >
                           {label}
@@ -3826,7 +4002,7 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                   </PopButton>
                 </div>
               </div>
-              {/* Trades show both sides: your card ⇄ theirs. */}
+              {/* Trades show both sides: your card ⇄ theirs; bundles show both cards. */}
               <div className="shrink-0 flex items-center gap-1">
                 {def &&
                   ((item as SlabItem | undefined)?.graded_id ? (
@@ -3839,6 +4015,19 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                       variant={asVariant(item?.variant)}
                     />
                   ))}
+                {def2 && (
+                  <>
+                    <span className="heading-font text-lg" aria-hidden>
+                      +
+                    </span>
+                    <CardFace
+                      def={def2}
+                      size="compact"
+                      foil={!!item2?.foil}
+                      variant={asVariant(item2?.variant)}
+                    />
+                  </>
+                )}
                 {c.kind === 'trade' && offerDef && (
                   <>
                     <span className="heading-font text-lg" aria-hidden>
@@ -3854,11 +4043,11 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
       </div>
       {state && state.recent.length > 0 && (
         <details className="mt-2" open>
-          <summary className="fs-xs font-bold cursor-pointer">Recent visitors</summary>
-          <ul className="fs-xs font-bold mt-1">
+          <summary className="fs-xs font-bold cursor-pointer min-h-[24px]">Recent visitors</summary>
+          <ul className="fs-xs font-bold mt-1 flex flex-col gap-1">
             {state.recent.map((r, i) => (
-              <li key={i}>
-                {personaEmoji(r.persona)} {r.persona} —{' '}
+              <li key={i} className="flex items-center gap-1">
+                <PersonaBadge id={r.persona_id} name={r.persona} size={24} /> {r.persona} —{' '}
                 {r.status === 'accepted'
                   ? r.kind === 'buy'
                     ? `bought for ${fmtCredits(r.final_credits ?? 0)}`

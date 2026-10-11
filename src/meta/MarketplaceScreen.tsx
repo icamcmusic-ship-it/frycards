@@ -32,6 +32,21 @@ import { quicksellPrice, fmtCredits } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
 import { sellableSplit } from './sellable';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
+import { BID_STYLE_LABEL, initials, resolvePersona } from './buyers/personas';
+
+/** CPU auction bidder: persona badge + name, with archetype and bid style on hover. */
+function CpuBidderTag({ name }: { name: string }) {
+  const p = resolvePersona(null, name);
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 align-middle"
+      title={p ? `${p.archetype} · ${BID_STYLE_LABEL[p.bidStyle]}` : 'CPU bidder'}
+    >
+      <span aria-hidden>{p?.badge ?? initials(name)}</span>
+      {name} (CPU{p ? ` · ${BID_STYLE_LABEL[p.bidStyle].toLowerCase()}` : ''}) leads
+    </span>
+  );
+}
 
 const TABS = ['browse', 'mine', 'sell'] as const;
 type Tab = (typeof TABS)[number];
@@ -380,9 +395,10 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                   <span className="fs-xs font-bold text-[var(--c-steel)]">
                     {l.bid_count ?? 0} bid{(l.bid_count ?? 0) === 1 ? '' : 's'}
                     {highBidder ? ' · YOU LEAD' : ''}
-                    {l.cpu_leading && l.cpu_bidder_name
-                      ? ` · ${l.cpu_bidder_name} (CPU) leads`
-                      : ''}
+                    {l.cpu_leading && l.cpu_bidder_name ? ' · ' : ''}
+                    {l.cpu_leading && l.cpu_bidder_name && (
+                      <CpuBidderTag name={l.cpu_bidder_name} />
+                    )}
                   </span>
                 </>
               ) : (

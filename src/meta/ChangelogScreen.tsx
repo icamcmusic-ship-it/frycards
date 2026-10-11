@@ -92,6 +92,12 @@ export const ENTRIES: ChangelogEntry[] = [
     tagline: 'Shattered glass, seven elemental overlays and nine new card backs.',
     items: [
       {
+        title: 'Shop Floor customers with personalities',
+        body: 'Twenty CPU buyer personas now visit your Player Shop — from the Impulsive Kid and the Slab Snob to a loyalist for every colour — and they offer more for what they collect. Haggle up to three times while a mood meter tracks how fair you are, take bundle and trade-plus-cash offers, and win regulars who come back friendlier. CPU auction bidders use the same personas, as snipers, early birds, steady raisers and bluffers.',
+        category: 'gameplay',
+        icon: Store,
+      },
+      {
         title: 'Shattered',
         body: 'About 1 in 150 pack cards comes out Shattered: split into three or four shards that shift as you move it (they hold still with reduced motion). It is worth six times the plain card, and a variant always gets at least the Super-Rare reveal.',
         category: 'collection',

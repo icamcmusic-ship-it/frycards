@@ -1,5 +1,12 @@
 # Backend changes: live status
 
+## 2026-10-13 CPU buyer personas
+
+Applied live: `20261013000100_cpu_buyer_personas.sql`, `20261013000101_shop_haggle_log_opening.sql`.
+Pending (DELETE): `20261013000190_pending_cpu_buyer_personas.sql` — `prune_market_listing_cpu()` sweeps
+`market_listing_cpu` rows of finished listings (the live `run_cpu_bidders` no longer deletes them).
+Design and before/after cost: [CPU_BUYERS.md](CPU_BUYERS.md).
+
 ## 2026-10-12 (audit 2026-10-11 §5 collection, §3 S-2, §7 S6/S7/X4)
 
 ### Applied live (each is also a repo migration, idempotent, tested in `supabase/migrations-2026-10-12.test.ts`)
