@@ -29,6 +29,8 @@
  * The slab artwork lives in `GradedSlab.tsx`.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEscapeClose, useFocusTrap } from '../components/useFocusTrap';
+import { useRouteTab } from './useHashRouter';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { useMotionMode } from './useMotionMode';
 import {
@@ -49,7 +51,7 @@ import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/poker/cardpool';
-import { spareSplit } from './CollectionScreen';
+import { sellableSplit } from './sellable';
 import { fmtCredits, fmtVouchers } from './economy';
 import { GradedSlab } from './GradedSlab';
 import type { ShowroomSubject } from './ShowroomScreen';
@@ -78,9 +80,9 @@ import {
   crackGradedSlab,
 } from './grading';
 
-type Tab = 'submit' | 'limbo' | 'vault';
+const TABS = ['submit', 'limbo', 'vault'] as const;
+type Tab = (typeof TABS)[number];
 type VaultSort = 'grade' | 'value' | 'newest';
-const isTab = (v: unknown): v is Tab => v === 'submit' || v === 'limbo' || v === 'vault';
 const isVaultSort = (v: unknown): v is VaultSort =>
   v === 'grade' || v === 'value' || v === 'newest';
 
@@ -181,7 +183,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     refreshCollection,
     dataLoading,
   } = useMeta();
-  const [tab, setTab] = usePersistedState<Tab>('grading:tab', 'submit', isTab);
+  const [tab, setTab] = useRouteTab<Tab>('grading', TABS, 'submit', 'grading:tab');
   const [graded, setGraded] = useState<GradedCard[]>([]);
   const [gradedLoading, setGradedLoading] = useState(true);
 
@@ -299,8 +301,12 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     const out: { cardId: string; foil: boolean; spare: number }[] = [];
     for (const [cardId, o] of owned) {
       if (!POOL_BY_ID[cardId]) continue;
-      const { normal, foil } = spareSplit(o, locked.get(cardId) || 0);
-      const spareNormal = Math.max(0, normal - (serialized.get(cardId) || 0));
+      // submit_grading's two independent checks (sellable.ts, audit B4).
+      const { normal: spareNormal, foil } = sellableSplit(
+        o,
+        locked.get(cardId) || 0,
+        serialized.get(cardId) || 0,
+      );
       if (spareNormal > 0) out.push({ cardId, foil: false, spare: spareNormal });
       if (foil > 0) out.push({ cardId, foil: true, spare: foil });
     }
@@ -1035,17 +1041,22 @@ function OddsModal({ service, onClose }: { service: GradingService; onClose: () 
   const [shown, setShown] = useState<GradingService>(service);
   const odds = gradeOddsFor(shown);
   const peak = Math.max(...odds.map(([, p]) => p));
+  // Same modal contract as SlabDetailModal: focus stays inside, Escape closes (B7).
+  const ref = useFocusTrap<HTMLDivElement>();
+  useEscapeClose(onClose);
   return (
     <motion.div
       className="fixed inset-0 z-50 bg-[var(--c-ink)]/85 flex items-center justify-center p-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      role="dialog"
-      aria-label="Grading odds"
       onClick={onClose}
     >
       <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Grading odds"
         className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-black-sm p-4 max-w-md w-full max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
@@ -1136,13 +1147,18 @@ function RevealCeremony({
 
   const last = idx === results.length - 1;
   const best = r.grade >= 9.5;
+  // Focus trap + Escape (skips the rest of the reveal), as every other meta dialog (B7).
+  const ref = useFocusTrap<HTMLDivElement>();
+  useEscapeClose(onDone);
   return (
     <motion.div
+      ref={ref}
       className="fixed inset-0 z-50 bg-[var(--c-ink)]/90 flex flex-col items-center justify-center gap-4 px-4 overflow-y-auto py-6"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       role="dialog"
+      aria-modal="true"
       aria-label="Grade reveal"
     >
       <div className="heading-font text-[var(--c-yellow)] text-sm flex items-center gap-2 text-center">

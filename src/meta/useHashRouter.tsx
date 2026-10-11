@@ -218,10 +218,12 @@ export function useRouteTab<T extends string>(
   screen: MetaScreen,
   tabs: readonly T[],
   initial: T,
+  /** localStorage key for the remembered tab (defaults to `tab:<screen>`). */
+  storageKey: string = `tab:${screen}`,
 ): [T, (tab: T) => void] {
   const router = useRouter();
   const [stored, setStored] = usePersistedState<T>(
-    `tab:${screen}`,
+    storageKey,
     initial,
     (v): v is T => typeof v === 'string' && (tabs as readonly string[]).includes(v),
   );

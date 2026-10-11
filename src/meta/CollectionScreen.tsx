@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { sellableSplit } from './sellable';
 import { askConfirm } from './confirm';
 import { useMeta } from './MetaContext';
 import {
@@ -98,10 +99,12 @@ async function runBulkQuicksell(
     const o = owned.get(c.id);
     if (!o) continue;
     const locked = lockedByDecks.get(c.id) || 0;
-    const { normal: spareNormalRaw, foil: spareFoil } = spareSplit(o, locked);
     const reserved = serializedByCard.get(c.id)?.length || 0;
-    const spareNormal = Math.max(0, spareNormalRaw - reserved);
-    if (spareNormal + spareFoil <= 0) continue;
+    // Normal copies first, then whatever foil the deck locks still allow.
+    const s = sellableSplit(o, locked, reserved);
+    const spareNormal = s.normal;
+    const spareFoil = s.total - s.normal;
+    if (s.total <= 0) continue;
     for (const [foil, qty] of [
       [false, spareNormal],
       [true, spareFoil],
@@ -481,11 +484,9 @@ export function CollectionScreen({
   // Spare (unlocked) copies across the whole collection — Leaders excluded
   // (they're never bulk-fodder) — per card (the SPARES view) and per rarity
   // with what they would sell for (the "QUICKSELL ALL <rarity>" bulk actions).
-  // Same arithmetic as runBulkQuicksell above (spareSplit, then reserves out
-  // of the normal split only) — a flat q+f−locked−reserved diverges when a
-  // deck lock spills into foil copies on a card with serialized reserves, and
-  // the progress bar's total disagrees with what the loop actually sells
-  // ("SELLING 3/2").
+  // Same arithmetic as runBulkQuicksell above (sellableSplit: deck locks and
+  // Serialized prints are two independent server checks, normal copies sell
+  // first), so the progress bar's total matches what the loop actually sells.
   const { spareByCard, spareValues } = useMemo(() => {
     const byCard = new Map<string, number>();
     const rows: { rarity: string; normal: number; foil: number }[] = [];
@@ -494,11 +495,10 @@ export function CollectionScreen({
       const o = owned.get(c.id);
       if (!o) continue;
       const reserved = serializedByCard.get(c.id)?.length || 0;
-      const { normal, foil } = spareSplit(o, lockedByDecks.get(c.id) || 0);
-      const spareNormal = Math.max(0, normal - reserved);
-      if (spareNormal + foil <= 0) continue;
-      byCard.set(c.id, spareNormal + foil);
-      rows.push({ rarity: c.rarity || 'Common', normal: spareNormal, foil });
+      const s = sellableSplit(o, lockedByDecks.get(c.id) || 0, reserved);
+      if (s.total <= 0) continue;
+      byCard.set(c.id, s.total);
+      rows.push({ rarity: c.rarity || 'Common', normal: s.normal, foil: s.total - s.normal });
     }
     return { spareByCard: byCard, spareValues: spareValueByRarity(rows) };
   }, [owned, lockedByDecks, serializedByCard]);
@@ -718,8 +718,10 @@ export function CollectionScreen({
   // and foil buttons, which could show a normal copy as sellable when every
   // normal copy was actually deck-locked (and only foil was spare), or vice
   // versa.
-  const { normal: spareNormal, foil: spareFoil } = spareSplit(inspectOwned, inspectLocked);
-  const normalSellable = Math.max(0, spareNormal - inspectSerializedReserved);
+  // Two independent server checks (deck locks vs Serialized), see sellable.ts.
+  const inspectSellable = sellableSplit(inspectOwned, inspectLocked, inspectSerializedReserved);
+  const normalSellable = inspectSellable.normal;
+  const spareFoil = inspectSellable.foil;
   // `q` (player_cards.quantity) INCLUDES serialized copies — the grid
   // subtracts them for the normal tile's count, and the inspector must agree
   // or "Normal ×3" appears beside sell buttons that can only move 1.

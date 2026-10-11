@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { clampWholeText, parseWhole } from './wholeField';
+import { useRouteTab } from './useHashRouter';
 import { askConfirm } from './confirm';
 import { Store, Gavel, Tag, Coins, Clock } from 'lucide-react';
 import { useMeta } from './MetaContext';
@@ -26,11 +28,11 @@ import { CardFace } from '../components/CardFaceV4';
 import { RARITY_CHIP, RARITY_ORDER } from './rarity';
 import { quicksellPrice, fmtCredits } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
-import { spareSplit } from './CollectionScreen';
+import { sellableSplit } from './sellable';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
-type Tab = 'browse' | 'mine' | 'sell';
-const isTab = (v: unknown): v is Tab => v === 'browse' || v === 'mine' || v === 'sell';
+const TABS = ['browse', 'mine', 'sell'] as const;
+type Tab = (typeof TABS)[number];
 
 export type MarketSort = 'ending' | 'price-asc' | 'price-desc';
 const isSort = (v: unknown): v is MarketSort =>
@@ -114,7 +116,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     refreshCollection,
   } = useMeta();
   const userId = session?.user?.id;
-  const [tab, setTab] = usePersistedState<Tab>('market.tab', 'browse', isTab);
+  const [tab, setTab] = useRouteTab<Tab>('market', TABS, 'browse', 'market.tab');
   const [sort, setSort] = usePersistedState<MarketSort>('market.sort', 'ending', isSort);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [listings, setListings] = useState<MarketListing[]>([]);
@@ -813,9 +815,10 @@ function SellForm({
 }) {
   const [cardId, setCardId] = useState('');
   const [foil, setFoil] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  // Raw text, parsed below and clamped on blur (B8).
+  const [qtyText, setQtyText] = useState('1');
   const [type, setType] = useState<'fixed' | 'auction'>('fixed');
-  const [price, setPrice] = useState(100);
+  const [priceText, setPriceText] = useState('100');
   const [buyout, setBuyout] = useState<number | ''>('');
   const [hours, setHours] = useState(24);
   const [search, setSearch] = useState('');
@@ -846,12 +849,12 @@ function SellForm({
           // only holds back normal copies. A flat sum here double-counted
           // locks + serialized against the same physical copies and hid
           // cards whose foil was genuinely listable.
-          const spare = spareSplit(
-            { q: c.quantity, f: c.foil_quantity },
-            locked.get(c.card_id) || 0,
-          );
           return (
-            Math.max(0, spare.normal - (serializedReserved.get(c.card_id) || 0)) + spare.foil > 0
+            sellableSplit(
+              { q: c.quantity, f: c.foil_quantity },
+              locked.get(c.card_id) || 0,
+              serializedReserved.get(c.card_id) || 0,
+            ).total > 0
           );
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
@@ -867,24 +870,21 @@ function SellForm({
     selectedEntry && POOL_BY_ID[cardId]
       ? { ...selectedEntry, def: POOL_BY_ID[cardId]! }
       : undefined;
-  // Uses the same normal-copies-consumed-first, foil-as-spillover model as
-  // CollectionScreen's spareSplit — a card whose deck-locked count exceeds
-  // its normal copies spills the lock into foil, not the other way around.
-  // A locally-reinvented formula here previously diverged from that model
-  // and could offer a "spare" quantity the create_listing RPC would reject.
-  const spare = selected
-    ? spareSplit({ q: selected.quantity, f: selected.foil_quantity }, locked.get(cardId) || 0)
-    : { normal: 0, foil: 0 };
-  // Serialized prints are normal copies that can never be listed.
-  const listable = foil
-    ? spare.foil
-    : Math.max(0, spare.normal - (serializedReserved.get(cardId) || 0));
+  // Deck locks and Serialized prints are two independent checks (B4).
+  const spare = sellableSplit(
+    selected ? { q: selected.quantity, f: selected.foil_quantity } : undefined,
+    locked.get(cardId) || 0,
+    serializedReserved.get(cardId) || 0,
+  );
+  const listable = foil ? spare.foil : spare.normal;
   // create_listing caps a single listing at 20 copies and a price of 1,000,000
   // credits; the form must offer only what the RPC will accept rather than
   // inviting a value that comes back as a bare "Invalid quantity/price" error.
   const LISTING_MAX_QTY = 20;
   const LISTING_MAX_PRICE = 1_000_000;
   const maxQty = Math.min(LISTING_MAX_QTY, listable);
+  const quantity = parseWhole(qtyText, 1, Math.max(1, maxQty)) ?? 0;
+  const price = parseWhole(priceText, 1, LISTING_MAX_PRICE) ?? 0;
   const suggested = selected ? quicksellPrice(selected.def.rarity, foil) : 0;
 
   // Buyout only applies to auctions — a stale buyout value left over from
@@ -920,14 +920,15 @@ function SellForm({
               // always resetting to normal left the qty input at max=0 with
               // no explanation whenever every normal copy was deck-locked
               // and only foils were free.
-              const s = spareSplit(
+              const s = sellableSplit(
                 { q: c.quantity, f: c.foil_quantity },
                 locked.get(c.card_id) || 0,
+                serializedReserved.get(c.card_id) || 0,
               );
-              const sellableNormal = s.normal - (serializedReserved.get(c.card_id) || 0);
+              const sellableNormal = s.normal;
               setCardId(c.card_id);
               setFoil(sellableNormal <= 0 && s.foil > 0);
-              setQuantity(1);
+              setQtyText('1');
             }}
             className={cn(
               // min-h keeps these dense chips tappable on a phone.
@@ -959,7 +960,7 @@ function SellForm({
                     checked={foil}
                     onChange={(e) => {
                       setFoil(e.target.checked);
-                      setQuantity(1);
+                      setQtyText('1');
                     }}
                   />
                   List foil copies ✦
@@ -971,10 +972,9 @@ function SellForm({
                   type="number"
                   min={1}
                   max={maxQty}
-                  value={quantity}
-                  onChange={(e) =>
-                    setQuantity(Math.max(1, Math.min(maxQty, Number(e.target.value) || 1)))
-                  }
+                  value={qtyText}
+                  onChange={(e) => setQtyText(e.target.value)}
+                  onBlur={() => setQtyText(clampWholeText(qtyText, 1, Math.max(1, maxQty)))}
                   className="w-16 px-2 py-1 ink-border-sm"
                 />
                 <span className="fs-xs text-[var(--c-steel)]">of {maxQty} spare</span>
@@ -1021,15 +1021,9 @@ function SellForm({
               <input
                 type="number"
                 min={1}
-                value={price}
-                onChange={(e) =>
-                  setPrice(
-                    Math.min(
-                      LISTING_MAX_PRICE,
-                      Math.max(1, Math.round(Number(e.target.value) || 0)),
-                    ),
-                  )
-                }
+                value={priceText}
+                onChange={(e) => setPriceText(e.target.value)}
+                onBlur={() => setPriceText(clampWholeText(priceText, 1, LISTING_MAX_PRICE))}
                 className="w-24 px-2 py-1 ink-border-sm"
               />
               <span className="fs-xs text-[var(--c-steel)] inline-flex items-center gap-0.5">

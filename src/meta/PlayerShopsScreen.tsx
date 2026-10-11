@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { counterText, counterValid, counterValue } from './shopCounter';
 import { askConfirm } from './confirm';
 import {
   Store,
@@ -38,7 +39,7 @@ import {
   quicksellPrice,
 } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
-import { spareSplit } from './CollectionScreen';
+import { sellableSplit } from './sellable';
 import { SafeImage } from './SafeImage';
 import { RARITY_ORDER, RARITY_HEX, rarityTier } from './rarity';
 import {
@@ -688,12 +689,12 @@ function CardStackPicker({
           // reservation only holds back normal copies. A flat sum here
           // double-counted locks + serialized against the same physical
           // copies and hid cards whose foil was genuinely listable.
-          const spare = spareSplit(
-            { q: c.quantity, f: c.foil_quantity },
-            locked.get(c.card_id) || 0,
-          );
           return (
-            Math.max(0, spare.normal - (serializedReserved.get(c.card_id) || 0)) + spare.foil > 0
+            sellableSplit(
+              { q: c.quantity, f: c.foil_quantity },
+              locked.get(c.card_id) || 0,
+              serializedReserved.get(c.card_id) || 0,
+            ).total > 0
           );
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
@@ -710,18 +711,14 @@ function CardStackPicker({
     selectedEntry && POOL_BY_ID[cardId] && POOL_BY_ID[cardId].type !== 'Leader'
       ? selectedEntry
       : undefined;
-  // Uses the same normal-copies-consumed-first, foil-as-spillover model as
-  // CollectionScreen's spareSplit (also used by Marketplace's sell form) —
-  // a locally-reinvented split here previously diverged from that model
-  // whenever a deck-lock spilled from normal copies into foil, and could
-  // let the player submit a quantity the server-side RPC would reject.
-  const spare = selected
-    ? spareSplit({ q: selected.quantity, f: selected.foil_quantity }, locked.get(cardId) || 0)
-    : { normal: 0, foil: 0 };
-  // Serialized prints are normal copies that can never be listed.
-  const totalSpare = foil
-    ? spare.foil
-    : Math.max(0, spare.normal - (serializedReserved.get(cardId) || 0));
+  // Deck locks and Serialized prints are two independent server checks
+  // (sellable.ts, audit B4), shared with Collection and Marketplace.
+  const spare = sellableSplit(
+    selected ? { q: selected.quantity, f: selected.foil_quantity } : undefined,
+    locked.get(cardId) || 0,
+    serializedReserved.get(cardId) || 0,
+  );
+  const totalSpare = foil ? spare.foil : spare.normal;
   // Copies of this exact card/foil combo already staged in `items` don't
   // stop being "spare" — but they're no longer available to add again, so
   // the input's max (and the "of X spare" label) must be reduced by however
@@ -781,11 +778,12 @@ function CardStackPicker({
               // passed the sellable filter, then dead-ended on "of 0 spare"
               // with a disabled + ADD unless the player found the Foil box.
               // Default the variant to the one that's actually sellable.
-              const sp = spareSplit(
+              const sp = sellableSplit(
                 { q: c.quantity, f: c.foil_quantity },
                 locked.get(c.card_id) || 0,
+                serializedReserved.get(c.card_id) || 0,
               );
-              const spareNormal = Math.max(0, sp.normal - (serializedReserved.get(c.card_id) || 0));
+              const spareNormal = sp.normal;
               setFoil(spareNormal <= 0 && sp.foil > 0);
               setQty(1);
             }}
@@ -3356,7 +3354,7 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
     const { data, error } = await respondShopCustomer(
       c.id,
       action,
-      action === 'counter' ? Math.round(Number(counter[c.id] ?? '')) : undefined,
+      action === 'counter' ? counterValue(counter[c.id], c.offer_credits) : undefined,
     );
     if (error) setErr(error);
     else if (data) {
@@ -3408,10 +3406,10 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
           const def = item ? POOL_BY_ID[item.card_id] : undefined;
           const offerDef = c.offer_card_id ? POOL_BY_ID[c.offer_card_id] : undefined;
           const busy = busyId === c.id;
-          const ctr = counter[c.id] ?? String(Math.round((c.offer_credits ?? 0) * 1.15));
-          const ctrNum = Math.round(Number(ctr));
+          const ctr = counterText(counter[c.id], c.offer_credits);
+          const ctrNum = counterValue(counter[c.id], c.offer_credits);
           // The server only takes a counter above their offer.
-          const ctrValid = Number.isFinite(ctrNum) && ctrNum > (c.offer_credits ?? 0);
+          const ctrValid = counterValid(ctrNum, c.offer_credits);
           // Quicksell value of what they want — the yardstick both offer
           // kinds are priced against.
           const wantValue = c.listing_cards.reduce(

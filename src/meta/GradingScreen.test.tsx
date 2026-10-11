@@ -112,3 +112,14 @@ describe('summary bar', () => {
     expect(screen.getByText(/EXPECTED BACK/)).toBeTruthy();
   });
 });
+
+describe('odds dialog (B7)', () => {
+  test('is modal and closes on Escape', async () => {
+    render(<GradingScreen onBack={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /ODDS/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Grading odds' });
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Grading odds' })).toBeNull());
+  });
+});
