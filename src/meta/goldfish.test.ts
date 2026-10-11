@@ -153,3 +153,22 @@ describe('simulateOpenings', () => {
     expect(s.byHand.every((h) => h.seen === 0 && h.unit === 0)).toBe(true);
   });
 });
+
+describe('goldfish vs a Location (Q23)', () => {
+  test('Happy Hour makes a tier-4 card castable on chips; Night Game drops Quick Events', async () => {
+    const { castableUnder } = await import('./goldfish');
+    const t4 = { id: 'x', name: 'x', type: 'Unit', tier: 4, colors: [] } as never;
+    const quick = {
+      id: 'q',
+      name: 'q',
+      type: 'Event',
+      subtype: 'Quick',
+      tier: 1,
+      colors: [],
+    } as never;
+    expect(castableUnder(t4)).toBe(false);
+    expect(castableUnder(t4, { costStep: -1 })).toBe(true);
+    expect(castableUnder(quick)).toBe(true);
+    expect(castableUnder(quick, { noQuick: true })).toBe(false);
+  });
+});

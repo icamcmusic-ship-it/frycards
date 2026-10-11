@@ -44,8 +44,32 @@ export function castableOnChips(c: CardDef): boolean {
   return (c.tier ?? 1) < SECOND_COST_TIER;
 }
 
-const has = (kws: EffectKeyword[]) => (c: CardDef) =>
-  !!c.effect && kws.includes(c.effect.kw as EffectKeyword) && castableOnChips(c);
+/** Table conditions a Location sets (Q23): `costStep` shifts every power's
+ * cost (Happy Hour: -1) and `noQuick` turns off Quick Events (Night Game,
+ * Silent Table). */
+export interface CastContext {
+  costStep?: number;
+  noQuick?: boolean;
+}
+
+/** Castable on chips alone under `ctx`. */
+export function castableUnder(c: CardDef, ctx: CastContext = {}): boolean {
+  if (ctx.noQuick && c.type === 'Event' && c.subtype === 'Quick') return false;
+  return (c.tier ?? 1) + (ctx.costStep ?? 0) < SECOND_COST_TIER;
+}
+
+/** The Location rules that change what is castable, as goldfish contexts. */
+export const LOCATION_CONTEXTS: { id: string; label: string; ctx: CastContext }[] = [
+  { id: 'none', label: 'Any table', ctx: {} },
+  { id: 'happyHour', label: 'Happy Hour (one step cheaper)', ctx: { costStep: -1 } },
+  { id: 'nightGame', label: 'Night Game (no Quick Events)', ctx: { noQuick: true } },
+  { id: 'silentTable', label: 'Silent Table (no Quick, no Ambush)', ctx: { noQuick: true } },
+];
+
+const has =
+  (kws: EffectKeyword[], ctx: CastContext = {}) =>
+  (c: CardDef) =>
+    !!c.effect && kws.includes(c.effect.kw as EffectKeyword) && castableUnder(c, ctx);
 export const isCastableRevive = has(REVIVE);
 export const isCastableInformation = has(INFORMATION);
 
@@ -118,9 +142,12 @@ export function simulateOpenings(
   cardIds: readonly string[],
   poolById: Record<string, CardDef>,
   mode: ModeId = 'standard',
-  opts: { trials?: number; hands?: number; seed?: number } = {},
+  opts: { trials?: number; hands?: number; seed?: number } & CastContext = {},
 ): OpeningStats {
   const { trials = 500, hands = 5, seed = 1 } = opts;
+  const ctx: CastContext = { costStep: opts.costStep, noQuick: opts.noQuick };
+  const revivePred = has(REVIVE, ctx);
+  const infoPred = has(INFORMATION, ctx);
   const m = MODES[mode];
   const deck = powerCards(cardIds, poolById);
   const byHand: HandOdds[] = Array.from({ length: hands }, (_, i) => ({
@@ -145,8 +172,8 @@ export function simulateOpenings(
       const i = order.findIndex(pred);
       return i < 0 ? Infinity : i;
     };
-    const fRevive = first(isCastableRevive);
-    const fInfo = first(isCastableInformation);
+    const fRevive = first(revivePred);
+    const fInfo = first(infoPred);
     const fUnit = first((c) => c.type === 'Unit');
     for (const h of byHand) {
       if (fRevive < h.seen) h.revive++;

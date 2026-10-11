@@ -27,6 +27,7 @@ import { MetaHeader, PopButton, CardMarketValuePanel, Tabs } from './ui';
 import { ActionMenu } from './ActionMenu';
 import { askConfirm } from './confirm';
 import { useToast } from './toast';
+import { loadWishlist, pushWishlistToggle, saveWishlist, toggleWishlisted } from './wishlist';
 import { FilterSelect } from './FilterSelect';
 import { usePersistedState } from './usePersistedState';
 import {
@@ -52,7 +53,7 @@ import { MODES, MODE_IDS, NERVE, type ModeId } from '../game/poker/constants';
 import { cardColors, Color, COLOR_IDENTITY, isColorLegal } from '../game/poker/colors';
 import { ruleName } from '../game/poker/locations';
 import { rngOn } from '../game/poker/rng';
-import { deriveDeckAdvice } from './deckAdvice';
+import { deriveDeckAdvice, gapFillers } from './deckAdvice';
 import { formatTags } from '../game/poker/formats';
 import { DeckMeta } from './DeckMeta';
 import { loadMatchHistory, summarizeMatchHistory } from './matchHistory';
@@ -65,7 +66,7 @@ import {
   pushDeckVersion,
   saveDeckNote,
 } from './deckExtras';
-import { drawTestHand, simulateOpenings } from './goldfish';
+import { drawTestHand, simulateOpenings, LOCATION_CONTEXTS } from './goldfish';
 import { COLOR_HEX } from './colors';
 import { cn } from '../lib/utils';
 import { useIsNarrow } from '../lib/useIsNarrow';
@@ -518,6 +519,20 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const [tierFilter, setTierFilter] = usePersistedState('deck.tier', 'All', isOneOf(TIER_FILTERS));
   // On: the pool shows only cards legal under the Leader's colours.
   const [identityOnly, setIdentityOnly] = usePersistedState('deck.identityOnly', true);
+  // Q11: browse cards with no free copy too, and wishlist them.
+  const [showUnowned, setShowUnowned] = usePersistedState('deck.showUnowned', false);
+  const userId = session?.user?.id ?? null;
+  const [wish, setWish] = useState<Set<string>>(() => loadWishlist(userId));
+  const setWished = (ids: string[], on: boolean) => {
+    let next = new Set<string>(wish);
+    for (const id of ids) {
+      if (next.has(id) === on) continue;
+      next = toggleWishlisted(next, id);
+      if (userId) void pushWishlistToggle(userId, id, on);
+    }
+    setWish(next);
+    saveWishlist(next, userId);
+  };
   const [panelTab, setPanelTab] = usePersistedState<PanelTab>('deck.panelTab', 'list', isPanelTab);
   // The phone bottom sheet; collapsed by default so the pool gets the room.
   const [sheetOpen, setSheetOpen] = usePersistedState('deck.sheetOpen', false);
@@ -580,6 +595,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
 
   const issues = validateDeckList(leader, cardIds, mode, collection, lockedByOtherDecks);
   const isValid = issues.length === 0;
+  // Q11: cards the list holds more of than you have, not yet wishlisted.
+  const missing = [
+    ...new Set(issues.filter((i) => i.kind === 'ownership').flatMap((i) => i.cards ?? [])),
+  ].filter((id) => !wish.has(id));
 
   const countOf = (id: string) => cardIds.filter((x) => x === id).length;
   // Live deck shape, for the counters and the add-card limits.
@@ -662,7 +681,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const pool = poolByType('Unit')
     .concat(poolByType('Item'), poolByType('Event'), poolByType('Location'))
     .filter((c) => {
-      if ((availableQty.get(c.id) || 0) === 0) return false;
+      if (!showUnowned && (availableQty.get(c.id) || 0) === 0) return false;
       if (typeFilter !== 'All' && c.type !== typeFilter) return false;
       if (tierFilter !== 'All' && String(c.tier ?? '') !== tierFilter) return false;
       if (identityOnly && colorIdentity && !isColorLegal(c, colorIdentity)) return false;
@@ -716,9 +735,20 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
 
   // Opening power hands for this format: seeded, so the odds hold still
   // while the list doesn't change.
+  // Q23: the same odds under a Location rule that changes what is castable.
+  const [vsLoc, setVsLoc] = usePersistedState('deck.goldfishVs', 'none');
+  const vsCtx = (LOCATION_CONTEXTS.find((l) => l.id === vsLoc) ?? LOCATION_CONTEXTS[0]).ctx;
   const openings = useMemo(
-    () => simulateOpenings(cardIds, POOL_BY_ID, mode, { trials: 400, hands: ODDS_HANDS, seed: 1 }),
-    [cardIds, mode],
+    () =>
+      simulateOpenings(cardIds, POOL_BY_ID, mode, {
+        trials: 400,
+        hands: ODDS_HANDS,
+        seed: 1,
+        ...vsCtx,
+      }),
+    // vsCtx is derived from vsLoc
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cardIds, mode, vsLoc],
   );
 
   // Seeded test hand: the same seed deals the same opening power hand a real
@@ -737,6 +767,19 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [grouped, mode, leaderId],
   );
+
+  // Q10: the advice's first gap, as up to 3 owned cards with an ADD button.
+  const fillers =
+    leader && shape.powers < m.powers
+      ? gapFillers(
+          advice,
+          POOL.filter((c) => (availableQty.get(c.id) || 0) > 0).sort((a, b) =>
+            a.name.localeCompare(b.name),
+          ),
+          colorIdentity,
+          (c) => !addBlock(c),
+        )
+      : null;
 
   const handleSave = async () => {
     if (!session?.user || !leaderId || saving) return;
@@ -1005,6 +1048,21 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         <div className="fs-xs font-bold text-[var(--c-paper)]/80 mb-1.5">
           {m.label}: open with {m.handStart}, draw {m.handDraw} each hand, hold up to {m.handCap}.
         </div>
+        <label className="flex items-center gap-1.5 fs-xs font-bold text-[var(--c-paper)]/80 mb-1.5">
+          vs Location
+          <select
+            value={vsLoc}
+            onChange={(e) => setVsLoc(e.target.value)}
+            aria-label="Goldfish against a Location rule"
+            className="flex-1 min-w-0 px-1 py-0.5 bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm fs-xs font-bold"
+          >
+            {LOCATION_CONTEXTS.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
         {shape.powers > 0 && (
           <table
             className="w-full fs-xs font-bold text-[var(--c-paper)] mb-1.5"
@@ -1206,6 +1264,28 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             <li key={s}>› {s}</li>
           ))}
         </ul>
+      )}
+      {fillers && (
+        <div className="mt-1.5" data-testid="gap-fillers">
+          <div className="fs-xs font-black text-[var(--c-yellow)]">{fillers.why}:</div>
+          <ul className="list-none space-y-0.5 mt-0.5">
+            {fillers.cards.map((c) => (
+              <li key={c.id} className="flex items-center gap-1.5 fs-xs font-bold">
+                <span className="flex-1 min-w-0 truncate text-[var(--c-paper)]">
+                  {c.name} <span className="opacity-60">· T{c.tier ?? 1}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => addCard(c)}
+                  aria-label={`Add ${c.name}`}
+                  className="btn-pop heading-font fs-xs px-2 min-h-[28px] bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm"
+                >
+                  ADD
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -1529,6 +1609,20 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 <span className="hidden sm:inline">{fix.label}</span>
               </button>
             )}
+            {missing.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setWished(missing, true);
+                  toast(
+                    `${missing.length} card${missing.length === 1 ? '' : 's'} added to your wishlist`,
+                  );
+                }}
+                className="btn-pop heading-font fs-xs bg-[var(--c-paper)] text-[var(--c-ink)] px-2 py-1 min-h-[28px] ink-border-sm shrink-0"
+              >
+                ♥ ADD {missing.length} MISSING<span className="hidden sm:inline"> TO WISHLIST</span>
+              </button>
+            )}
             {summary.hasDetails && (
               <button
                 type="button"
@@ -1614,6 +1708,21 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                   {identityOnly ? '✓' : '○'} {leader.name}&apos;s colours only
                 </button>
               )}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showUnowned}
+                onClick={() => setShowUnowned(!showUnowned)}
+                title="Also show cards you have no free copy of — tap ♥ to wishlist them"
+                className={cn(
+                  'btn-pop heading-font fs-xs ink-border-sm px-2 py-1 min-h-[28px] shrink-0',
+                  showUnowned
+                    ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                    : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                )}
+              >
+                {showUnowned ? '✓' : '○'} UNOWNED
+              </button>
               <span className="fs-xs font-bold text-[var(--c-steel)] ml-auto shrink-0">
                 {pool.length} MATCH
               </span>
@@ -1635,19 +1744,40 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                     badge={block?.short}
                     onClick={() => (blocked ? toast(blocked) : addCard(c))}
                     footer={
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setInspect(c);
-                        }}
-                        title={blocked ?? undefined}
-                        // v28 tap targets: a 9px underline is an 18px-tall
-                        // strip, and it is the only way into the card's full
-                        // rules text from the pool grid.
-                        className="fs-xs font-bold text-[var(--c-steel)]/70 underline mt-0.5 px-1 py-1.5"
-                      >
-                        details
-                      </button>
+                      <span className="flex items-center justify-center gap-1 mt-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInspect(c);
+                          }}
+                          title={blocked ?? undefined}
+                          // v28 tap targets: a 9px underline is an 18px-tall
+                          // strip, and it is the only way into the card's full
+                          // rules text from the pool grid. U31: its own row
+                          // under the tile, clear of the border.
+                          className="fs-xs font-bold text-[var(--c-steel)]/70 underline px-1 py-1.5"
+                        >
+                          details
+                        </button>
+                        {(availableQty.get(c.id) || 0) === 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setWished([c.id], !wish.has(c.id));
+                            }}
+                            aria-pressed={wish.has(c.id)}
+                            aria-label={`${wish.has(c.id) ? 'Remove' : 'Add'} ${c.name} ${wish.has(c.id) ? 'from' : 'to'} wishlist`}
+                            className={cn(
+                              'fs-xs font-black px-1.5 py-1 ink-border-sm',
+                              wish.has(c.id)
+                                ? 'bg-[var(--c-red)] text-white'
+                                : 'bg-[var(--c-paper)] text-[var(--c-ink)]',
+                            )}
+                          >
+                            ♥
+                          </button>
+                        )}
+                      </span>
                     }
                   />
                 </React.Fragment>
