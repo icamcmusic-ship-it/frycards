@@ -63,6 +63,7 @@ import {
 import { buildCycle, ruleName, type ScheduledLocation } from './locations';
 import { poolByType } from './cardpool';
 import { rngOn, shuffle, type Rng } from './rng';
+import { applyMutators, mutatorNerve, type MutatorId } from './mutators';
 
 // ===========================================================================
 // Types
@@ -270,6 +271,72 @@ export interface LogEntry {
   hand: number;
 }
 
+/**
+ * Per-seat tallies for one match (poker missions, AUDIT §5 c.2, and the
+ * game-over recap, §6 Q16). Pure bookkeeping: counting never touches the
+ * rng or any rule, so a replay produces the same numbers. The field names
+ * match the server's `MatchStats` contract (src/lib/supabase.ts); the last
+ * three are recap-only and are not sent.
+ */
+export interface SeatStats {
+  hands_won: number;
+  showdown_wins: number;
+  strong_showdowns: number;
+  win_pair: number;
+  bluff_wins: number;
+  leader_uses: number;
+  powers_cast: number;
+  made_straight: number;
+  made_flush: number;
+  made_full_house: number;
+  made_quads: number;
+  made_straight_flush: number;
+  big_pots: number;
+  big_pots_50: number;
+  seats_busted: number;
+  triple_bust: number;
+  short_stack: boolean;
+  kw: string[];
+  /** Recap: the largest pot this seat won (chips). */
+  biggest_pot: number;
+  /** Recap: best hand category won with at showdown (-1 = none). */
+  best_category: number;
+  /** Recap: this seat's casts that were Called Out. */
+  called_out: number;
+}
+
+export function emptyStats(): SeatStats {
+  return {
+    hands_won: 0,
+    showdown_wins: 0,
+    strong_showdowns: 0,
+    win_pair: 0,
+    bluff_wins: 0,
+    leader_uses: 0,
+    powers_cast: 0,
+    made_straight: 0,
+    made_flush: 0,
+    made_full_house: 0,
+    made_quads: 0,
+    made_straight_flush: 0,
+    big_pots: 0,
+    big_pots_50: 0,
+    seats_busted: 0,
+    triple_bust: 0,
+    short_stack: false,
+    kw: [],
+    biggest_pot: 0,
+    best_category: -1,
+    called_out: 0,
+  };
+}
+
+/** A seat's tally, created on first use (matches saved before stats existed). */
+function stat(m: Match, seat: number): SeatStats {
+  const all = (m.stats ??= m.seats.map(() => emptyStats()));
+  return (all[seat] ??= emptyStats());
+}
+
 export interface Match {
   seed: number;
   mode: ModeId;
@@ -296,6 +363,10 @@ export interface Match {
    * voluntary fold / check / call / raise, and how many were bets or raises
    * (what any player at the table could tally; bots read it). */
   aggro?: { actions: number; raises: number }[];
+  /** Per-seat match tallies (see SeatStats). */
+  stats?: SeatStats[];
+  mutators?: MutatorId[];
+  forcedLocation?: CardDef;
   capped: boolean;
 }
 
@@ -329,6 +400,10 @@ export interface MatchSetup {
   seed: number;
   mode: ModeId;
   seats: SeatSetup[];
+  /** Weekly rule twists (R3). */
+  mutators?: MutatorId[];
+  /** Practice: this Location replaces the Plain Table in every cycle (Q18). */
+  forcedLocation?: CardDef;
 }
 
 export class IllegalAction extends Error {
@@ -369,8 +444,8 @@ export function personaFor(leader: CardDef, skill = 0.6): Persona {
 // ===========================================================================
 // Small helpers
 // ===========================================================================
-export function modeOf(m: Pick<Match, 'mode'>): ModeConfig {
-  return MODES[m.mode];
+export function modeOf(m: Pick<Match, 'mode'> & { mutators?: MutatorId[] }): ModeConfig {
+  return applyMutators(MODES[m.mode], m.mutators);
 }
 
 function say(m: Match, text: string, to?: number): void {
@@ -545,10 +620,12 @@ function dealCard(h: Hand): PCard {
 // ===========================================================================
 export function createMatch(setup: MatchSetup): Match {
   if (setup.seats.length < 2 || setup.seats.length > 6) throw new Error('2–6 seats');
-  const mode = MODES[setup.mode];
+  const mode = modeOf(setup);
   const m: Match = {
     seed: setup.seed,
     mode: setup.mode,
+    ...(setup.mutators?.length ? { mutators: [...setup.mutators] } : {}),
+    ...(setup.forcedLocation ? { forcedLocation: setup.forcedLocation } : {}),
     rng: setup.seed | 0,
     seats: [],
     handNo: 0,
@@ -567,6 +644,7 @@ export function createMatch(setup: MatchSetup): Match {
     placements: null,
     capped: false,
     aggro: setup.seats.map(() => ({ actions: 0, raises: 0 })),
+    stats: setup.seats.map(() => emptyStats()),
   };
   const rng = R(m);
   setup.seats.forEach((ss, idx) => {
@@ -582,7 +660,7 @@ export function createMatch(setup: MatchSetup): Match {
       discard: [],
       hand: [],
       stack: mode.stackChips,
-      nerve: NERVE.start,
+      nerve: NERVE.start + mutatorNerve(setup.mutators),
       busted: false,
     });
   });
@@ -607,6 +685,12 @@ function nextLocation(m: Match): ScheduledLocation {
       R(m),
       m.prevLocation,
     );
+    if (m.forcedLocation) {
+      // Practice tables (Q18): the chosen Location takes the house slot.
+      const k = m.bag.findIndex((b) => b.owner === undefined);
+      if (k >= 0) m.bag[k] = { card: m.forcedLocation };
+      else m.bag.push({ card: m.forcedLocation });
+    }
   }
   const loc = m.bag.shift()!;
   m.prevLocation = loc.card.id;
@@ -705,6 +789,8 @@ function startHand(m: Match): void {
   };
   m.jackpot = 0;
   m.hand = h;
+  for (let i = 0; i < n; i++)
+    if (dealtIn[i] && m.seats[i].stack <= bb) stat(m, i).short_stack = true;
   m.phase = 'hand';
   const owner = location.owner !== undefined ? ` (${seatName(m, location.owner)}'s Location)` : '';
   say(
@@ -1364,18 +1450,64 @@ function finishHand(m: Match): void {
       'no winner',
   });
 
+  tallyHand(m, h, potResults, winnersAll, uncontested);
+
   // Busts: seats at zero are out. Same-hand busts rank by starting stack.
   const busted = m.seats
     .filter((s) => !s.busted && s.stack <= 0 && h.dealtIn[s.idx])
     .sort((a, b) => h.stackAtStart[a.idx] - h.stackAtStart[b.idx]);
+  const knocked = new Array(n).fill(0);
   for (const s of busted) {
     s.busted = true;
     s.bustOrder = ++m.bustCount;
     say(m, `${s.name} ${verb(m, s.idx, 'is', 'are')} out.`);
+    // Credit the knockout to the winner of the biggest pot the seat lost.
+    const lost = potResults
+      .filter((p) => p.eligible.includes(s.idx) && !p.winners.includes(s.idx))
+      .sort((a, b) => b.amount - a.amount)[0];
+    const by = lost?.winners[0] ?? winnersAll.find((w) => w !== s.idx);
+    if (by !== undefined) {
+      knocked[by]++;
+      stat(m, by).seats_busted++;
+    }
   }
+  if (n >= 4) knocked.forEach((k, i) => k >= 3 && (stat(m, i).triple_bust = 1));
   m.phase = 'between';
   const alive = aliveSeats(m);
   if (alive.length <= 1 || m.clockMs >= modeOf(m).capMs) endMatch(m, alive.length > 1);
+}
+
+/** Hand-end tallies for SeatStats (wins, showdown categories, big pots). */
+function tallyHand(
+  m: Match,
+  h: Hand,
+  pots: PotResult[],
+  winners: number[],
+  uncontested: boolean,
+): void {
+  for (const w of winners) {
+    const st = stat(m, w);
+    st.hands_won++;
+    const won = pots.filter((p) => p.winners.includes(w)).reduce((a, p) => a + p.amount, 0);
+    st.biggest_pot = Math.max(st.biggest_pot, won);
+    if (won >= 20 * h.bb) st.big_pots++;
+    if (won >= 50 * h.bb) st.big_pots_50++;
+    if (uncontested) {
+      if (!madeHand(h, w)) st.bluff_wins++;
+      continue;
+    }
+    st.showdown_wins++;
+    const boards = h.board2 ? [h.board, h.board2] : [h.board];
+    const cat = Math.max(...boards.map((b) => bestHand(h, w, b).category));
+    st.best_category = Math.max(st.best_category, cat);
+    if (cat >= 2) st.strong_showdowns++;
+    if (cat === 1) st.win_pair++;
+    if (cat === 4) st.made_straight++;
+    if (cat === 5) st.made_flush++;
+    if (cat === 6) st.made_full_house++;
+    if (cat === 7) st.made_quads++;
+    if (cat === 8) st.made_straight_flush++;
+  }
 }
 
 function applyRefunds(m: Match, winners: number[], gains: number[], showdown: boolean): void {
@@ -1895,6 +2027,7 @@ function leaderAbility(m: Match, a: Extract<Action, { type: 'leader' }>): void {
     target = a.target;
   }
   h.leaderUsed[a.seat] = true;
+  stat(m, a.seat).leader_uses++;
   if (ab.nerve < 0) adjustNerve(m, a.seat, ab.nerve);
   else adjustNerve(m, a.seat, ab.nerve, 'Leader ability');
   let paid = 0;
@@ -2059,6 +2192,9 @@ function resolveCast(m: Match, rec: CastRecord): void {
     return;
   }
   rec.status = 'resolved';
+  const st = stat(m, rec.seat);
+  if (!rec.leader) st.powers_cast++;
+  st.kw.push(rec.effect.kw);
   if (rec.feinted) {
     // Looks resolved to everyone; only the caster knows it did nothing.
     say(m, `${rec.def.name} resolves.`);
@@ -2354,6 +2490,7 @@ function applyEffect(m: Match, rec: CastRecord, eff: KwRef): void {
       const target = h.casts.find((c) => c.id === rec.targetCast);
       if (!target) return;
       target.calledOut = true;
+      stat(m, target.seat).called_out++;
       if (target.feinted) {
         say(
           m,
