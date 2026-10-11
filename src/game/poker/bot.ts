@@ -352,7 +352,11 @@ function powerValue(v: Match, seat: number, def: CardDef, r: Read): number {
     case 'Toll':
       return nBB * 0.3;
     case 'Straddle':
-      return r.equity > 0.55 ? 1 : 0;
+      // A fair-share range, not only premium hands (BOT.straddleEdge).
+      return r.equity >
+        (BOT.straddleEquity ?? 1 / (1 + Math.max(1, r.opponents)) + BOT.straddleEdge)
+        ? 1
+        : 0;
     case 'Rerun':
       // Chip-neutral, but a second board halves the chance of busting when
       // behind with the stack at risk — worth it in a freezeout.

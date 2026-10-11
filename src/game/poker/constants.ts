@@ -230,6 +230,15 @@ export const BOT = {
    * betting (0 = never reads, 1 = takes every bet at face value). Reading
    * fully makes a bot fold its way to second place on the clock. */
   readDepth: 0.5,
+  /** A bot straddles a hand whose equity beats its fair share of the table
+   * (1 / players) by this much. It used to need equity > 0.55, which at six
+   * seats is a top-3 % hand: Straddle cards were cast only with monsters and
+   * read +25 to +39 pts in the card band, while the paired ablation measured
+   * the card itself at −2 pts (audit C-5). */
+  straddleEdge: 0.05,
+  /** Ablation only (`simulate-poker.ts --straddle-eq`): a fixed equity
+   * threshold in place of the fair-share rule. */
+  straddleEquity: null as number | null,
   /** Pacing (nominal ms) — independent of hand strength so it is never a tell. */
   slowActionMs: [5000, 7000],
   fastActionMs: [1000, 2000],
