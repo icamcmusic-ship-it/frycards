@@ -1903,8 +1903,9 @@ function FittedRules({
 /** Flavor text on the standard and full faces (U69: hidden on compact and
  * micro): renders at up to `MAX_LINES`
  * clamped lines and MEASURES its wrapper — while the clamped paragraph doesn't
- * fit the leftover space it sheds one line at a time, but never below one
- * line. The rules paragraph above it gives up space first. */
+ * fit the leftover space it sheds one line at a time; when not even one line
+ * fits, it drops out entirely rather than run under the corner plate. The
+ * rules paragraph above it gives up space first. */
 function FittedFlavor({
   text,
   fontPx,
@@ -1934,9 +1935,14 @@ function FittedFlavor({
       (el.scrollHeight > el.clientHeight + 1 ||
         (el.parentElement && el.parentElement.scrollHeight > el.parentElement.clientHeight + 1))
     ) {
-      setLines((l) => (l > 1 ? l - 1 : l));
+      setLines((l) => (l > 0 ? l - 1 : l));
     }
   }, [lines, resetKey, setClassName, onArt, fonts]);
+  // Even one line did not fit: the chips and rules above already filled the
+  // box, and a clamped line would spill into the padding reserved for the
+  // corner plate (overflow-hidden clips at the border box, not the padding).
+  // Drop the flavor rather than print it under the plate.
+  if (lines === 0) return null;
   return (
     <div
       ref={ref}
@@ -2984,7 +2990,12 @@ function CardFacePlain({
           <div className="flex-1 min-h-0" />
           <div
             className={cn(
-              'relative z-20 flex flex-col shrink-0 pb-1',
+              // min-h-0, not shrink-0: once the art spacer above is spent the
+              // panel must give way inside the card, so the rules box below
+              // overflows (and the flavor sheds lines) instead of the whole
+              // panel sliding off the card's clipped bottom edge and taking
+              // the reserved plate clearance with it.
+              'relative z-20 flex flex-col min-h-0 pb-1',
               // Mythic: a black rules panel under a gold keyline, inside the
               // card's gold double keyline.
               monolith ? 'my-panel pt-1 mx-[6px] mb-[5px]' : 'pt-4',
