@@ -59,6 +59,7 @@ import {
   createMatch,
   effectiveEffect,
   excludableCategories,
+  fallbackAction,
   forecast,
   IllegalAction,
   inHand,
@@ -371,14 +372,6 @@ function Felt({ def, reduced }: { def: CardDef | null; reduced: boolean }) {
 // ===========================================================================
 // Bot planning (shared by the driver and the STEP button)
 // ===========================================================================
-/** What a stuck bot does instead when its chosen action is illegal (A7). */
-function fallbackFor(m: Match, seat: number): Action {
-  const w = waitingOn(m);
-  if (w.kind === 'window') return { type: 'pass', seat };
-  if (w.kind === 'choice') return { type: 'choose', seat, index: 0 };
-  return betOptions(m, seat)?.canCheck ? { type: 'check', seat } : { type: 'fold', seat };
-}
-
 /** The next automatic action: a hand start or a bot's move, with its nominal
  * delay at 1×. Null when the table waits on the human (or is over). */
 function planNext(
@@ -636,6 +629,23 @@ export function PokerTable({
     [dispatch, preset, thinkElapsed, realElapsed, shownAt, setSpot],
   );
 
+  /** A bot's move, never freezing the table (A7): if the engine refuses it
+   * (e.g. a veiled target), retry without powers, then the engine's fallback.
+   * Quiet: a bot's error is never the player's notice. */
+  const botDispatch = useCallback(
+    (plan: { action: Action; seat: number | null }) => {
+      if (dispatch(plan.action, true) || plan.seat === null) return;
+      const m = matchRef.current;
+      const retry = botAction(viewFor(m, plan.seat), plan.seat, botRngRef.current, {
+        noPowers: true,
+      });
+      if (retry && dispatch(retry, true)) return;
+      const fb = fallbackAction(matchRef.current, plan.seat);
+      if (fb) dispatch(fb, true);
+    },
+    [dispatch],
+  );
+
   // ---- the driver: bots and hand starts -----------------------------------
   const spotHold = !!spot?.hold;
   const awaitingDeal =
@@ -651,21 +661,27 @@ export function PokerTable({
     } else {
       delay = Math.max(speedMult === 0 ? 40 : 120, plan.nominal * mult);
     }
-    const t = window.setTimeout(() => {
-      // An illegal bot move must never freeze the table (A7).
-      if (!dispatch(plan.action, true) && plan.seat !== null)
-        dispatch(fallbackFor(matchRef.current, plan.seat), true);
-    }, delay);
+    const t = window.setTimeout(() => botDispatch(plan), delay);
     return () => window.clearTimeout(t);
-  }, [match, mult, speedMult, busted, over, paused, confirming, spotHold, awaitingDeal, dispatch]);
+  }, [
+    match,
+    mult,
+    speedMult,
+    busted,
+    over,
+    paused,
+    confirming,
+    spotHold,
+    awaitingDeal,
+    botDispatch,
+  ]);
 
   /** Paused: play exactly one automatic action (U6). */
   const stepOnce = () => {
     const m = matchRef.current;
     const plan = planNext(m, m.seats[HUMAN].busted, botRngRef.current);
     if (!plan) return;
-    if (!dispatch(plan.action, true) && plan.seat !== null)
-      dispatch(fallbackFor(matchRef.current, plan.seat), true);
+    botDispatch(plan);
   };
   const deal = () => {
     if (waitingOn(matchRef.current).kind === 'start') dispatch({ type: 'start', dt: 3000 }, true);
@@ -2416,10 +2432,11 @@ function CastDialog({
   /** The decision's remaining time (the clock keeps running, A4). */
   secondsLeft: number | null;
   onClose: () => void;
-  onCast: (a: Action) => void;
+  onCast: (a: Action) => boolean;
   onInspect: (d: CardDef) => void;
 }) {
   const amt = useAmt();
+  const [refused, setRefused] = useState(false);
   const h = view.hand!;
   const me = view.seats[HUMAN];
   const inst = flow.uid ? me.hand.find((p) => p.uid === flow.uid) : null;
@@ -2473,9 +2490,11 @@ function CastDialog({
     (castOpts.length === 0 || targetCast !== null || castOpts.length === 1) &&
     costs.length === extraNeeded;
   const submit = () => {
-    if (isLeader) onCast({ type: 'leader', seat: HUMAN, ability: leaderIdx!, target });
+    setRefused(false);
+    let ok: boolean;
+    if (isLeader) ok = onCast({ type: 'leader', seat: HUMAN, ability: leaderIdx!, target });
     else
-      onCast({
+      ok = onCast({
         type: 'cast',
         seat: HUMAN,
         uid: inst!.uid,
@@ -2484,6 +2503,11 @@ function CastDialog({
         costs,
         feint,
       });
+    // A10: a hidden (veiled) seat can make a pick illegal after all.
+    if (!ok) {
+      setRefused(true);
+      setTarget(null);
+    }
   };
   return (
     <div
@@ -2561,6 +2585,11 @@ function CastDialog({
                 ))}
               </div>
             </div>
+          )}
+          {refused && (
+            <p className="text-xs font-bold text-[var(--c-red)]" role="alert">
+              No legal target — that pick was refused. Choose another.
+            </p>
           )}
           {castOpts.length > 1 && (
             <div>
@@ -3000,6 +3029,12 @@ function HistoryModal({ match, onClose }: { match: Match; onClose: () => void })
             <X className="w-4 h-4" />
           </button>
         </div>
+        {/* A11: the seed replays every hole card, so only after the match. */}
+        {match.phase === 'over' && (
+          <p className="fs-xs font-bold text-[var(--c-steel)] mb-2">
+            Match seed {match.seed}. The seed plus the action log replays this match exactly.
+          </p>
+        )}
         <ol className="flex-1 overflow-y-auto flex flex-col gap-1 text-xs">
           {[...match.history].reverse().map((r) => (
             <li key={r.no} className="ink-border-sm px-2 py-1">
