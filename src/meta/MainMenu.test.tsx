@@ -97,4 +97,14 @@ describe('MainMenu tile order', () => {
     );
     expect(names).toEqual(['How to play', 'News', 'Changelog', 'Settings', 'Sign out']);
   });
+
+  test('tiles are grouped under CARDS / TRADE / YOU, with PLAY as a hero above them (U22/U23)', () => {
+    mount({ profile: profile('creator') as never });
+    expect(screen.getByRole('heading', { name: 'CARDS' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'TRADE' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'YOU' })).toBeTruthy();
+    const play = screen.getByText('PLAY').closest('button')!;
+    const cards = screen.getByRole('heading', { name: 'CARDS' });
+    expect(play.compareDocumentPosition(cards) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

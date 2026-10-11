@@ -336,12 +336,27 @@ export function LevelBadge({
   compact?: boolean;
 }) {
   const { into, band } = levelProgress(level, xp);
+  // A full bar that hasn't levelled yet (the level-up lands on the next
+  // reward) read as broken: say so instead (U25).
+  const ready = into >= band;
   return (
     <div className="flex items-center gap-2">
       <span className="bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-xs px-2 py-0.5 ink-border-sm">
         LV {level}
       </span>
-      {!compact && (
+      {compact ? (
+        // Phones: a bare bar, so progress is visible without the caption (U25).
+        <ProgressBar
+          value={into}
+          max={band}
+          className="h-1.5 w-14"
+          ariaLabel={
+            ready
+              ? `Ready for level ${level + 1}`
+              : `${into} of ${band} XP toward level ${level + 1}`
+          }
+        />
+      ) : (
         <div className="flex flex-col gap-0.5 w-28">
           <ProgressBar
             value={into}
@@ -349,8 +364,8 @@ export function LevelBadge({
             className="h-1.5"
             ariaLabel={`XP toward level ${level + 1}`}
           />
-          <span className="text-[8px] font-bold text-[var(--c-steel)] leading-none">
-            {into}/{band} XP TO LV {level + 1}
+          <span className="fs-xs font-bold text-[var(--c-steel)] leading-none whitespace-nowrap">
+            {ready ? `READY FOR LV ${level + 1}` : `${into}/${band} XP TO LV ${level + 1}`}
           </span>
         </div>
       )}

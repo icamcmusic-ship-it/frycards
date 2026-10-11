@@ -142,10 +142,15 @@ function DailyLoginPanel() {
           <div className="min-w-0">
             <div className="heading-font text-sm leading-none">DAILY LOGIN REWARD</div>
             <div className="fs-xs font-bold text-[var(--c-steel)] flex items-center gap-1 mt-0.5">
-              <Flame className="w-3 h-3 shrink-0 text-[var(--c-steel)]" /> {streak}-day streak — day{' '}
-              {cycleDay} of 7
-              <span className="hidden sm:inline">
-                . Bigger prizes the longer you keep it alive.
+              <Flame className="w-3 h-3 shrink-0 text-[var(--c-steel)]" />
+              {/* U26: no "0-day streak" for a new player, and no stray space before the "." */}
+              <span>
+                {streak > 0
+                  ? `${streak}-day streak — day ${cycleDay} of 7`
+                  : `Start your streak — day ${cycleDay} of 7`}
+                <span className="hidden sm:inline">
+                  . Bigger prizes the longer you keep it alive.
+                </span>
               </span>
             </div>
           </div>
@@ -241,13 +246,17 @@ function UtilityButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`btn-pop w-9 h-9 flex items-center justify-center ink-border-sm shadow-hard-black-xs ${
+      // U24: icon-only on a phone (title = long-press hint), labelled from sm up.
+      className={`btn-pop min-w-9 h-9 px-0 sm:px-2 gap-1.5 flex items-center justify-center ink-border-sm shadow-hard-black-xs ${
         tone === 'ink'
           ? 'bg-[var(--c-ink)] text-[var(--c-paper)]'
           : 'bg-[var(--c-steel)] text-[var(--c-paper)]'
       }`}
     >
       {icon}
+      <span aria-hidden className="hidden lg:inline heading-font fs-xs whitespace-nowrap">
+        {label.toUpperCase()}
+      </span>
     </button>
   );
 }
@@ -409,15 +418,62 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
   ];
   const liveTiles: Tile[] = liveTileDefs.map((t) => ({ ...t, disabled: needsAccount(t.key) }));
 
-  // Playable tiles first, then whatever this account can't open yet; a locked
-  // PLAY goes after all the live ones (it used to be the biggest tile on the
-  // screen and a dead end for every non-creator account).
-  const tiles: Tile[] = [
-    ...(cpuLocked ? [] : [playTile]),
-    ...liveTiles.filter((t) => !t.disabled),
-    ...(cpuLocked ? [playTile] : []),
-    ...liveTiles.filter((t) => t.disabled),
+  // U23: grouped, so a phone reads three short sections instead of four
+  // screens of equal tiles. Within a group, playable tiles come first.
+  const GROUPS: { id: string; label: string; keys: MetaScreen[] }[] = [
+    { id: 'cards', label: 'CARDS', keys: ['collection', 'decks', 'store', 'grading', 'showroom'] },
+    { id: 'trade', label: 'TRADE', keys: ['market', 'shops', 'social'] },
+    {
+      id: 'you',
+      label: 'YOU',
+      keys: ['achievements', 'battlepass', 'profile', 'history', 'submissions'],
+    },
   ];
+  const groups = GROUPS.map((g) => {
+    const inGroup = g.keys
+      .map((k) => liveTiles.find((t) => t.key === k))
+      .filter((t): t is Tile => !!t);
+    const tiles = [...inGroup.filter((t) => !t.disabled), ...inGroup.filter((t) => t.disabled)];
+    // A locked PLAY is not playable yet: last on the screen, after every live tile.
+    if (g.id === 'you' && cpuLocked) tiles.push(playTile);
+    return { ...g, tiles };
+  });
+
+  const renderTile = (t: Tile) => (
+    <button
+      key={t.key}
+      onClick={() => !t.disabled && onNavigate(t.muted ? 'howtoplay' : t.key)}
+      // aria-disabled instead of disabled: a disabled button drops out
+      // of the tab order, so keyboard/switch users could never reach
+      // the tile to hear WHY it's off. The onClick guard above keeps it
+      // inert either way, and aria-label carries the reason.
+      aria-disabled={t.disabled || undefined}
+      aria-label={t.disabled ? `${t.label} — ${t.desc}` : undefined}
+      title={
+        t.disabled
+          ? 'Create an account to unlock'
+          : t.muted
+            ? 'Not open yet — opens How to Play'
+            : undefined
+      }
+      className={`btn-pop relative w-full sm:w-56 p-3 sm:p-5 text-left ink-border-md shadow-hard-black transition-all ${t.color} ${
+        t.disabled
+          ? 'opacity-40 cursor-not-allowed'
+          : t.muted
+            ? 'grayscale opacity-80'
+            : 'hover:-translate-y-1'
+      }`}
+    >
+      {t.badge && (
+        <span className="absolute -top-2 -right-1 sm:-right-2 rotate-3 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font fs-xs px-2 py-0.5 ink-border-sm shadow-hard-black-xs">
+          {t.badge}
+        </span>
+      )}
+      {t.icon}
+      <div className="heading-font text-base sm:text-xl mt-2 sm:mt-3 leading-tight">{t.label}</div>
+      <div className="fs-xs font-bold opacity-80 mt-1">{t.desc}</div>
+    </button>
+  );
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)] relative overflow-hidden">
@@ -531,47 +587,48 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
         </h1>
       </div>
 
+      {/* U22: PLAY is the one primary action — a full-width hero, not the
+          first of fifteen equal tiles (and above the daily CLAIM). */}
+      {!cpuLocked && (
+        <div className="relative z-10 max-w-5xl mx-auto px-3 sm:px-6 mb-5 sm:mb-8">
+          <button
+            type="button"
+            onClick={() => onNavigate('play')}
+            className="btn-pop w-full flex items-center gap-3 sm:gap-5 p-4 sm:p-6 text-left bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-md shadow-hard-black-lg hover:-translate-y-1 transition-all"
+          >
+            <Swords className="w-8 h-8 sm:w-12 sm:h-12 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <span className="block heading-font text-3xl sm:text-5xl leading-tight">PLAY</span>
+              <span className="block fs-sm font-black mt-1">
+                {guest
+                  ? 'Quick match with a random deck'
+                  : 'Quick · Standard · Deep — poker against bots'}
+              </span>
+            </span>
+            <span aria-hidden className="heading-font text-3xl sm:text-5xl shrink-0">
+              ▸
+            </span>
+          </button>
+        </div>
+      )}
+
       {/* Daily login reward strip */}
       {!guest && <DailyLoginPanel />}
 
-      {/* Nav tiles: two per row on phones so the first rows sit above the fold */}
-      <div className="relative z-10 grid grid-cols-2 sm:flex sm:flex-wrap justify-center gap-3 sm:gap-5 px-3 sm:px-6 pb-8 sm:pb-10 max-w-5xl mx-auto">
-        {tiles.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => !t.disabled && onNavigate(t.muted ? 'howtoplay' : t.key)}
-            // aria-disabled instead of disabled: a disabled button drops out
-            // of the tab order, so keyboard/switch users could never reach
-            // the tile to hear WHY it's off. The onClick guard above keeps it
-            // inert either way, and aria-label carries the reason.
-            aria-disabled={t.disabled || undefined}
-            aria-label={t.disabled ? `${t.label} — ${t.desc}` : undefined}
-            title={
-              t.disabled
-                ? 'Create an account to unlock'
-                : t.muted
-                  ? 'Not open yet — opens How to Play'
-                  : undefined
-            }
-            className={`btn-pop relative w-full sm:w-56 p-3 sm:p-5 text-left ink-border-md shadow-hard-black transition-all ${t.color} ${
-              t.disabled
-                ? 'opacity-40 cursor-not-allowed'
-                : t.muted
-                  ? 'grayscale opacity-80'
-                  : 'hover:-translate-y-1'
-            }`}
-          >
-            {t.badge && (
-              <span className="absolute -top-2 -right-1 sm:-right-2 rotate-3 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font fs-xs px-2 py-0.5 ink-border-sm shadow-hard-black-xs">
-                {t.badge}
-              </span>
-            )}
-            {t.icon}
-            <div className="heading-font text-base sm:text-xl mt-2 sm:mt-3 leading-tight">
-              {t.label}
+      {/* Nav tiles, grouped: two per row on phones */}
+      <div className="relative z-10 max-w-5xl mx-auto px-3 sm:px-6 pb-8 sm:pb-10 flex flex-col gap-5 sm:gap-8">
+        {groups.map((g) => (
+          <section key={g.id} aria-labelledby={`menu-group-${g.id}`}>
+            <h2
+              id={`menu-group-${g.id}`}
+              className="heading-font fs-sm inline-block bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 mb-2 sm:mb-3"
+            >
+              {g.label}
+            </h2>
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 sm:gap-5">
+              {g.tiles.map(renderTile)}
             </div>
-            <div className="fs-xs font-bold opacity-80 mt-1">{t.desc}</div>
-          </button>
+          </section>
         ))}
       </div>
 
