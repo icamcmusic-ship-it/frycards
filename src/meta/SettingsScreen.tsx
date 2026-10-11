@@ -39,6 +39,13 @@ import {
   savePauseOnTarget,
   loadAmountsInBB,
   saveAmountsInBB,
+  loadFoldGuard,
+  saveFoldGuard,
+  loadPreActions,
+  savePreActions,
+  loadAllInConfirm,
+  saveAllInConfirm,
+  ALLIN_CONFIRMS,
   HAND_SORTS,
   type HandSort,
   loadHandSort,
@@ -96,6 +103,9 @@ export function SettingsScreen({
   const [autoDeal, setAutoDeal] = useState(loadAutoDeal);
   const [pauseOnTarget, setPauseOnTarget] = useState(loadPauseOnTarget);
   const [inBB, setInBB] = useState(loadAmountsInBB);
+  const [foldGuard, setFoldGuard] = useState(loadFoldGuard);
+  const [preActions, setPreActions] = useState(loadPreActions);
+  const [allIn, setAllIn] = useState(loadAllInConfirm);
   const [handSort, setHandSort] = useState<HandSort>(loadHandSort);
   // Two-step reset: the first press arms it, the second (within 6s) fires.
   const [resetArmed, setResetArmed] = useState(false);
@@ -445,6 +455,48 @@ export function SettingsScreen({
                 saveAmountsInBB(v);
               }}
             />
+            <ToggleRow
+              title="DON'T FOLD WHEN CHECK IS FREE"
+              blurb="FOLD (or F) while checking costs nothing checks instead."
+              on={foldGuard}
+              onChange={(v) => {
+                setFoldGuard(v);
+                saveFoldGuard(v);
+              }}
+            />
+            <ToggleRow
+              title="PRE-ACTION BUTTONS"
+              blurb="While the bots act, queue CHECK / FOLD, CHECK or CALL ANY for your turn."
+              on={preActions}
+              onChange={(v) => {
+                setPreActions(v);
+                savePreActions(v);
+              }}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="heading-font text-sm">CONFIRM BIG BETS</div>
+                <p className="text-[11px] font-bold text-[var(--c-steel)] mt-1 max-w-md">
+                  Ask before a raise that puts you all in (or half your stack). A freezeout has no
+                  rebuy.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {ALLIN_CONFIRMS.map((o) => (
+                  <PopButton
+                    key={o.id}
+                    color={allIn === o.id ? 'yellow' : 'steel'}
+                    ariaPressed={allIn === o.id}
+                    onClick={() => {
+                      setAllIn(o.id);
+                      saveAllInConfirm(o.id);
+                    }}
+                  >
+                    {o.label}
+                  </PopButton>
+                ))}
+              </div>
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="min-w-0">
                 <div className="heading-font text-sm">POWER HAND ORDER</div>

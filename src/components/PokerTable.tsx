@@ -83,7 +83,7 @@ import { CATEGORY_NAMES, cardLabel, describeHand } from '../game/poker/evaluator
 import { KEYWORD_SPECS, keywordLabel } from '../game/poker/keywords';
 import { LOCATION_TEMPLATES, ruleText } from '../game/poker/locations';
 import { minPaidHands, ordinal, placementReward } from '../game/poker/rewards';
-import { runBots } from '../game/poker/sim';
+import { runBots, styleTag } from '../game/poker/sim';
 import { isHidden, viewFor } from '../game/poker/view';
 import type { MatchResult, MatchStats } from '../lib/supabase';
 import { isVideoSrc, mediaUrl } from '../lib/media';
@@ -103,6 +103,13 @@ import {
   loadHandHelper,
   loadHandSort,
   loadPauseOnTarget,
+  loadFoldGuard,
+  loadAllInConfirm,
+  loadPreActions,
+  needsAllInConfirm,
+  potOddsPct,
+  PREFLOP_PRESETS,
+  POSTFLOP_PRESETS,
   loadTimerMode,
   saveAmountsInBB,
   saveAutoDeal,
@@ -115,7 +122,7 @@ import {
   type HandSort,
   type TimerMode,
 } from '../meta/matchPrefs';
-import { recordMatch } from '../meta/matchHistory';
+import { loadMatchHistory, placeOf, recordMatch } from '../meta/matchHistory';
 import { askConfirm } from '../meta/confirm';
 import { useReducedMotion } from '../meta/useMotionMode';
 import { CardFace } from './CardFaceV4';
@@ -667,6 +674,7 @@ export function PokerTable({
   );
 
   // ---- the driver: bots and hand starts -----------------------------------
+  const [botThink, setThink] = useState<{ seat: number; ms: number; id: number } | null>(null);
   const spotHold = !!spot?.hold;
   const awaitingDeal =
     !over && waiting.kind === 'start' && match.handNo > 0 && !autoDeal && !busted;
@@ -681,8 +689,17 @@ export function PokerTable({
     } else {
       delay = Math.max(speedMult === 0 ? 40 : 120, plan.nominal * mult);
     }
+    // U2: the acting bot's plate shows a countdown arc sized to this wait.
+    const seat = plan.seat;
+    const arm = window.setTimeout(
+      () => setThink(seat !== null && delay >= 400 ? { seat, ms: delay, id: Date.now() } : null),
+      0,
+    );
     const t = window.setTimeout(() => botDispatch(plan), delay);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(arm);
+      window.clearTimeout(t);
+    };
   }, [
     match,
     mult,
@@ -757,6 +774,64 @@ export function PokerTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myTurn, match.hand?.currentBet, match.hand?.street, match.handNo]);
 
+  // ---- action guards (S-6, S-7) and pre-actions (S-9) ----------------------
+  const [foldGuard] = useState(loadFoldGuard);
+  const [allInConfirm] = useState(loadAllInConfirm);
+  const [preActionsOn] = useState(loadPreActions);
+  const playerAct = useCallback(
+    async (action: Action) => {
+      const m = matchRef.current;
+      const o = betOptions(m, HUMAN);
+      if (action.type === 'fold' && foldGuard && o?.canCheck) {
+        // Never fold when checking is free: check instead.
+        const ok = humanAct({ type: 'check', seat: HUMAN });
+        if (ok) setNotice('Checked instead of folding — checking was free.');
+        return ok;
+      }
+      if (action.type === 'raise' && m.hand) {
+        const behind = m.seats[HUMAN].stack + m.hand.streetBet[HUMAN];
+        if (needsAllInConfirm(allInConfirm, action.to, behind)) {
+          setConfirming(true);
+          const yes = await askConfirm(
+            action.to >= behind
+              ? `Go ALL IN for ${fmtAmount(behind, null)} chips? In a freezeout there is no rebuy.`
+              : `Put ${fmtAmount(action.to, null)} of your ${fmtAmount(behind, null)} chips in?`,
+          ).finally(() => setConfirming(false));
+          if (!yes) return false;
+        }
+      }
+      return humanAct(action);
+    },
+    [humanAct, foldGuard, allInConfirm],
+  );
+  type Pre = 'checkfold' | 'check' | 'callany';
+  const [pre, setPreState] = useState<{ kind: Pre; hand: number; bet: number } | null>(null);
+  const setPre = (kind: Pre | null) =>
+    // The tail of a double-click on CHECK / CALL must not queue the next street.
+    Date.now() - lastActAt.current >= ACT_GUARD_MS &&
+    setPreState(
+      kind && match.hand ? { kind, hand: match.handNo, bet: match.hand.currentBet } : null,
+    );
+  useEffect(() => {
+    if (!pre || !myTurn) return;
+    const o = betOptions(matchRef.current, HUMAN);
+    const h0 = matchRef.current.hand;
+    const stale = pre.hand !== matchRef.current.handNo;
+    const t = window.setTimeout(() => {
+      setPreState(null);
+      if (!o || stale || !h0) return;
+      // CHECK and CHECK/FOLD fire only if the bet has not changed since.
+      if (pre.kind === 'check') {
+        if (o.canCheck) humanAct({ type: 'check', seat: HUMAN }, { auto: true });
+      } else if (pre.kind === 'checkfold') {
+        humanAct({ type: o.canCheck ? 'check' : 'fold', seat: HUMAN }, { auto: true });
+      } else {
+        humanAct({ type: o.canCheck ? 'check' : 'call', seat: HUMAN }, { auto: true });
+      }
+    }, ACT_GUARD_MS);
+    return () => window.clearTimeout(t);
+  }, [pre, myTurn, humanAct]);
+
   // ---- keyboard -------------------------------------------------------------
   useEffect(() => {
     if (over || (!myTurn && !myWindow) || castFlow || showHistory || inspect) return;
@@ -782,14 +857,15 @@ export function PokerTable({
         return;
       }
       if (!opts) return;
-      if (k === 'f') humanAct({ type: 'fold', seat: HUMAN });
+      if (k === 'f') void playerAct({ type: 'fold', seat: HUMAN });
       else if (k === 'c')
         humanAct(opts.canCheck ? { type: 'check', seat: HUMAN } : { type: 'call', seat: HUMAN });
-      else if (k === 'r' && opts.canRaise) humanAct({ type: 'raise', seat: HUMAN, to: raiseTo });
+      else if (k === 'r' && opts.canRaise)
+        void playerAct({ type: 'raise', seat: HUMAN, to: raiseTo });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [over, myTurn, myWindow, castFlow, showHistory, inspect, opts, raiseTo, humanAct]);
+  }, [over, myTurn, myWindow, castFlow, showHistory, inspect, opts, raiseTo, humanAct, playerAct]);
 
   // ---- speech bursts: clear a street's bubbles shortly after it ends --------
   const streetNow = match.hand?.street ?? '';
@@ -1243,7 +1319,10 @@ export function PokerTable({
                 </div>
               )}
               {h && (
-                <div className="relative bg-black/70 rounded-full px-3 py-0.5 heading-font text-sm text-[var(--c-yellow)] whitespace-nowrap">
+                <div
+                  key={`${h.no}-${h.street}`}
+                  className="pot-bump relative bg-black/70 rounded-full px-3 py-0.5 heading-font text-sm text-[var(--c-yellow)] whitespace-nowrap"
+                >
                   POT <Chips chips={Math.max(0, potTotal(h))} />
                   {match.jackpot > 0 && (
                     <span className="fs-xs text-white ml-2">jackpot {amt(match.jackpot)}</span>
@@ -1285,6 +1364,7 @@ export function PokerTable({
                   reduced={reduced}
                   bubble={b && b.hand === match.handNo ? b : null}
                   onInspect={setInspect}
+                  think={botThink && botThink.seat === i && clockSeat === i ? botThink : null}
                 />
               );
             })}
@@ -1368,6 +1448,9 @@ export function PokerTable({
           choiceLeft={choiceLeft}
           narrow={narrow}
           act={humanAct}
+          playerAct={playerAct}
+          pre={preActionsOn && !over ? (pre?.kind ?? null) : undefined}
+          setPre={setPre}
           openCast={(uid) => setCastFlow({ uid })}
           openLeader={(i) => setCastFlow({ leader: i })}
           onInspect={setInspect}
@@ -1424,6 +1507,7 @@ export function PokerTable({
             heldUntil={rewardHoldUntil}
             unrewarded={unrewarded}
             shareLine={shareLine}
+            deckCode={humanDeckCode}
           />
         )}
         {/* The coach sits above everything (z-70), so it steps aside while a
@@ -1694,10 +1778,13 @@ function SeatBadge({
   reduced,
   bubble,
   onInspect,
+  think,
 }: {
   key?: React.Key;
   match: Match;
   seat: number;
+  /** U2: the bot's wait before it acts, drawn as a draining arc. */
+  think?: { ms: number; id: number } | null;
   pos: SeatPos;
   narrow: boolean;
   fourColor: boolean;
@@ -1717,6 +1804,7 @@ function SeatBadge({
   const units = h?.units.filter((u) => u.seat === seat) ?? [];
   const bet = narrow && h ? h.streetBet[seat] : 0;
   const shown = !!h && h.holes[seat].length > 0 && h.holes[seat].every((c) => c.public);
+  const [pop, setPop] = useState(false);
   const tags: string[] = [];
   if (h?.button === seat) tags.push('D');
   if (h?.sbSeat === seat) tags.push('SB');
@@ -1782,6 +1870,29 @@ function SeatBadge({
             ON THE CLOCK
           </span>
         )}
+        {think && !reduced && (
+          <svg
+            key={think.id}
+            aria-hidden
+            viewBox="0 0 20 20"
+            className="absolute -top-2.5 -left-2.5 w-5 h-5 drop-shadow"
+            data-think-arc
+          >
+            <circle cx="10" cy="10" r="8" fill="var(--c-ink)" />
+            <circle
+              cx="10"
+              cy="10"
+              r="6"
+              fill="none"
+              stroke="var(--c-yellow)"
+              strokeWidth="4"
+              pathLength={100}
+              strokeDasharray="100"
+              transform="rotate(-90 10 10)"
+              style={{ animation: `think-drain ${think.ms}ms linear forwards` }}
+            />
+          </svg>
+        )}
         <button
           onClick={() => onInspect(s.leader)}
           title={`${s.leader.name} — inspect Leader`}
@@ -1790,9 +1901,15 @@ function SeatBadge({
           <LeaderArt def={s.leader} size={narrow ? 22 : 30} />
         </button>
         <div className="relative min-w-0 flex-1 leading-tight">
-          <div className="text-[11px] font-black truncate" title={s.name}>
+          <button
+            type="button"
+            onClick={() => setPop((v) => !v)}
+            aria-expanded={pop}
+            className="block w-full text-left text-[11px] font-black truncate hover:underline"
+            title={`${s.name} — what has this seat done?`}
+          >
             {s.name}
-          </div>
+          </button>
           <div className="flex items-center gap-1 text-[11px]">
             <Chips chips={s.stack} className="text-[var(--c-yellow)]" />
             <NerveMeter nerve={s.nerve} compact />
@@ -1852,6 +1969,62 @@ function SeatBadge({
           </button>
         ))}
       </div>
+      {pop && <SeatPopover match={match} seat={seat} onClose={() => setPop(false)} />}
+    </div>
+  );
+}
+
+/** U9: tap a seat's name — what it did this hand, what hit it, its state. */
+function SeatPopover({
+  match,
+  seat,
+  onClose,
+}: {
+  match: Match;
+  seat: number;
+  onClose: () => void;
+}) {
+  const amt = useAmt();
+  const s = match.seats[seat];
+  const h = match.hand;
+  const lines = match.log
+    .filter((e) => e.hand === match.handNo && e.text.includes(s.name.split(' · ')[0]))
+    .slice(-8)
+    .map((e) => e.text);
+  const castsBy = h?.casts.filter((c) => c.seat === seat).length ?? 0;
+  const castsAt = h?.casts.filter((c) => c.target === seat).length ?? 0;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div
+      role="dialog"
+      aria-label={`${s.name} this hand`}
+      className="absolute z-40 top-full mt-1 left-1/2 -translate-x-1/2 w-[220px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-2 text-[11px] font-bold text-left"
+    >
+      <div className="flex items-center gap-1 mb-1">
+        <span className="heading-font text-xs flex-1 truncate">{s.name}</span>
+        <span className="fs-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-1">
+          {styleTag(s.persona)}
+        </span>
+        <button onClick={onClose} aria-label="Close" className="px-1">
+          ✕
+        </button>
+      </div>
+      <div className="text-[var(--c-steel)]">
+        Stack {amt(s.stack)} · nerve {s.nerve}
+        {tilted(s) ? ' (TILTED)' : ''} · {s.hand.length} power card
+        {s.hand.length === 1 ? '' : 's'}
+      </div>
+      <div className="text-[var(--c-steel)]">
+        This hand: cast {castsBy} · targeted {castsAt} ·{' '}
+        {h?.units.filter((u) => u.seat === seat).length ?? 0} unit(s) out
+      </div>
+      <ul className="mt-1 max-h-32 overflow-y-auto list-disc pl-4">
+        {lines.length ? lines.map((l, k) => <li key={k}>{l}</li>) : <li>Nothing yet.</li>}
+      </ul>
     </div>
   );
 }
@@ -1909,6 +2082,9 @@ function HumanPanel({
   choiceLeft,
   narrow,
   act,
+  playerAct,
+  pre,
+  setPre,
   openCast,
   openLeader,
   onInspect,
@@ -1938,6 +2114,11 @@ function HumanPanel({
   choiceLeft: number | null;
   narrow: boolean;
   act: (a: Action) => void;
+  /** FOLD / RAISE through the guards (fold-when-free, all-in confirm). */
+  playerAct: (a: Action) => void;
+  /** Pre-action queued while waiting (undefined: pre-actions off). */
+  pre: 'checkfold' | 'check' | 'callany' | null | undefined;
+  setPre: (p: 'checkfold' | 'check' | 'callany' | null) => void;
   openCast: (uid: string) => void;
   openLeader: (i: number) => void;
   onInspect: (d: CardDef) => void;
@@ -2128,7 +2309,11 @@ function HumanPanel({
           <div className="flex items-center gap-2 fs-xs font-bold text-white/60 min-w-0">
             <span className="truncate">
               POWERS ({me.hand.length}/{MODES[view.mode].handCap})
-              {narrow ? '' : ` · deck ${me.drawPile.length} · discard ${me.discard.length}`}
+              {narrow
+                ? hand.length > 3
+                  ? ' · swipe ▸'
+                  : ''
+                : ` · deck ${me.drawPile.length} · discard ${me.discard.length}`}
             </span>
             {me.hand.length > 1 && (
               <button
@@ -2140,7 +2325,15 @@ function HumanPanel({
               </button>
             )}
           </div>
-          <div className="power-dock flex gap-1.5 overflow-x-auto pb-1">
+          {/* U21: a phone shows ~3.5 cards; fade the edge and say there is more. */}
+          <div
+            className={cn(
+              'power-dock flex gap-1.5 overflow-x-auto pb-1',
+              narrow &&
+                hand.length > 3 &&
+                '[mask-image:linear-gradient(to_right,black_82%,transparent)] pr-6',
+            )}
+          >
             {me.hand.length === 0 && (
               <span className="fs-xs text-white/50">No power cards in hand.</span>
             )}
@@ -2271,6 +2464,12 @@ function HumanPanel({
             <div className="flex items-center justify-between text-[11px] font-bold">
               <span>
                 To call <Chips chips={owe} /> · pot <Chips chips={pot} />
+                {owe > 0 && (
+                  <span title="Pot odds: the share of the final pot a call must win to break even">
+                    {' '}
+                    · need {potOddsPct(owe, pot)}%
+                  </span>
+                )}
               </span>
               {turnLeft !== null && (
                 <span className={cn(inBank ? 'text-[var(--c-red)]' : 'text-white/70')}>
@@ -2285,7 +2484,7 @@ function HumanPanel({
                 label="FOLD"
                 hotkey="F"
                 tone="ink"
-                onClick={() => act({ type: 'fold', seat: HUMAN })}
+                onClick={() => playerAct({ type: 'fold', seat: HUMAN })}
               />
               {opts.canCheck ? (
                 <ActionButton
@@ -2307,7 +2506,7 @@ function HumanPanel({
                   label={`${h!.currentBet === 0 ? 'BET' : 'RAISE TO'} ${amt(raiseTo)}${raiseTo >= me.stack + h!.streetBet[HUMAN] ? ' ALL IN' : ''}`}
                   hotkey="R"
                   tone="yellow"
-                  onClick={() => act({ type: 'raise', seat: HUMAN, to: raiseTo })}
+                  onClick={() => playerAct({ type: 'raise', seat: HUMAN, to: raiseTo })}
                 />
               )}
             </div>
@@ -2328,20 +2527,25 @@ function HumanPanel({
                   className="flex-1 accent-[var(--c-yellow)]"
                   aria-label="Raise amount (pot limit)"
                 />
-                {[
-                  ['½', 0.5],
-                  ['¾', 0.75],
-                  ['POT', 1],
-                ].map(([l, f]) => (
+                {(h!.street === 'preflop' ? PREFLOP_PRESETS : POSTFLOP_PRESETS).map((p) => (
                   <button
-                    key={l}
-                    onClick={() => setRaiseTo(potRaise(f as number))}
+                    key={p.label}
+                    onClick={() =>
+                      setRaiseTo(
+                        p.bb
+                          ? Math.max(
+                              opts.minRaiseTo,
+                              Math.min(opts.maxRaiseTo, Math.round(p.bb * h!.bb)),
+                            )
+                          : potRaise(p.pot ?? 1),
+                      )
+                    }
                     className={cn(
                       'btn-pop fs-xs font-black px-1.5 ink-border-sm bg-[var(--c-steel)] text-[var(--c-paper)]',
                       narrow ? 'min-h-[40px] min-w-[40px]' : 'py-0.5 min-h-[28px]',
                     )}
                   >
-                    {l}
+                    {p.label}
                   </button>
                 ))}
               </div>
@@ -2357,6 +2561,43 @@ function HumanPanel({
                 : 'Waiting on the table…'}
           </div>
         )}
+        {pre !== undefined &&
+          !myTurn &&
+          !myWindow &&
+          !myChoice &&
+          h &&
+          !h.done &&
+          !h.folded[HUMAN] &&
+          !me.busted &&
+          h.dealtIn[HUMAN] &&
+          me.stack > 0 && (
+            <div className="flex gap-1" role="group" aria-label="Pre-select your next action">
+              {(
+                [
+                  ['checkfold', 'CHECK / FOLD'],
+                  ['check', 'CHECK'],
+                  ['callany', 'CALL ANY'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  aria-pressed={pre === id}
+                  aria-label={`Pre-select ${label}`}
+                  onClick={() => setPre(pre === id ? null : id)}
+                  className={cn(
+                    'btn-pop flex-1 heading-font fs-xs px-1 ink-border-sm',
+                    narrow ? 'min-h-[36px]' : 'py-1',
+                    pre === id
+                      ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                      : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                  )}
+                >
+                  {pre === id ? '✓ ' : ''}
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
       </div>
     </div>
   );
@@ -3072,6 +3313,7 @@ function GameOver({
   heldUntil,
   unrewarded,
   shareLine,
+  deckCode,
 }: {
   match: Match;
   conceded: boolean;
@@ -3084,7 +3326,15 @@ function GameOver({
   heldUntil: number | null;
   unrewarded: boolean;
   shareLine?: (place: number, seats: number, hands: number) => string;
+  deckCode?: string;
 }) {
+  const [copied, setCopied] = useState(false);
+  // U20: the match before this one (this one was recorded first).
+  const [prevPlace] = useState(() => {
+    const prev = loadMatchHistory()[1];
+    return prev ? placeOf(prev) : null;
+  });
+  const st = match.stats?.[HUMAN];
   const live = standings(match);
   const concededNow = conceded && match.phase !== 'over' && !match.seats[HUMAN].busted;
   // Conceding takes the lowest place still open, whatever your stack — rank
@@ -3111,7 +3361,7 @@ function GameOver({
   }, [heldUntil]);
   return (
     <div className="absolute inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
-      <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-black max-w-md w-full p-5 flex flex-col gap-3">
+      <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-black max-w-md w-full max-h-full overflow-y-auto p-5 flex flex-col gap-3">
         <h2 className="heading-font text-2xl text-center">
           {/* A16: "CONCEDED" only when the concede actually decided the place. */}
           {concededNow
@@ -3145,6 +3395,37 @@ function GameOver({
             );
           })}
         </ol>
+        {st && (
+          <dl
+            className="grid grid-cols-3 gap-1 text-center fs-xs font-bold"
+            aria-label="Your match in numbers"
+          >
+            {(
+              [
+                ['HANDS WON', `${st.hands_won}/${match.handNo}`],
+                ['SHOWDOWNS', st.showdown_wins],
+                ['BIGGEST POT', st.biggest_pot ? `◎${fmtAmount(st.biggest_pot, null)}` : '—'],
+                ['POWERS CAST', st.powers_cast],
+                ['CALLED OUT', st.called_out],
+                ['BEST HAND', st.best_category >= 0 ? CATEGORY_NAMES[st.best_category] : '—'],
+              ] as const
+            ).map(([k, v]) => (
+              <div key={k} className="ink-border-sm px-1 py-0.5 bg-white/60">
+                <dt className="text-[var(--c-steel)] fs-xs">{k}</dt>
+                <dd className="heading-font text-xs">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {prevPlace !== null && !concededNow && (
+          <p className="text-center fs-xs font-bold text-[var(--c-steel)]">
+            {prevPlace === place
+              ? `Same as last match (${ordinal(prevPlace)}).`
+              : prevPlace > place
+                ? `▲ Up from ${ordinal(prevPlace)} last match.`
+                : `▼ Down from ${ordinal(prevPlace)} last match.`}
+          </p>
+        )}
         {reward != null ? (
           <div className="text-center heading-font text-sm">
             +{fmtCredits(reward.reward)} CREDITS · +{reward.xp_gained} XP · +{reward.bp_xp_gained}{' '}
@@ -3178,7 +3459,7 @@ function GameOver({
               : `A finish below 1st pays only after ${minPaidHands(match.seats.length)} hands — this match lasted ${match.handNo}.`}
           </div>
         )}
-        <div className="flex gap-2 justify-center">
+        <div className="flex flex-wrap gap-2 justify-center">
           <button
             onClick={onRematch}
             className="btn-pop heading-font text-sm px-4 py-2 bg-[var(--c-yellow)] text-[#111] ink-border-sm shadow-hard-black-xs"
@@ -3190,6 +3471,24 @@ function GameOver({
             className="btn-pop heading-font text-sm px-4 py-2 bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-sm shadow-hard-black-xs"
           >
             BACK TO MENU
+          </button>
+          <button
+            onClick={() => {
+              const text = [
+                shareLine
+                  ? shareLine(place, match.seats.length, match.handNo)
+                  : `FryCards Poker · ${ordinal(place)} of ${match.seats.length} · ${MODES[match.mode].label} · ${match.handNo} hands`,
+                `Seed ${match.seed}`,
+                ...(deckCode ? [deckCode] : []),
+              ].join('\n');
+              navigator.clipboard?.writeText(text).then(
+                () => setCopied(true),
+                () => setCopied(false),
+              );
+            }}
+            className="btn-pop heading-font text-sm px-4 py-2 bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
+          >
+            {copied ? 'COPIED ✓' : 'SHARE RESULT'}
           </button>
         </div>
         <p className="text-center fs-xs text-[var(--c-steel)] flex items-center justify-center gap-1">

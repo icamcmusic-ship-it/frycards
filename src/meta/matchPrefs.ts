@@ -378,3 +378,66 @@ export function fmtAmount(chips: number, bb: number | null): string {
 export function rewardFloorMs(modeMinMatchMs: number, seats: number): number {
   return Math.max(45_000, Math.round((modeMinMatchMs * seats) / 6));
 }
+
+// ---------------------------------------------------------------------------
+// Action guards and aids (AUDIT §3.1.2 S-6 … S-9)
+// ---------------------------------------------------------------------------
+/** S-6: a FOLD while checking is free becomes a CHECK. Default ON. */
+export const FOLD_GUARD_KEY = 'frycards:fold-guard';
+export const loadFoldGuard = () => loadFlag(FOLD_GUARD_KEY, true);
+export const saveFoldGuard = (on: boolean) => saveFlag(FOLD_GUARD_KEY, on);
+
+/** S-7: confirm an all-in. */
+export const ALLIN_CONFIRMS = [
+  { id: 'off', label: 'OFF' },
+  { id: 'allin', label: 'EVERY ALL-IN' },
+  { id: 'half', label: '≥ HALF MY STACK' },
+] as const;
+export type AllInConfirm = (typeof ALLIN_CONFIRMS)[number]['id'];
+export const ALLIN_CONFIRM_KEY = 'frycards:allin-confirm';
+export function loadAllInConfirm(): AllInConfirm {
+  try {
+    const raw = window.localStorage.getItem(ALLIN_CONFIRM_KEY);
+    return ALLIN_CONFIRMS.find((o) => o.id === raw)?.id ?? 'allin';
+  } catch {
+    return 'allin';
+  }
+}
+export function saveAllInConfirm(id: AllInConfirm): void {
+  try {
+    window.localStorage.setItem(ALLIN_CONFIRM_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+/** Should a raise to `to` ask first? `behind` is the stack plus this street's bet. */
+export function needsAllInConfirm(mode: AllInConfirm, to: number, behind: number): boolean {
+  if (mode === 'off') return false;
+  if (mode === 'allin') return to >= behind;
+  return to * 2 >= behind;
+}
+
+/** S-9: pre-action buttons (check/fold, check, call any) while waiting. */
+export const PRE_ACTIONS_KEY = 'frycards:pre-actions';
+export const loadPreActions = () => loadFlag(PRE_ACTIONS_KEY, true);
+export const savePreActions = (on: boolean) => saveFlag(PRE_ACTIONS_KEY, on);
+
+/** S-8: bet-size presets. Pre-flop in big blinds, post-flop as a share of the pot. */
+export const PREFLOP_PRESETS: { label: string; bb?: number; pot?: number }[] = [
+  { label: '2×', bb: 2 },
+  { label: '2.5×', bb: 2.5 },
+  { label: '3×', bb: 3 },
+  { label: 'POT', pot: 1 },
+];
+export const POSTFLOP_PRESETS: { label: string; bb?: number; pot?: number }[] = [
+  { label: '⅓', pot: 1 / 3 },
+  { label: '½', pot: 0.5 },
+  { label: '¾', pot: 0.75 },
+  { label: 'POT', pot: 1 },
+];
+
+/** S-12: the share of the final pot a call must win to break even. */
+export function potOddsPct(toCall: number, pot: number): number {
+  if (toCall <= 0) return 0;
+  return Math.round((toCall / (pot + toCall)) * 100);
+}

@@ -966,3 +966,31 @@ html[data-scheme='dark'] select:not(.poker-table *) {
   transform: rotate(-8deg);
   letter-spacing: -0.04em;
 }
+
+/* U2: the acting bot's countdown arc drains over its planned wait. */
+@keyframes think-drain {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 100;
+  }
+}
+/* U7: the pot bumps as a street's bets slide in. */
+@keyframes pot-bump-kf {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.pot-bump {
+  animation: pot-bump-kf 0.45s ease-out;
+}
+html[data-motion='reduced'] .pot-bump {
+  animation: none;
+}
