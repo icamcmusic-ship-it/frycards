@@ -281,21 +281,29 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
             </div>
           )}
         </div>
-        <div className="px-2 fs-xs font-bold leading-tight flex-1">{tier.label}</div>
+        <div className="px-2 fs-xs font-bold leading-tight flex-1">
+          {/* U57: "2750 Credits" reads as 2,750 like the tile. */}
+          {tier.label.replace(/\b\d{4,}\b/g, (n) => fmtCredits(Number(n)))}
+        </div>
         <div className="p-2">
           {state === 'claimed' ? (
             <div className="flex items-center justify-center gap-1 heading-font fs-xs py-1.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
               <Check className="w-3 h-3" /> CLAIMED
             </div>
-          ) : (
+          ) : unlocked ? (
             <PopButton
-              color={unlocked ? 'yellow' : 'steel'}
+              color="yellow"
               className="w-full"
-              disabled={!unlocked || busyTier !== null || claimAll !== null}
+              disabled={busyTier !== null || claimAll !== null}
               onClick={() => handleClaim(tier)}
             >
-              {busyTier === tier.tier ? 'CLAIMING…' : unlocked ? 'CLAIM ▸' : 'LOCKED'}
+              {busyTier === tier.tier ? 'CLAIMING…' : 'CLAIM ▸'}
             </PopButton>
+          ) : (
+            // A locked tier is not a button (U57/U58): the lock says it all.
+            <div className="flex items-center justify-center gap-1 fs-xs font-bold py-1.5 text-[var(--c-steel)]">
+              <Lock className="w-3 h-3" aria-hidden /> {tier.tier * BP_XP_PER_TIER - xp} XP TO GO
+            </div>
           )}
         </div>
       </div>
@@ -305,6 +313,32 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="BATTLE PASS" onBack={onBack} />
+      {/* U56: the season line stays in view while the tiers scroll. */}
+      {season && !loading && (
+        <div
+          className="sticky top-[52px] z-20 bg-[var(--c-yellow)] text-[var(--c-ink)] border-b-2 border-[var(--c-ink)] px-4 py-1 heading-font fs-xs flex flex-wrap gap-x-2 justify-center"
+          data-testid="bp-strip"
+        >
+          <span>{(season.name || 'SEASON').toUpperCase()}</span>
+          <span>
+            · TIER {currentTier}
+            {currentTier < tiers.length ? ` → ${currentTier + 1}` : ''}
+          </span>
+          <span>
+            · {xp - currentTier * BP_XP_PER_TIER}/{BP_XP_PER_TIER} XP
+          </span>
+          {season.ends_at && (
+            <span>
+              · ENDS IN{' '}
+              {Math.max(
+                0,
+                Math.ceil((new Date(season.ends_at).getTime() - Date.now()) / 86_400_000),
+              )}
+              D
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="p-5 max-w-6xl mx-auto">
         {loading ? (

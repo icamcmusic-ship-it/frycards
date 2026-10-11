@@ -261,7 +261,16 @@ function UtilityButton({
   );
 }
 
-export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }) {
+export function MainMenu({
+  onNavigate,
+  onRematch,
+  rematchLabel,
+}: {
+  onNavigate: (s: MetaScreen) => void;
+  /** U22: sit straight back down at the last table setup. */
+  onRematch?: () => void;
+  rematchLabel?: string;
+}) {
   const { profile, guest, signOut, shopItems } = useMeta();
   // Rewards waiting to be claimed — badged on the MISSIONS tile, which until
   // now gave no hint that anything had finished.
@@ -609,6 +618,16 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
               ▸
             </span>
           </button>
+          {onRematch && rematchLabel && (
+            <button
+              type="button"
+              onClick={onRematch}
+              className="btn-pop mt-2 w-full sm:w-auto heading-font fs-sm px-3 py-2 bg-[var(--c-ink)] text-[var(--c-yellow)] ink-border-sm shadow-hard-black-xs text-left"
+            >
+              ↻ REMATCH LAST SETUP{' '}
+              <span className="font-bold text-[var(--c-paper)]/80">· {rematchLabel}</span>
+            </button>
+          )}
         </div>
       )}
 

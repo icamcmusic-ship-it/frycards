@@ -9,6 +9,7 @@ import {
 } from './lib/supabase';
 import { minPaidHands } from './game/poker/rewards';
 import { holdLabel, loadPending, submitResult, submitting } from './meta/pendingResult';
+import { describeSetup, loadLastSetup, saveLastSetup } from './meta/lastSetup';
 import { legalModes } from './game/poker/deck';
 import { MODES, MODE_IDS, MAX_SEATS, MIN_SEATS, type ModeId } from './game/poker/constants';
 import { POOL_BY_ID, applyCardPool } from './game/poker/cardpool';
@@ -651,7 +652,7 @@ function AppInner({
    * that must not happen under a live game (the card-pool RETRY). */
   onMatchChange: (mounted: boolean) => void;
 }) {
-  const { session, guest, loading, bootError, retryBoot, profile, shopItems, dataLoading } =
+  const { session, guest, loading, bootError, retryBoot, profile, shopItems, dataLoading, decks } =
     useMeta();
   const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
   const { toast } = useToast();
@@ -674,6 +675,10 @@ function AppInner({
   const setMatch = (m: PlaySetup | null) => {
     setMatchState(m);
     onMatchChange(m !== null);
+  };
+  const startMatch = (m: PlaySetup) => {
+    saveLastSetup(m);
+    setMatch(m);
   };
 
   // Screens are real history entries (#/store/packs): browser / Android back
@@ -699,6 +704,18 @@ function AppInner({
   const { route } = router;
   const screen: MetaScreen = route.screen;
   const go = router.navigate;
+  // U22: the last table, re-checked against the saved decks (a deleted or
+  // edited deck is not silently replayed).
+  const lastSetup = (() => {
+    if (screen !== 'menu' || cpuLocked) return null;
+    const l = loadLastSetup();
+    if (!l || l.kind !== 'custom') return l;
+    if (l.unrewarded) return l; // a pasted deck: its list travels with it
+    const fresh = decks.find((d) => d.id === l.deck.id);
+    return fresh && legalModes(fresh.leader_id, fresh.card_ids).includes(l.mode)
+      ? { ...l, deck: fresh }
+      : null;
+  })();
   const back = () => router.back('menu');
 
   // What the 3D Showroom opens on when it is reached from a deep link (the
@@ -806,7 +823,7 @@ function AppInner({
         // only covers the moment before the profile (role) has loaded.
         if (!rulesKnown) return <ScreenFallback />;
         return (
-          <PlayScreen onStart={setMatch} onBack={back} practice={route.sub[0] === 'practice'} />
+          <PlayScreen onStart={startMatch} onBack={back} practice={route.sub[0] === 'practice'} />
         );
       case 'store':
         return <StoreScreen onBack={back} />;
@@ -865,7 +882,13 @@ function AppInner({
           />
         );
       default:
-        return <MainMenu onNavigate={go} />;
+        return (
+          <MainMenu
+            onNavigate={go}
+            onRematch={lastSetup ? () => startMatch(lastSetup) : undefined}
+            rematchLabel={lastSetup ? describeSetup(lastSetup) : undefined}
+          />
+        );
     }
   })();
 

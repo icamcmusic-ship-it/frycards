@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BingoPanel } from './BingoPanel';
-import { Trophy, Grid3x3, Target, Coins, Ticket, Package, Zap, Check } from 'lucide-react';
+import { Trophy, Grid3x3, Target, Coins, Ticket, Package, Zap, Check, Lock } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   fetchAchievements,
@@ -343,7 +343,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <MetaHeader title="MISSIONS & ACHIEVEMENTS" onBack={onBack} />
+      <MetaHeader title="MISSIONS" onBack={onBack} />
       <div className="p-5 max-w-5xl mx-auto">
         <Tabs<Tab>
           ariaLabel="Missions and achievements"
@@ -485,19 +485,18 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                             <div className="flex items-center gap-1 heading-font fs-xs px-3 py-1.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
                               <Check className="w-3 h-3" /> CLAIMED
                             </div>
+                          ) : locked && !done ? (
+                            // U58: a lock and the reason, not a grey button shaped like CLAIM.
+                            <span className="flex items-center gap-1 fs-xs font-bold text-[var(--c-steel)]">
+                              <Lock className="w-3 h-3" aria-hidden /> NEEDS BOT MATCHES
+                            </span>
                           ) : (
                             <PopButton
                               color={done ? 'yellow' : 'steel'}
                               disabled={!done || !!busyId}
                               onClick={() => handleClaimMission(m)}
                             >
-                              {busyId === m.id
-                                ? 'CLAIMING…'
-                                : done
-                                  ? 'CLAIM ▸'
-                                  : locked
-                                    ? 'LOCKED'
-                                    : 'IN PROGRESS'}
+                              {busyId === m.id ? 'CLAIMING…' : done ? 'CLAIM ▸' : 'IN PROGRESS'}
                             </PopButton>
                           )}
                         </div>
