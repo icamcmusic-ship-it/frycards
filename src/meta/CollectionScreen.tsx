@@ -28,6 +28,9 @@ import {
   cardMatchesFilters,
   compareCards,
   ruleFilterLabel,
+  tileMatchesVariant,
+  VARIANT_FILTERS,
+  variantFilterLabel,
   deletePreset,
   isFilters,
   isPresetList,
@@ -64,6 +67,7 @@ import {
   type QuicksellManyItem,
 } from '../lib/supabase';
 import { GradedCard, fetchGradedCards, gradedQuicksellPrice } from './grading';
+import { asVariant, type CardVariant, type OwnedVariant, VARIANT_META } from './variants';
 import { GradedSlab } from './GradedSlab';
 import { SlabDetailModal, MAX_SHOWCASE } from './SlabDetailModal';
 import { AnimatePresence } from 'motion/react';
@@ -134,10 +138,15 @@ const CollectionTile = React.memo(function CollectionTile({
   wished,
   isNew,
   spare,
+  variant,
+  variantFoil,
   onInspect,
 }: {
   def: CardDef;
-  kind: 'normal' | 'foil' | 'serialized';
+  kind: 'normal' | 'foil' | 'serialized' | 'variant';
+  /** kind 'variant': which variant, and whether these copies are also foil. */
+  variant?: CardVariant;
+  variantFoil?: boolean;
   count?: number;
   serialNumber?: number;
   serialCap?: number;
@@ -147,7 +156,12 @@ const CollectionTile = React.memo(function CollectionTile({
   isNew?: boolean;
   /** U37/U36: copies free to quicksell (not deck-locked or Serialized). */
   spare?: number;
-  onInspect: (def: CardDef, foil: boolean, serial?: { number: number; cap: number }) => void;
+  onInspect: (
+    def: CardDef,
+    foil: boolean,
+    serial?: { number: number; cap: number },
+    variant?: CardVariant,
+  ) => void;
 }) {
   const size = narrow ? 'standard' : 'full';
   const { w, h } = CARD_SIZES[size];
@@ -157,8 +171,8 @@ const CollectionTile = React.memo(function CollectionTile({
     [serialNumber, serialCap],
   );
   const onClick = React.useCallback(
-    () => onInspect(def, kind === 'foil', serial),
-    [onInspect, def, kind, serial],
+    () => onInspect(def, kind === 'foil' || (kind === 'variant' && !!variantFoil), serial, variant),
+    [onInspect, def, kind, serial, variant, variantFoil],
   );
   return (
     <div
@@ -173,10 +187,21 @@ const CollectionTile = React.memo(function CollectionTile({
         def={def}
         size={size}
         count={kind !== 'serialized' ? count : undefined}
-        foil={kind === 'foil'}
+        foil={kind === 'foil' || (kind === 'variant' && !!variantFoil)}
+        variant={kind === 'variant' ? variant : undefined}
         serial={serial}
         dimmed={kind === 'normal' && count === 0}
-        badge={isNew ? '● NEW' : wished ? '♥ WISH' : spare ? `${spare} SPARE` : undefined}
+        badge={
+          isNew
+            ? '● NEW'
+            : kind === 'variant' && variant
+              ? `◆ ${VARIANT_META[variant].short}`
+              : wished
+                ? '♥ WISH'
+                : spare
+                  ? `${spare} SPARE`
+                  : undefined
+        }
         onClick={onClick}
       />
     </div>
@@ -251,6 +276,7 @@ export function CollectionScreen({
     decks,
     dataLoading,
     serializedCards,
+    cardVariants,
   } = useMeta();
 
   // The sticky search/filter bar sits just under the (sticky) header, whose
@@ -276,7 +302,7 @@ export function CollectionScreen({
     isFilters,
   );
   const filters = useMemo(() => sanitizeFilters(storedFilters), [storedFilters]);
-  const { view, type, rarity, color, tier, rule, sort } = filters;
+  const { view, type, rarity, color, tier, rule, sort, variant: variantSel } = filters;
   const setFilter = <K extends keyof CollectionFilters>(k: K, v: CollectionFilters[K]) =>
     setStoredFilters({ ...filters, [k]: v });
   const [presets, setPresets] = usePersistedState<FilterPreset[]>(
@@ -360,12 +386,18 @@ export function CollectionScreen({
     def: CardDef;
     foil?: boolean;
     serial?: { number: number; cap: number };
+    variant?: CardVariant;
   } | null>(null);
   const [sellError, setSellError] = useState('');
   // Stable, so the memoized grid tiles are not re-rendered by unrelated state.
   const openInspector = useCallback(
-    (def: CardDef, foil: boolean, serial?: { number: number; cap: number }) => {
-      setInspect({ def, foil, serial });
+    (
+      def: CardDef,
+      foil: boolean,
+      serial?: { number: number; cap: number },
+      variant?: CardVariant,
+    ) => {
+      setInspect({ def, foil, serial, variant });
       setSellError('');
       setPinHint(false);
     },
@@ -445,6 +477,33 @@ export function CollectionScreen({
     return m;
   }, [collection]);
 
+  // Variant copies (Shattered / elemental) are a subset of `owned`'s counts
+  // but their own collection entries, keyed card + foil + variant. Plain
+  // sells and the plain/foil tiles only ever see the copies that are NOT
+  // variants (the server keeps variants back from a plain sale).
+  const variantsByCard = useMemo(() => {
+    const m = new Map<string, OwnedVariant[]>();
+    for (const v of cardVariants ?? []) {
+      if (v.quantity <= 0) continue;
+      const list = m.get(v.card_id);
+      if (list) list.push(v);
+      else m.set(v.card_id, [v]);
+    }
+    return m;
+  }, [cardVariants]);
+  const plainOwned = useMemo(() => {
+    if (variantsByCard.size === 0) return owned;
+    const m = new Map<string, { q: number; f: number }>(owned);
+    for (const [id, vs] of variantsByCard) {
+      const o = m.get(id);
+      if (!o) continue;
+      const vq = vs.filter((v) => !v.foil).reduce((n, v) => n + v.quantity, 0);
+      const vf = vs.filter((v) => v.foil).reduce((n, v) => n + v.quantity, 0);
+      m.set(id, { q: Math.max(0, o.q - vq), f: Math.max(0, o.f - vf) });
+    }
+    return m;
+  }, [owned, variantsByCard]);
+
   const serializedByCard = useMemo(() => {
     const m = new Map<string, typeof serializedCards>();
     for (const s of serializedCards) {
@@ -491,7 +550,7 @@ export function CollectionScreen({
     const rows: { rarity: string; normal: number; foil: number }[] = [];
     for (const c of POOL) {
       if (c.type === 'Leader') continue;
-      const o = owned.get(c.id);
+      const o = plainOwned.get(c.id);
       if (!o) continue;
       const reserved = serializedByCard.get(c.id)?.length || 0;
       const s = sellableSplit(o, lockedByDecks.get(c.id) || 0, reserved);
@@ -500,7 +559,7 @@ export function CollectionScreen({
       rows.push({ rarity: c.rarity || 'Common', normal: s.normal, foil: s.total - s.normal });
     }
     return { spareByCard: byCard, spareValues: spareValueByRarity(rows) };
-  }, [owned, lockedByDecks, serializedByCard]);
+  }, [plainOwned, lockedByDecks, serializedByCard]);
   const spareCount = (r: string) => spareValues.get(r)?.cards ?? 0;
   // Which rarity's bulk sell is running (null = idle) — keyed so the OTHER
   // rarity's button doesn't also read "SELLING…" while one runs.
@@ -520,7 +579,7 @@ export function CollectionScreen({
     try {
       const { credits, cards, error } = await runBulkQuicksell(
         targetRarity,
-        owned,
+        plainOwned,
         lockedByDecks,
         serializedByCard,
         (cardsSoFar) => setBulkProgress((p) => (p ? { ...p, done: cardsSoFar } : p)),
@@ -578,13 +637,16 @@ export function CollectionScreen({
   const entries = useMemo(() => {
     const out: {
       def: CardDef;
-      kind: 'normal' | 'foil' | 'serialized';
+      kind: 'normal' | 'foil' | 'serialized' | 'variant';
       count?: number;
       serial?: { number: number; cap: number };
+      variant?: CardVariant;
+      foil?: boolean;
     }[] = [];
     for (const c of filtered) {
-      const o = owned.get(c.id);
+      const o = plainOwned.get(c.id);
       const serials = serializedByCard.get(c.id) || [];
+      const vars = variantsByCard.get(c.id) || [];
       const normalQty = Math.max(0, (o?.q || 0) - serials.length);
       const foilQty = o?.f || 0;
       if (normalQty > 0) out.push({ def: c, kind: 'normal', count: normalQty });
@@ -592,12 +654,16 @@ export function CollectionScreen({
       for (const s of serials) {
         out.push({ def: c, kind: 'serialized', serial: { number: s.serial_number, cap: s.cap } });
       }
-      if (normalQty === 0 && foilQty === 0 && serials.length === 0) {
+      // Each card + foil + variant is its own tile, like foil.
+      for (const v of vars) {
+        out.push({ def: c, kind: 'variant', count: v.quantity, variant: v.variant, foil: v.foil });
+      }
+      if (normalQty === 0 && foilQty === 0 && serials.length === 0 && vars.length === 0) {
         out.push({ def: c, kind: 'normal', count: 0 });
       }
     }
-    return out;
-  }, [filtered, owned, serializedByCard]);
+    return out.filter((e) => tileMatchesVariant(variantSel, e.variant));
+  }, [filtered, plainOwned, serializedByCard, variantsByCard, variantSel]);
 
   const totalOwned = collection.reduce((s, c) => s + c.quantity + c.foil_quantity, 0);
   const uniqueOwned = collection.filter((c) => c.quantity + c.foil_quantity > 0).length;
@@ -718,13 +784,61 @@ export function CollectionScreen({
   // normal copy was actually deck-locked (and only foil was spare), or vice
   // versa.
   // Two independent server checks (deck locks vs Serialized), see sellable.ts.
-  const inspectSellable = sellableSplit(inspectOwned, inspectLocked, inspectSerializedReserved);
+  const inspectSellable = sellableSplit(
+    inspect ? plainOwned.get(inspect.def.id) : undefined,
+    inspectLocked,
+    inspectSerializedReserved,
+  );
   const normalSellable = inspectSellable.normal;
   const spareFoil = inspectSellable.foil;
   // `q` (player_cards.quantity) INCLUDES serialized copies — the grid
   // subtracts them for the normal tile's count, and the inspector must agree
   // or "Normal ×3" appears beside sell buttons that can only move 1.
-  const inspectNormalQty = Math.max(0, (inspectOwned?.q || 0) - inspectSerializedReserved);
+  const inspectPlain = inspect ? plainOwned.get(inspect.def.id) : undefined;
+  const inspectNormalQty = Math.max(0, (inspectPlain?.q || 0) - inspectSerializedReserved);
+  const inspectVariants = inspect ? variantsByCard.get(inspect.def.id) || [] : [];
+  // The variant tile that was clicked (if any): its copies sell on their own.
+  const inspectVariantRow = inspect?.variant
+    ? inspectVariants.find((v) => v.variant === inspect.variant && v.foil === !!inspect.foil)
+    : undefined;
+  const handleSellVariant = async () => {
+    if (!inspect || !inspectVariantRow || selling) return;
+    // Deck locks count every copy: keep the variant if selling it would
+    // leave a deck short.
+    if (inspectTotal - 1 < inspectLocked) {
+      setSellError('That card is in use by one of your decks — remove it before selling.');
+      return;
+    }
+    const price = quicksellPrice(inspect.def.rarity, !!inspect.foil, inspectVariantRow.variant);
+    if (
+      !(await askConfirm(
+        `Quicksell one ${VARIANT_META[inspectVariantRow.variant].name} copy for ${fmtCredits(price)} credits?`,
+      ))
+    )
+      return;
+    setSelling(true);
+    setSellError('');
+    try {
+      const { error } = await quicksellMany([
+        {
+          card_id: inspect.def.id,
+          qty: 1,
+          foil: !!inspect.foil,
+          variant: inspectVariantRow.variant,
+        },
+      ]);
+      if (error) {
+        setSellError(error);
+        return;
+      }
+      await Promise.all([refreshCollection(), refreshProfile()]);
+      if ((inspectVariantRow.quantity ?? 0) <= 1) setInspect(null);
+    } catch {
+      setSellError('Something went wrong — check your connection and try again.');
+    } finally {
+      setSelling(false);
+    }
+  };
   const foilSellable = spareFoil;
 
   const handleSell = async (foil: boolean, quantity: number) => {
@@ -850,6 +964,12 @@ export function CollectionScreen({
                 value={ruleSel}
                 onChange={(v) => setFilter('rule', v)}
                 options={ruleOptions.map((r) => ({ value: r, label: ruleFilterLabel(r) }))}
+              />
+              <FilterSelect
+                label="Variant"
+                value={variantSel}
+                onChange={(v) => setFilter('variant', v)}
+                options={VARIANT_FILTERS.map((v) => ({ value: v, label: variantFilterLabel(v) }))}
               />
               <FilterSelect
                 label="Sort by"
@@ -1300,9 +1420,11 @@ export function CollectionScreen({
           <div className="flex flex-wrap gap-3">
             {entries.map((e) => (
               <CollectionTile
-                key={`${e.def.id}-${e.kind}-${e.serial?.number ?? ''}`}
+                key={`${e.def.id}-${e.kind}-${e.serial?.number ?? ''}-${e.variant ?? ''}-${e.foil ? 'f' : ''}`}
                 def={e.def}
                 kind={e.kind}
+                variant={e.variant}
+                variantFoil={e.foil}
                 count={e.count}
                 serialNumber={e.serial?.number}
                 serialCap={e.serial?.cap}
@@ -1360,7 +1482,11 @@ export function CollectionScreen({
           // on screen, not the tile that was clicked.
           onFoilToggle={(showFoil) => setInspect((i) => (i ? { ...i, foil: showFoil } : i))}
           serial={inspect.serial}
+          variant={inspect.variant}
           meta={[
+            ...(inspect.variant
+              ? [{ label: 'Variant', value: `◆ ${VARIANT_META[inspect.variant].name}` }]
+              : []),
             { label: 'Rarity', value: inspect.def.rarity || 'Common' },
             { label: 'Set', value: inspect.def.set || '—' },
             { label: 'Type', value: inspect.def.type },
@@ -1377,11 +1503,44 @@ export function CollectionScreen({
               value: `×${inspectNormalQty}${inspectSerializedReserved > 0 ? ` (+${inspectSerializedReserved} serialized)` : ''}`,
             },
             { label: 'Foil owned', value: `✦ ${inspectOwned?.f || 0}` },
+            ...(inspectVariants.length > 0
+              ? [
+                  {
+                    label: 'Variants',
+                    value: inspectVariants
+                      .map(
+                        (v) =>
+                          `${VARIANT_META[v.variant].name}${v.foil ? ' ✦' : ''} ×${v.quantity}`,
+                      )
+                      .join(', '),
+                  },
+                ]
+              : []),
             ...(inspectLocked > 0 ? [{ label: 'Locked in decks', value: `${inspectLocked}` }] : []),
           ]}
           onClose={() => setInspect(null)}
           actions={
             <div className="flex flex-col gap-3">
+              {inspectVariantRow && (
+                <div className="ink-border-sm p-2 bg-[var(--c-ink)] text-[var(--c-paper)] flex flex-col gap-1.5">
+                  <div className="heading-font text-[11px] text-[var(--c-yellow)]">
+                    ◆ {VARIANT_META[inspectVariantRow.variant].name.toUpperCase()}
+                    {inspectVariantRow.foil ? ' · FOIL ✦' : ''} ×{inspectVariantRow.quantity}
+                  </div>
+                  <div className="fs-xs font-bold opacity-80">
+                    {VARIANT_META[inspectVariantRow.variant].blurb} Worth ×
+                    {VARIANT_META[inspectVariantRow.variant].mult}
+                    {inspectVariantRow.foil ? ' on top of foil' : ''}. Plays as the same card in
+                    decks.
+                  </div>
+                  <PopButton color="yellow" onClick={handleSellVariant} disabled={selling}>
+                    QUICKSELL 1 FOR{' '}
+                    {fmtCredits(
+                      quicksellPrice(inspect.def.rarity, !!inspect.foil, inspectVariantRow.variant),
+                    )}
+                  </PopButton>
+                </div>
+              )}
               {/* The inspector tilts; the Showroom turns. A card whose rarity
                   earns its own 3D room says so on the button, because that is
                   the reason to take the trip. */}
@@ -1548,7 +1707,9 @@ function sortSlabs(
   const value = (g: GradedCard) =>
     g.grade == null
       ? -1
-      : gradedQuicksellPrice(POOL_BY_ID[g.card_id]?.rarity, g.foil, g.grade, g.service);
+      : gradedQuicksellPrice(POOL_BY_ID[g.card_id]?.rarity, g.foil, g.grade, g.service, {
+          variant: asVariant(g.variant),
+        });
   const out = [...rows];
   out.sort((a, b) => {
     if ((a.grade == null) !== (b.grade == null)) return a.grade == null ? 1 : -1;

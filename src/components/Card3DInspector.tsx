@@ -12,6 +12,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from '../meta/useMotionMode';
 import { CardDef } from '../game/poker/cards';
 import { CardFace, CardReadingPanel, CARD_SIZES } from './CardFaceV4';
+import type { CardVariant } from '../meta/variants';
 import { getCardBackImage } from '../meta/cardback';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { cn } from '../lib/utils';
@@ -35,10 +36,13 @@ export function Card3DInspector({
   canToggleFoil,
   onFoilToggle,
   serial,
+  variant,
   meta,
   actions,
   onClose,
 }: {
+  /** Cosmetic variant overlay on the enlarged card (Shattered gets 3D depth). */
+  variant?: CardVariant | null;
   def: CardDef;
   /** Show the foil treatment on the enlarged card. */
   foil?: boolean;
@@ -244,6 +248,8 @@ export function Card3DInspector({
                       foil={showFoil}
                       foilEffect={false}
                       serial={serial}
+                      variant={variant}
+                      variantDepth={1}
                     />
                     {/* Dynamic glare / light sweep following the tilt */}
                     {!reducedMotion && (

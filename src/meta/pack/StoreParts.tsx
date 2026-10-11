@@ -20,7 +20,10 @@ import {
   packChaseRarities,
   packGuarantee,
   packGuaranteeBadge,
+  packVariantOdds,
 } from '../packodds';
+import type { CardDef } from '../../game/poker/cards';
+import { ELEMENTAL_MULT, ELEMENTAL_ODDS, SHATTERED_MULT, SHATTERED_ODDS } from '../variants';
 import { PackArt } from './PackArt';
 import { heroArtUrl, packColor, packIconCandidates, packWrapperCandidates } from './packArt';
 
@@ -428,6 +431,7 @@ export function WhatsInside({
           </span>
         ))}
       </div>
+      <VariantOddsLine pack={pack} pool={pool} />
       <div className="grid grid-cols-2 gap-2">
         <div className="ink-border-sm p-2 bg-[var(--c-paper)]">
           <div className="heading-font text-[11px]">YOU OWN</div>
@@ -449,6 +453,27 @@ export function WhatsInside({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Variant (Shattered / elemental overlay) odds for "what's inside". */
+export function VariantOddsLine({ pack, pool }: { pack: StorePack; pool: CardDef[] }) {
+  const coloured = pool.length
+    ? pool.filter((c) => (c.colors ?? []).length > 0).length / pool.length
+    : 1;
+  const v = packVariantOdds(pack, coloured);
+  if (v.cards === 0) return null;
+  const pct = (p: number) => `${(p * 100).toFixed(1).replace(/\.0$/, '')}%`;
+  return (
+    <div
+      className="ink-border-sm p-2 mb-2 bg-[var(--c-ink)] text-[var(--c-paper)] fs-xs font-bold"
+      data-testid="variant-odds"
+    >
+      <span className="heading-font text-[11px] text-[var(--c-yellow)]">◆ VARIANTS</span>{' '}
+      {pct(v.any)} per {pack.pack_tier === 'booster_box' ? 'box' : 'pack'} · Shattered 1 in{' '}
+      {Math.round(1 / SHATTERED_ODDS)} cards (×{SHATTERED_MULT}) · Elemental 1 in{' '}
+      {Math.round(1 / ELEMENTAL_ODDS)} cards of its colour (×{ELEMENTAL_MULT}). Stacks with foil.
     </div>
   );
 }

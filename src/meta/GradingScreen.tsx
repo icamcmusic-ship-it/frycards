@@ -28,6 +28,7 @@
  *
  * The slab artwork lives in `GradedSlab.tsx`.
  */
+import { asVariant, type CardVariant, VARIANT_META, variantMult } from './variants';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEscapeClose, useFocusTrap } from '../components/useFocusTrap';
 import { useRouteTab } from './useHashRouter';
@@ -227,6 +228,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     refreshProfile,
     refreshCollection,
     dataLoading,
+    cardVariants,
   } = useMeta();
   const [tab, setTab] = useRouteTab<Tab>('grading', TABS, 'submit', 'grading:tab');
   const [graded, setGraded] = useState<GradedCard[]>([]);
@@ -343,6 +345,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
       return def
         ? gradedQuicksellPrice(def.rarity, g.foil, g.grade!, g.service, {
             pristine: g.pristine,
+            variant: asVariant(g.variant),
             favourite,
           })
         : 0;
@@ -386,6 +389,21 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
   const spares = useMemo(() => {
     const owned = new Map<string, { q: number; f: number }>();
     for (const pc of collection) owned.set(pc.card_id, { q: pc.quantity, f: pc.foil_quantity });
+    // Variant copies grade as their own lines (the slab keeps the variant);
+    // plain lines only count the copies that are not variants.
+    const variants = (cardVariants ?? []).filter((v) => v.quantity > 0);
+    const totals = new Map<string, number>();
+    for (const [id, o] of owned) totals.set(id, o.q + o.f);
+    for (const v of variants) {
+      const o = owned.get(v.card_id);
+      if (!o) continue;
+      owned.set(
+        v.card_id,
+        v.foil
+          ? { ...o, f: Math.max(0, o.f - v.quantity) }
+          : { ...o, q: Math.max(0, o.q - v.quantity) },
+      );
+    }
     const locked = new Map<string, number>();
     for (const d of decks) {
       for (const id of d.card_ids) locked.set(id, (locked.get(id) || 0) + 1);
@@ -394,7 +412,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     const serialized = new Map<string, number>();
     for (const s of serializedCards)
       serialized.set(s.card_id, (serialized.get(s.card_id) || 0) + 1);
-    const out: { cardId: string; foil: boolean; spare: number }[] = [];
+    const out: { cardId: string; foil: boolean; spare: number; variant?: CardVariant }[] = [];
     for (const [cardId, o] of owned) {
       if (!POOL_BY_ID[cardId]) continue;
       // submit_grading's two independent checks (sellable.ts, audit B4).
@@ -406,19 +424,28 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
       if (spareNormal > 0) out.push({ cardId, foil: false, spare: spareNormal });
       if (foil > 0) out.push({ cardId, foil: true, spare: foil });
     }
+    for (const v of variants) {
+      if (!POOL_BY_ID[v.card_id]) continue;
+      const free = Math.min(
+        v.quantity,
+        (totals.get(v.card_id) ?? 0) - (locked.get(v.card_id) || 0),
+      );
+      if (free > 0) out.push({ cardId: v.card_id, foil: v.foil, spare: free, variant: v.variant });
+    }
     // Most valuable first: grading a Common is a hobby, grading a Mythic is the
     // mini-game, and the old alphabetical sort buried every card worth the fee
     // behind three hundred that are not.
     // U49: by net gain over quicksell (the fee is the same for every card).
-    const gain = (x: { cardId: string; foil: boolean }) =>
-      expectedSlabValue(POOL_BY_ID[x.cardId].rarity, x.foil, service) -
-      quicksellPrice(POOL_BY_ID[x.cardId].rarity, x.foil);
+    const gain = (x: { cardId: string; foil: boolean; variant?: CardVariant }) =>
+      (expectedSlabValue(POOL_BY_ID[x.cardId].rarity, x.foil, service) -
+        quicksellPrice(POOL_BY_ID[x.cardId].rarity, x.foil)) *
+      variantMult(x.variant);
     out.sort(
       (a, b) =>
         gain(b) - gain(a) || POOL_BY_ID[a.cardId].name.localeCompare(POOL_BY_ID[b.cardId].name),
     );
     return out;
-  }, [collection, decks, serializedCards, service]);
+  }, [collection, decks, serializedCards, service, cardVariants]);
 
   const filteredSpares = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -480,10 +507,13 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
   const basketExpected = useMemo(() => {
     let sum = 0;
     for (const [key, qty] of basket) {
-      const [cardId, foilStr] = key.split('|');
+      const [cardId, foilStr, v] = key.split('|');
       const def = POOL_BY_ID[cardId];
       if (!def) continue;
-      sum += expectedSlabValue(def.rarity, foilStr === 'true', service) * qty;
+      sum +=
+        expectedSlabValue(def.rarity, foilStr === 'true', service) *
+        variantMult(asVariant(v)) *
+        qty;
     }
     return sum;
   }, [basket, service]);
@@ -508,9 +538,15 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     return rows;
   }, [vault, vaultSort, slabPrice]);
 
-  const bump = (cardId: string, foil: boolean, delta: number, max: number) => {
+  const bump = (
+    cardId: string,
+    foil: boolean,
+    delta: number,
+    max: number,
+    variant?: CardVariant,
+  ) => {
     setBasket((prev) => {
-      const key = `${cardId}|${foil}`;
+      const key = `${cardId}|${foil}|${variant ?? ''}`;
       const next = new Map<string, number>(prev);
       const q = Math.min(max, Math.max(0, (next.get(key) || 0) + delta));
       if (q === 0) next.delete(key);
@@ -526,8 +562,11 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     setNotice('');
     try {
       const items = [...basket.entries()].map(([key, qty]) => {
-        const [card_id, foil] = key.split('|');
-        return { card_id, qty, foil: foil === 'true' };
+        const [card_id, foil, v] = key.split('|');
+        const variant = asVariant(v);
+        return variant
+          ? { card_id, qty, foil: foil === 'true', variant }
+          : { card_id, qty, foil: foil === 'true' };
       });
       const { data, error } = await submitGrading(items, service, speed, currency, {
         insure,
@@ -804,7 +843,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
               // three-hundred-line collection doesn't bury the service picker.
               <div className="isolate grid grid-cols-3 justify-items-center gap-2 sm:flex sm:flex-wrap sm:max-h-[46vh] sm:overflow-y-auto ink-border-sm p-2 bg-[var(--c-ink)]/5">
                 {filteredSpares.slice(0, 240).map((s) => {
-                  const key = `${s.cardId}|${s.foil}`;
+                  const key = `${s.cardId}|${s.foil}|${s.variant ?? ''}`;
                   const inBasket = basket.get(key) || 0;
                   const def = POOL_BY_ID[s.cardId];
                   return (
@@ -814,7 +853,8 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                           def={def}
                           size="compact"
                           foil={s.foil}
-                          onClick={() => bump(s.cardId, s.foil, +1, s.spare)}
+                          variant={s.variant}
+                          onClick={() => bump(s.cardId, s.foil, +1, s.spare, s.variant)}
                           highlight={inBasket > 0}
                         />
                         {/* Selected state the card face itself can't carry at
@@ -832,13 +872,16 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                       <span className="fs-xs font-bold text-[var(--c-steel)] text-center leading-tight">
                         {inBasket > 0 ? `${inBasket} of ${s.spare}` : `${s.spare} spare`}
                         {s.foil ? ' foil' : ''}
+                        {s.variant ? ` ◆ ${VARIANT_META[s.variant].short}` : ''}
                         <br />
                         {/* U49: the slab value against what grading costs (the fee
                             plus the card's own quicksell), so it supports a choice. */}
                         {(() => {
-                          const slab = expectedSlabValue(def.rarity, s.foil, service);
+                          const slab = Math.round(
+                            expectedSlabValue(def.rarity, s.foil, service) * variantMult(s.variant),
+                          );
                           const fee = gradingUnitFee(service, speed, Math.max(1, basketCount));
-                          const net = slab - fee - quicksellPrice(def.rarity, s.foil);
+                          const net = slab - fee - quicksellPrice(def.rarity, s.foil, s.variant);
                           return (
                             <>
                               fee {fmtCredits(fee)} → ≈{fmtCredits(slab)}
@@ -864,7 +907,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                           <PopButton
                             color="steel"
                             className="!px-2 !py-1 !min-w-6 !min-h-6"
-                            onClick={() => bump(s.cardId, s.foil, -1, s.spare)}
+                            onClick={() => bump(s.cardId, s.foil, -1, s.spare, s.variant)}
                             ariaLabel={`Remove one ${def.name}`}
                           >
                             −
@@ -872,7 +915,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                           <PopButton
                             color="steel"
                             className="!px-2 !py-1 !min-w-6 !min-h-6"
-                            onClick={() => bump(s.cardId, s.foil, s.spare, s.spare)}
+                            onClick={() => bump(s.cardId, s.foil, s.spare, s.spare, s.variant)}
                             ariaLabel={`Add every spare ${def.name}`}
                             disabled={inBasket >= s.spare}
                           >

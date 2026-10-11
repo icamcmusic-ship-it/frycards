@@ -8,6 +8,7 @@ import { KEYWORDS } from '../game/poker/keywords';
 import { LOCATION_TEMPLATES } from '../game/poker/locations';
 import type { CardDef, LocationRuleId } from '../game/poker/cards';
 import { quicksellPrice } from './economy';
+import { CARD_VARIANTS, type CardVariant, isCardVariant, VARIANT_META } from './variants';
 
 export const TYPES = ['All', 'Leader', 'Unit', 'Item', 'Event', 'Location'];
 export const RARITY_FILTERS = ['All', ...RARITIES];
@@ -22,6 +23,8 @@ export const RULE_FILTERS: string[] = [
   'All',
   ...(Object.keys(LOCATION_TEMPLATES) as LocationRuleId[]),
 ];
+/** Variant filter: 'All' (every tile), 'Any' (only variant copies) or one variant. */
+export const VARIANT_FILTERS: string[] = ['All', 'Any', ...CARD_VARIANTS];
 export const SORTS = ['Name', 'Rarity', 'Type', 'Tier'] as const;
 export type SortKey = (typeof SORTS)[number];
 
@@ -41,6 +44,8 @@ export interface CollectionFilters {
   /** Location rule id (e.g. 'highStakes'); 'All' = any. */
   rule: string;
   set: string;
+  /** Card variant tiles (see VARIANT_FILTERS); 'All' = no narrowing. */
+  variant: string;
   sort: SortKey;
 }
 
@@ -53,6 +58,7 @@ export const DEFAULT_FILTERS: CollectionFilters = {
   tier: 'All',
   rule: 'All',
   set: 'All',
+  variant: 'All',
   sort: 'Name',
 };
 
@@ -85,6 +91,7 @@ export function sanitizeFilters(v: unknown): CollectionFilters {
     tier: pick(typeof o.tier === 'number' ? String(o.tier) : o.tier, TIER_FILTERS, d.tier),
     rule: pick(o.rule, RULE_FILTERS, d.rule),
     set: str(o.set, d.set),
+    variant: pick(o.variant, VARIANT_FILTERS, d.variant),
     sort: pick(sort, SORTS, d.sort),
   };
 }
@@ -93,7 +100,24 @@ export const isFilters = (v: unknown): v is CollectionFilters =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** The narrowing filters (the view and the sort are choices, not filters). */
-const NARROWING = ['type', 'rarity', 'color', 'keyword', 'tier', 'rule', 'set'] as const;
+const NARROWING = ['type', 'rarity', 'color', 'keyword', 'tier', 'rule', 'set', 'variant'] as const;
+
+/** Does a grid tile (plain / foil / serialized copy, or a variant copy) pass
+ * the variant filter? */
+export function tileMatchesVariant(
+  filter: string,
+  variant: CardVariant | null | undefined,
+): boolean {
+  if (filter === 'All') return true;
+  if (filter === 'Any') return !!variant;
+  return variant === filter;
+}
+
+export function variantFilterLabel(v: string): string {
+  if (v === 'All') return 'All copies';
+  if (v === 'Any') return 'Any variant';
+  return isCardVariant(v) ? VARIANT_META[v].name : v;
+}
 
 /** How many of the narrowing filters differ from the default (the view and
  * the sort are choices, not filters, and are not counted). */

@@ -81,6 +81,40 @@ export interface ChangelogEntry {
 // headline, so the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: '35.6',
+    name: 'Card Variants',
+    date: 'October 2026',
+    tagline: 'Shattered glass and seven elemental overlays, rolled on every pack card.',
+    items: [
+      {
+        title: 'Shattered',
+        body: 'About 1 in 150 pack cards comes out Shattered: split into shards that shift as you move it (they hold still with reduced motion). Worth \u00d76.',
+        category: 'collection',
+        icon: Sparkles,
+        route: { screen: 'store', label: 'OPEN A PACK' },
+      },
+      {
+        title: 'Seven elemental overlays',
+        body: 'About 1 in 40 cards of a colour rolls that colour\u2019s overlay: Ember Sparks, Tide Frost, Root Overgrown, Gale Lightning, Light Radiant, Shadow Ink or Void Rift. Worth \u00d73, and a foil variant stacks both.',
+        category: 'collection',
+        icon: Palette,
+      },
+      {
+        title: 'Their own entries',
+        body: 'Variants are separate collection tiles with a Variant filter. They sell, list, trade, shelve and grade as themselves (slabs keep the variant), and play in decks as the same card.',
+        category: 'collection',
+        icon: Layers,
+        route: { screen: 'collection', label: 'SEE YOUR COLLECTION' },
+      },
+      {
+        title: 'Variant achievements',
+        body: 'Pull your first variant, a Shattered card, and one of each elemental to earn three new collection achievements.',
+        category: 'collection',
+        icon: Award,
+      },
+    ],
+  },
+  {
     version: '35.5',
     name: 'Grading Houses',
     date: 'October 2026',

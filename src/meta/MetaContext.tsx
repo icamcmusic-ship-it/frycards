@@ -1,4 +1,5 @@
 import { cachedFetch } from '../lib/cache';
+import type { OwnedVariant } from './variants';
 import React, {
   createContext,
   useCallback,
@@ -22,6 +23,7 @@ import {
   fetchShopItems,
   fetchPackTypes,
   fetchCollection,
+  fetchCardVariants,
   fetchCosmetics,
   fetchDecks,
   fetchInventory,
@@ -106,6 +108,10 @@ export interface MetaState {
   /** This player's own numbered Serialized pulls — never foil, never
    * quick-sellable (see quicksell_cards' serialized-reserved check). */
   serializedCards: OwnedSerializedCard[];
+  /** Variant copies (Shattered / elemental overlays) — a subset of the copies
+   * `collection` counts, keyed card + foil + variant. Optional so stubs
+   * without it read as "no variants". */
+  cardVariants?: OwnedVariant[];
   setGuest: (g: boolean) => void;
   refreshProfile: () => Promise<void>;
   refreshCollection: () => Promise<void>;
@@ -125,6 +131,14 @@ export interface MetaState {
  * MetaState so their layouts can be measured without a Supabase session. App
  * code should use `useMeta`/`MetaProvider`, never this directly.
  */
+/** Variants are cosmetic: a failed read shows plain cards rather than
+ * failing the whole collection load. */
+function fetchVariantsSafe(uid: string): Promise<OwnedVariant[]> {
+  return Promise.resolve()
+    .then(() => fetchCardVariants(uid))
+    .catch(() => []);
+}
+
 export const MetaContext = createContext<MetaState | null>(null);
 
 export function useMeta(): MetaState {
@@ -153,6 +167,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   const [decks, setDecks] = useState<DeckRow[]>([]);
   const [inventory, setInventory] = useState<InventoryEntry[]>([]);
   const [serializedCards, setSerializedCards] = useState<OwnedSerializedCard[]>([]);
+  const [cardVariants, setCardVariants] = useState<OwnedVariant[]>([]);
 
   /** Bump to re-run both bootstrap effects below after a failed load. */
   const retryBoot = useCallback(() => {
@@ -288,10 +303,16 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
             guards.collection,
             userId,
             userIdRef,
-            (uid) => Promise.all([fetchCollection(uid), fetchMySerializedCards(uid)]),
-            ([coll, serial]) => {
+            (uid) =>
+              Promise.all([
+                fetchCollection(uid),
+                fetchMySerializedCards(uid),
+                fetchVariantsSafe(uid),
+              ]),
+            ([coll, serial, vars]) => {
               setCollection(coll);
               setSerializedCards(serial);
+              setCardVariants(vars);
             },
           )
         : Promise.resolve(),
@@ -380,6 +401,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         setDecks([]);
         setInventory([]);
         setSerializedCards([]);
+        setCardVariants([]);
         setDataLoading(false);
         return;
       }
@@ -394,19 +416,21 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         inventory: guards.inventory.begin(),
       };
       try {
-        const [prof, coll, serial, cosm, dks, inv] = await Promise.all([
+        const [prof, coll, serial, cosm, dks, inv, vars] = await Promise.all([
           fetchProfile(userId),
           fetchCollection(userId),
           fetchMySerializedCards(userId),
           fetchCosmetics(userId),
           fetchDecks(userId),
           fetchInventory(userId),
+          fetchVariantsSafe(userId),
         ]);
         if (cancelled) return;
         if (guards.profile.accept(tickets.profile)) setProfile(prof);
         if (guards.collection.accept(tickets.collection)) {
           setCollection(coll);
           setSerializedCards(serial);
+          setCardVariants(vars);
         }
         if (guards.cosmetics.accept(tickets.cosmetics)) setCosmetics(cosm);
         if (guards.decks.accept(tickets.decks)) setDecks(dks);
@@ -498,6 +522,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
       decks,
       inventory,
       serializedCards,
+      cardVariants,
       setGuest,
       refreshProfile,
       refreshCollection,
@@ -524,6 +549,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
       decks,
       inventory,
       serializedCards,
+      cardVariants,
       refreshProfile,
       refreshCollection,
       refreshCosmetics,

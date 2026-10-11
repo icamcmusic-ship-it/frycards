@@ -1549,6 +1549,10 @@ html[data-scheme='dark'] .cl-tag-new {
 .po-b-wish {
   background: #f9a8d4;
 }
+.po-b-variant {
+  background: #1a1a1a;
+  color: #fde047;
+}
 .po-grow {
   animation: po-grow-kf 1s ease-out 0.4s both;
   transform-origin: left center;

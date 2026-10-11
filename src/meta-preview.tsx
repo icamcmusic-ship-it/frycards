@@ -32,6 +32,7 @@
 //   /meta-preview.html?screen=changelog
 //   /meta-preview.html?screen=submissions
 //   /meta-preview.html?screen=grading
+//   /meta-preview.html?screen=variants&v=<variant>&view=front|3d|slab|reveal
 //
 // Append `&role=creator` to any of the above to mount the Creator-only panels
 // (Profile's CREATOR TOOLS, the submission review queue and BULK ADD).
@@ -68,6 +69,10 @@ import { AuthScreen } from './meta/AuthScreen';
 import { HowToPlayScreen } from './components/HowToPlay';
 import { Card3DInspector } from './components/Card3DInspector';
 import { ShowroomScreen } from './meta/ShowroomScreen';
+import { CardFace } from './components/CardFaceV4';
+import { GradedSlab } from './meta/GradedSlab';
+import { CARD_VARIANTS, asVariant, VARIANT_META } from './meta/variants';
+import type { GradedCard } from './meta/grading';
 import { POOL } from './game/poker/cardpool';
 import { MODES } from './game/poker/constants';
 import { buildDeck, deckCardIds } from './game/poker/deck';
@@ -418,6 +423,105 @@ if (params.get('role') === 'creator') profile.role = 'creator';
 // A non-Leader card with some metadata rows, for the 3D inspector preview.
 const inspectDef = POOL.find((c) => c.type !== 'Leader')!;
 
+// `?screen=variants`: one variant (`&v=`) on a framed and a full-bleed card of
+// its colour, at every size (`view=front`), in the 3D inspector (`view=3d`),
+// slabbed (`view=slab`) and in a pack reveal (`view=reveal`).
+const variantId = asVariant(params.get('v')) ?? 'shattered';
+const variantView = params.get('view') ?? 'front';
+function variantCards() {
+  const colour = VARIANT_META[variantId].colour;
+  const fits = POOL.filter(
+    (c) => c.type !== 'Leader' && (!colour || (c.colors ?? []).includes(colour as never)),
+  );
+  const framed = fits.find((c) => c.rarity === 'Rare' || c.rarity === 'Super-Rare') ?? fits[0];
+  const bleed =
+    fits.find((c) => c.rarity === 'Full-Art' || c.rarity === 'Alt-Art') ?? fits[1] ?? fits[0];
+  return [framed, bleed].filter(Boolean);
+}
+function VariantsPreview() {
+  const cards = variantCards();
+  if (variantView === '3d') {
+    return (
+      <Card3DInspector
+        def={cards[0]}
+        variant={variantId}
+        meta={[{ label: 'Variant', value: VARIANT_META[variantId].name }]}
+        onClose={() => undefined}
+      />
+    );
+  }
+  if (variantView === 'slab') {
+    const g = (id: string, def: (typeof cards)[number], grade: number): GradedCard =>
+      ({
+        id,
+        user_id: 'preview',
+        card_id: def.id,
+        foil: false,
+        variant: variantId,
+        service: 'tca',
+        speed: 'standard',
+        fee_paid: 0,
+        submitted_at: new Date(0).toISOString(),
+        ready_at: new Date(0).toISOString(),
+        grade,
+        revealed_at: new Date(0).toISOString(),
+      }) as GradedCard;
+    return (
+      <div className="min-h-screen flex flex-wrap gap-6 items-start p-6 bg-[var(--c-paper)]">
+        {cards.map((c, i) => (
+          <GradedSlab key={c.id} g={g(`preview-slab-${i}`, c, i ? 8.5 : 10)} size="full" />
+        ))}
+        <GradedSlab g={g('preview-slab-c', cards[0], 9)} size="compact" />
+      </div>
+    );
+  }
+  if (variantView === 'reveal') {
+    const def = cards[0];
+    return (
+      <PackOpening
+        packName="Preview Pack"
+        packImageUrl={null}
+        pulls={[
+          {
+            card_id: def.id,
+            name: def.name,
+            rarity: def.rarity ?? 'Common',
+            card_type: def.type,
+            image_url: null,
+            foil: false,
+            slot: 'common',
+            converted_to_credits: false,
+            credit_value: 0,
+            variant: variantId,
+          },
+        ]}
+        onDone={() => undefined}
+      />
+    );
+  }
+  return (
+    <div className="min-h-screen p-4 bg-[var(--c-paper)] flex flex-col gap-4">
+      <h1 className="heading-font text-lg">{VARIANT_META[variantId].name}</h1>
+      {cards.map((c) => (
+        <div key={c.id} className="flex flex-wrap gap-4 items-end">
+          <CardFace def={c} size="full" variant={variantId} />
+          <CardFace def={c} size="standard" variant={variantId} />
+          <CardFace def={c} size="compact" variant={variantId} />
+          <CardFace def={c} size="micro" variant={variantId} />
+          <CardFace def={c} size="standard" foil variant={variantId} />
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-2">
+        {CARD_VARIANTS.map((v) => (
+          <a key={v} className="underline text-xs" href={`?screen=variants&v=${v}`}>
+            {VARIANT_META[v].name}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 createRoot(document.getElementById('root')!).render(
   <MetaContext.Provider value={meta}>
     {screen === 'decks' ? (
@@ -492,6 +596,8 @@ createRoot(document.getElementById('root')!).render(
       />
     ) : screen === 'grading' ? (
       <GradingScreen onBack={() => undefined} />
+    ) : screen === 'variants' ? (
+      <VariantsPreview />
     ) : screen === 'auth' ? (
       // v29 — the FIRST screen every player sees, and the one screen the
       // sweep had never loaded. `App` renders it above the whole meta shell

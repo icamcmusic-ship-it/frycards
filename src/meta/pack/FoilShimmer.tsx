@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { usePointerVars } from './usePointerVars';
 
 type OrientationCtor = { requestPermission?: () => Promise<'granted' | 'denied'> };
 
@@ -19,36 +20,7 @@ export function FoilShimmer({ reducedMotion }: { reducedMotion: boolean }) {
         ?.requestPermission === 'function',
   );
 
-  useEffect(() => {
-    const el = ref.current;
-    const host = el?.parentElement;
-    if (!el || !host || reducedMotion) return;
-    const set = (x: number, y: number) => {
-      el.style.setProperty('--mx', `${Math.round(x * 100)}%`);
-      el.style.setProperty('--my', `${Math.round(y * 100)}%`);
-    };
-    const onMove = (e: PointerEvent) => {
-      const r = host.getBoundingClientRect();
-      if (!r.width || !r.height) return;
-      set((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
-    };
-    const onTilt = (e: DeviceOrientationEvent) => {
-      if (e.gamma == null || e.beta == null) return;
-      set(
-        0.5 + Math.max(-1, Math.min(1, e.gamma / 35)) / 2,
-        0.5 + Math.max(-1, Math.min(1, (e.beta - 45) / 35)) / 2,
-      );
-    };
-    host.addEventListener('pointermove', onMove);
-    const DOE = (typeof window !== 'undefined' ? window.DeviceOrientationEvent : undefined) as
-      (typeof DeviceOrientationEvent & OrientationCtor) | undefined;
-    if (!(DOE && typeof DOE.requestPermission === 'function'))
-      window.addEventListener('deviceorientation', onTilt);
-    return () => {
-      host.removeEventListener('pointermove', onMove);
-      window.removeEventListener('deviceorientation', onTilt);
-    };
-  }, [reducedMotion]);
+  usePointerVars(ref, 'parent', reducedMotion);
 
   const askTilt = (e: React.MouseEvent) => {
     e.stopPropagation();

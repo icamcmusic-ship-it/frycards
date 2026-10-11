@@ -5,6 +5,7 @@
  * display-only mirrors of the SQL grading_* functions; the server always
  * recomputes and is the source of truth — keep them in sync.
  */
+import { type CardVariant, variantMult } from './variants';
 import { supabase } from '../lib/supabase';
 import { quicksellPrice } from './economy';
 
@@ -34,6 +35,8 @@ export interface GradedCard {
   user_id: string;
   card_id: string;
   foil: boolean;
+  /** Cosmetic variant the slabbed copy carries (null = plain). */
+  variant?: CardVariant | null;
   service: GradingService;
   speed: GradingSpeed;
   fee_paid: number;
@@ -325,7 +328,13 @@ export function gradedQuicksellPrice(
   foil: boolean,
   grade: number,
   service: GradingService,
-  opts: { pristine?: boolean; pop?: number; favourite?: GradingService | null } = {},
+  opts: {
+    pristine?: boolean;
+    pop?: number;
+    favourite?: GradingService | null;
+    /** A variant slab is worth variant_mult times more (grading_slab_price). */
+    variant?: CardVariant | null;
+  } = {},
 ): number {
   // Integer arithmetic: multipliers are hundredths, so `100 * 1.1 * 1.6`
   // (176.00000000000003) can no longer round up to 177 when the server's exact
@@ -336,6 +345,7 @@ export function gradedQuicksellPrice(
     hundredths(opts.favourite === service ? REPUTATION_BUMP : 1);
   return Math.ceil(
     (quicksellPrice(rarity, foil) *
+      variantMult(opts.variant) *
       hundredths(gradeMultiplier(grade, opts.pristine)) *
       hundredths(GRADING_SERVICE_BY_ID[service].premium) *
       mods) /
@@ -546,7 +556,7 @@ export async function fetchGradedCards(userId: string): Promise<GradedCard[]> {
 }
 
 export async function submitGrading(
-  items: { card_id: string; qty: number; foil: boolean }[],
+  items: { card_id: string; qty: number; foil: boolean; variant?: CardVariant | null }[],
   service: GradingService,
   speed: GradingSpeed,
   currency: GradingCurrency = 'credits',
@@ -616,7 +626,8 @@ export async function quicksellGradedCard(
 }
 
 export async function crackGradedSlab(id: string): Promise<string | null> {
-  const { error } = await supabase.rpc('crack_graded_slab', { p_id: id });
+  // The variant-aware wrapper: puts a variant slab's variant back too.
+  const { error } = await supabase.rpc('crack_variant_slab', { p_id: id });
   return error ? error.message : null;
 }
 
@@ -756,8 +767,9 @@ export function slabReferenceValue(
   grade: number,
   service: GradingService,
   pristine = false,
+  variant: CardVariant | null = null,
 ): number {
-  return gradedQuicksellPrice(rarity, foil, grade, service, { pristine });
+  return gradedQuicksellPrice(rarity, foil, grade, service, { pristine, variant });
 }
 
 export async function fetchSlabMarketValue(

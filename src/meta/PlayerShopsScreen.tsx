@@ -1,3 +1,4 @@
+import { asVariant, type OwnedVariant, VARIANT_META } from './variants';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { counterText, counterValid, counterValue } from './shopCounter';
 import { useRouter } from './useHashRouter';
@@ -127,6 +128,7 @@ const RARITIES = RARITY_ORDER;
 type SlabItem = {
   card_id: string;
   foil?: boolean;
+  variant?: string | null;
   graded_id?: string;
   grade?: number;
   service?: 'tca' | 'amg' | 'keeper';
@@ -148,6 +150,7 @@ function SlabThumb({ it }: { it: SlabItem }) {
     user_id: '',
     card_id: it.card_id,
     foil: !!it.foil,
+    variant: asVariant(it.variant),
     service: it.service ?? 'keeper',
     speed: 'standard',
     fee_paid: 0,
@@ -166,7 +169,7 @@ function slabItemValue(it: SlabItem): number {
     !!it.foil,
     Number(it.grade),
     it.service ?? 'keeper',
-    { pristine: it.pristine },
+    { pristine: it.pristine, variant: asVariant(it.variant) },
   );
 }
 
@@ -695,7 +698,7 @@ function QuickAddBar({
 }
 
 function CardStackPicker({
-  collection,
+  collection: rawCollection,
   decks,
   items,
   onChange,
@@ -703,6 +706,7 @@ function CardStackPicker({
   bulk,
   packSize,
   guarantees,
+  allowVariants,
 }: {
   collection: PlayerCard[];
   decks: DeckRow[];
@@ -714,11 +718,15 @@ function CardStackPicker({
   bulk?: boolean;
   packSize?: number;
   guarantees?: MysteryGuarantee[];
+  /** Individual/bundle listings may carry variant copies; mystery pools may not. */
+  allowVariants?: boolean;
 }) {
   const [search, setSearch] = useState('');
   const [cardId, setCardId] = useState('');
   const [foil, setFoil] = useState(false);
   const [qty, setQty] = useState(1);
+  /** '' = plain copies; otherwise `${variant}|${foil ? 1 : 0}`. */
+  const [copyKind, setCopyKind] = useState('');
 
   const locked = useMemo(() => {
     const m = new Map<string, number>();
@@ -728,7 +736,36 @@ function CardStackPicker({
 
   // Serialized prints count inside `quantity` but can never be listed in a
   // player shop — reserve them like Collection/Marketplace do.
-  const { serializedCards } = useMeta();
+  const { serializedCards, cardVariants } = useMeta();
+  const variantsByCard = useMemo(() => {
+    const m = new Map<string, OwnedVariant[]>();
+    for (const v of cardVariants ?? []) {
+      if (v.quantity <= 0) continue;
+      m.set(v.card_id, [...(m.get(v.card_id) ?? []), v]);
+    }
+    return m;
+  }, [cardVariants]);
+  // Plain copies only — variant copies are picked on their own (and never
+  // go into mystery pools; the server keeps them back from plain moves).
+  const collection = useMemo(
+    () =>
+      rawCollection.map((c) => {
+        const vs = variantsByCard.get(c.card_id) ?? [];
+        return {
+          ...c,
+          quantity: Math.max(
+            0,
+            c.quantity - vs.filter((v) => !v.foil).reduce((n, v) => n + v.quantity, 0),
+          ),
+          foil_quantity: Math.max(
+            0,
+            c.foil_quantity - vs.filter((v) => v.foil).reduce((n, v) => n + v.quantity, 0),
+          ),
+          total: c.quantity + c.foil_quantity,
+        };
+      }),
+    [rawCollection, variantsByCard],
+  );
   const serializedReserved = useMemo(() => {
     const m = new Map<string, number>();
     for (const s of serializedCards) m.set(s.card_id, (m.get(s.card_id) || 0) + 1);
@@ -751,12 +788,13 @@ function CardStackPicker({
               { q: c.quantity, f: c.foil_quantity },
               locked.get(c.card_id) || 0,
               serializedReserved.get(c.card_id) || 0,
-            ).total > 0
+            ).total > 0 ||
+            (!!allowVariants && (variantsByCard.get(c.card_id)?.length ?? 0) > 0)
           );
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
         .filter((c) => !search || c.def.name.toLowerCase().includes(search.toLowerCase())),
-    [collection, locked, serializedReserved, search],
+    [collection, locked, serializedReserved, search, allowVariants, variantsByCard],
   );
 
   // Look the selected card up in the full collection, not the search-filtered
@@ -775,23 +813,36 @@ function CardStackPicker({
     locked.get(cardId) || 0,
     serializedReserved.get(cardId) || 0,
   );
-  const totalSpare = foil ? spare.foil : spare.normal;
-  // Copies of this exact card/foil combo already staged in `items` don't
-  // stop being "spare" — but they're no longer available to add again, so
-  // the input's max (and the "of X spare" label) must be reduced by however
-  // much of this card/foil is already in the pool.
-  const alreadyInPool = items
-    .filter((i) => i.card_id === cardId && i.foil === foil)
-    .reduce((sum, i) => sum + i.quantity, 0);
+  const selVariants = allowVariants ? (variantsByCard.get(cardId) ?? []) : [];
+  const selVariant = copyKind
+    ? selVariants.find((v) => `${v.variant}|${v.foil ? 1 : 0}` === copyKind)
+    : undefined;
+  const pickFoil = selVariant ? selVariant.foil : foil;
+  const pickVariant = selVariant?.variant ?? null;
+  const totalSpare = selVariant
+    ? Math.max(0, Math.min(selVariant.quantity, (selected?.total ?? 0) - (locked.get(cardId) || 0)))
+    : foil
+      ? spare.foil
+      : spare.normal;
+  // Copies of this exact card/foil/variant combo already staged in `items`
+  // don't stop being "spare" — but they're no longer available to add again,
+  // so the input's max (and the "of X spare" label) must be reduced by
+  // however much of it is already in the pool.
+  const sameLot = (i: ShopListingCardItem) =>
+    i.card_id === cardId && i.foil === pickFoil && (i.variant ?? null) === pickVariant;
+  const alreadyInPool = items.filter(sameLot).reduce((sum, i) => sum + i.quantity, 0);
   const maxQty = Math.max(0, totalSpare - alreadyInPool);
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
   const add = () => {
     if (!selected || qty < 1 || qty > maxQty) return;
+    const lot: ShopListingCardItem = pickVariant
+      ? { card_id: cardId, foil: pickFoil, quantity: qty, variant: pickVariant }
+      : { card_id: cardId, foil: pickFoil, quantity: qty };
     if (maxItems === 1) {
-      onChange([{ card_id: cardId, foil, quantity: qty }]);
+      onChange([lot]);
     } else {
-      const idx = items.findIndex((i) => i.card_id === cardId && i.foil === foil);
+      const idx = items.findIndex(sameLot);
       if (idx >= 0) {
         const next = [...items];
         // Re-clamp to totalSpare (not maxQty, which is already net of what's
@@ -801,7 +852,7 @@ function CardStackPicker({
         next[idx] = { ...next[idx], quantity: Math.min(totalSpare, next[idx].quantity + qty) };
         onChange(next);
       } else {
-        onChange([...items, { card_id: cardId, foil, quantity: qty }]);
+        onChange([...items, lot]);
       }
     }
     setQty(1);
@@ -842,6 +893,8 @@ function CardStackPicker({
               );
               const spareNormal = sp.normal;
               setFoil(spareNormal <= 0 && sp.foil > 0);
+              const vs = allowVariants ? (variantsByCard.get(c.card_id) ?? []) : [];
+              setCopyKind(sp.total <= 0 && vs[0] ? `${vs[0].variant}|${vs[0].foil ? 1 : 0}` : '');
               setQty(1);
             }}
             className={cn(
@@ -853,6 +906,7 @@ function CardStackPicker({
           >
             {c.def.name} ×{c.quantity}
             {c.foil_quantity > 0 ? ` ✦${c.foil_quantity}` : ''}
+            {allowVariants && (variantsByCard.get(c.card_id)?.length ?? 0) > 0 ? ' ◆' : ''}
           </button>
         ))}
         {sellable.length === 0 && (
@@ -863,7 +917,26 @@ function CardStackPicker({
       </div>
       {selected && (
         <div className="flex items-center gap-2 mb-2 flex-wrap">
-          {selected.foil_quantity > 0 && (
+          {selVariants.length > 0 && (
+            <select
+              className={select}
+              value={copyKind}
+              aria-label="Which copies to add"
+              onChange={(e) => {
+                setCopyKind(e.target.value);
+                setQty(1);
+              }}
+            >
+              <option value="">Plain</option>
+              {selVariants.map((v) => (
+                <option key={`${v.variant}|${v.foil}`} value={`${v.variant}|${v.foil ? 1 : 0}`}>
+                  ◆ {VARIANT_META[v.variant].name}
+                  {v.foil ? ' ✦' : ''} ×{v.quantity}
+                </option>
+              ))}
+            </select>
+          )}
+          {!selVariant && selected.foil_quantity > 0 && (
             <label className="flex items-center gap-1 fs-xs font-bold">
               <input
                 type="checkbox"
@@ -920,7 +993,9 @@ function CardStackPicker({
               >
                 <span>
                   {def?.name || it.card_id}
-                  {it.foil ? ' ✦' : ''} ×{it.quantity}
+                  {it.foil ? ' ✦' : ''}
+                  {asVariant(it.variant) ? ` ◆ ${VARIANT_META[asVariant(it.variant)!].name}` : ''} ×
+                  {it.quantity}
                 </span>
                 <button
                   onClick={() => onChange(items.filter((_, idx) => idx !== i))}
@@ -1582,7 +1657,12 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           {cards[0]?.graded_id ? (
             <SlabThumb it={cards[0]} />
           ) : (
-            <CardFace def={headline} size="compact" foil={cards[0]?.foil} />
+            <CardFace
+              def={headline}
+              size="compact"
+              foil={cards[0]?.foil}
+              variant={asVariant(cards[0]?.variant)}
+            />
           )}
           {cards.length > 1 && (
             <span className="fs-xs font-black text-center bg-[var(--c-ink)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm">
@@ -1620,7 +1700,9 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                   }}
                 >
                   {defFor(c.card_id).name}
-                  {c.foil ? ' ✦' : ''} ×{c.quantity}
+                  {c.foil ? ' ✦' : ''}
+                  {asVariant(c.variant) ? ` ◆ ${VARIANT_META[asVariant(c.variant)!].short}` : ''} ×
+                  {c.quantity}
                 </span>
               ))}
             </div>
@@ -2657,7 +2739,7 @@ function SlabStockForm({
         chosen.foil,
         chosen.grade!,
         chosen.service,
-        { pristine: chosen.pristine },
+        { pristine: chosen.pristine, variant: asVariant(chosen.variant) },
       )
     : 0;
   return (
@@ -2680,6 +2762,7 @@ function SlabStockForm({
                 setPrice(
                   gradedQuicksellPrice(POOL_BY_ID[g.card_id]?.rarity, g.foil, g.grade!, g.service, {
                     pristine: g.pristine,
+                    variant: asVariant(g.variant),
                   }),
                 );
               }}
@@ -2792,6 +2875,7 @@ function NewCardListingForm({
         items={items}
         onChange={setItems}
         maxItems={type === 'individual' ? 1 : undefined}
+        allowVariants
       />
       {reference > 0 && (
         <div className="fs-xs font-bold text-[var(--c-steel)] mb-2 inline-flex items-center flex-wrap gap-x-1">
@@ -3748,7 +3832,12 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                   ((item as SlabItem | undefined)?.graded_id ? (
                     <SlabThumb it={item as SlabItem} />
                   ) : (
-                    <CardFace def={def} size="compact" foil={!!item?.foil} />
+                    <CardFace
+                      def={def}
+                      size="compact"
+                      foil={!!item?.foil}
+                      variant={asVariant(item?.variant)}
+                    />
                   ))}
                 {c.kind === 'trade' && offerDef && (
                   <>

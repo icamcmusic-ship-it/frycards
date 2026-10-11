@@ -60,6 +60,11 @@ import { useFocusTrap } from './useFocusTrap';
 import { COLOR_PIP, colorBg } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 import { CARD_SIZES, type CardSize } from './cardSizes';
+import type { CardVariant } from '../meta/variants';
+
+// The variant overlay renderer (procedural SVG art, shard split) only loads
+// once a variant card is actually on screen.
+const VariantLayer = React.lazy(() => import('./variants/VariantLayer'));
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -2145,6 +2150,8 @@ interface CardFaceProps {
   foilCount?: number;
   introduceKeywords?: boolean;
   serial?: { number: number; cap: number };
+  variant?: CardVariant | null;
+  variantDepth?: number;
 }
 
 /** What the bottom-right plate shows: a power's chip cost in units (a "+"
@@ -2157,7 +2164,38 @@ function statValue(def: CardDef): string | null {
   return null;
 }
 
-function CardFaceBase({
+/**
+ * A card variant (Shattered / elemental overlay, see meta/variants.ts) wraps
+ * the plain face in the lazy VariantLayer; until that chunk arrives the
+ * plain face shows.
+ */
+function CardFaceBase(
+  props: React.ComponentProps<typeof CardFacePlain> & {
+    /** Cosmetic variant overlay (null/undefined = none). */
+    variant?: CardVariant | null;
+    /** 3D inspector only: shard depth for Shattered (0..1). */
+    variantDepth?: number;
+  },
+) {
+  const { variant, variantDepth, ...rest } = props;
+  const face = <CardFacePlain {...rest} />;
+  if (!variant) return face;
+  const { w, h } = SIZES[rest.size ?? 'standard'];
+  return (
+    <React.Suspense fallback={face}>
+      <VariantLayer
+        variant={variant}
+        seed={rest.def.id}
+        width={w}
+        height={h}
+        face={face}
+        depth={variantDepth}
+      />
+    </React.Suspense>
+  );
+}
+
+function CardFacePlain({
   def,
   size = 'standard',
   dimmed,

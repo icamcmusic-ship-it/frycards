@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CardVariant, isCardVariant, type OwnedVariant, VARIANT_META } from './variants';
 import { useRouteTab } from './useHashRouter';
 import { askConfirm } from './confirm';
 import { ActionMenu } from './ActionMenu';
@@ -66,6 +67,7 @@ function CardChip({ item }: { key?: React.Key; item: TradeCardItem }) {
       {item.quantity > 1 ? `${item.quantity}× ` : ''}
       {cardName(item.card_id)}
       {item.foil ? ' ✦' : ''}
+      {isCardVariant(item.variant) ? ` ◆ ${VARIANT_META[item.variant].name}` : ''}
     </span>
   );
 }
@@ -991,7 +993,31 @@ function TradeComposerModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const { profile, collection, decks, serializedCards } = useMeta();
+  const { profile, collection: rawCollection, decks, serializedCards, cardVariants } = useMeta();
+  // Our variant copies trade as their own lots; the plain chips only count
+  // the copies that are not variants (the server keeps variants back).
+  const myVariants = useMemo(
+    () => (cardVariants ?? []).filter((v) => v.quantity > 0),
+    [cardVariants],
+  );
+  const collection = useMemo(
+    () =>
+      rawCollection.map((c) => {
+        const vs = myVariants.filter((v) => v.card_id === c.card_id);
+        return {
+          ...c,
+          quantity: Math.max(
+            0,
+            c.quantity - vs.filter((v) => !v.foil).reduce((n, v) => n + v.quantity, 0),
+          ),
+          foil_quantity: Math.max(
+            0,
+            c.foil_quantity - vs.filter((v) => v.foil).reduce((n, v) => n + v.quantity, 0),
+          ),
+        };
+      }),
+    [rawCollection, myVariants],
+  );
   // Cards locked into any of our own saved decks can't be traded — mirrors
   // assert_cards_available's deck-lock check the create_trade RPC enforces.
   const locked = useMemo(() => {
@@ -1057,9 +1083,18 @@ function TradeComposerModal({
     cardId: string,
     foil: boolean,
     max: number,
+    variant: CardVariant | null = null,
   ) => {
-    const idx = list.findIndex((i) => i.card_id === cardId && i.foil === foil);
-    if (idx === -1) setList([...list, { card_id: cardId, quantity: 1, foil }]);
+    const idx = list.findIndex(
+      (i) => i.card_id === cardId && i.foil === foil && (i.variant ?? null) === variant,
+    );
+    if (idx === -1)
+      setList([
+        ...list,
+        variant
+          ? { card_id: cardId, quantity: 1, foil, variant }
+          : { card_id: cardId, quantity: 1, foil },
+      ]);
     else {
       const next = [...list];
       if (next[idx].quantity < max) next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
@@ -1068,8 +1103,14 @@ function TradeComposerModal({
     }
   };
 
-  const pickedQty = (list: TradeCardItem[], cardId: string, foil: boolean) =>
-    list.find((i) => i.card_id === cardId && i.foil === foil)?.quantity || 0;
+  const pickedQty = (
+    list: TradeCardItem[],
+    cardId: string,
+    foil: boolean,
+    variant: CardVariant | null = null,
+  ) =>
+    list.find((i) => i.card_id === cardId && i.foil === foil && (i.variant ?? null) === variant)
+      ?.quantity || 0;
 
   const handleSend = async () => {
     if (busy) return;
@@ -1092,10 +1133,15 @@ function TradeComposerModal({
     setList: (l: TradeCardItem[]) => void,
     lockedMap: Map<string, number> = new Map(),
     reservedMap: Map<string, number> = new Map(),
+    variants: OwnedVariant[] = [],
   ) => (
     <div className="flex flex-wrap gap-1 max-h-52 overflow-y-auto ink-border-sm p-2 bg-[var(--c-paper)]">
       {source
-        .filter((c) => c.quantity + c.foil_quantity > 0 && POOL_BY_ID[c.card_id]?.type !== 'Leader')
+        .filter(
+          (c) =>
+            (c.quantity + c.foil_quantity > 0 || variants.some((v) => v.card_id === c.card_id)) &&
+            POOL_BY_ID[c.card_id]?.type !== 'Leader',
+        )
         .map((c) => {
           const def = POOL_BY_ID[c.card_id];
           // Deck-locked copies must be split across the two variants
@@ -1142,6 +1188,26 @@ function TradeComposerModal({
                   {pickedQty(list, c.card_id, true) > 0 && ` [${pickedQty(list, c.card_id, true)}]`}
                 </button>
               )}
+              {variants
+                .filter((v) => v.card_id === c.card_id)
+                .map((v) => (
+                  <button
+                    key={`${v.variant}|${v.foil}`}
+                    onClick={() => toggle(list, setList, c.card_id, v.foil, v.quantity, v.variant)}
+                    className={cn(
+                      'fs-xs font-black px-1.5 py-0.5 min-h-10 sm:min-h-0 ink-border-sm',
+                      RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
+                      pickedQty(list, c.card_id, v.foil, v.variant) > 0 &&
+                        'outline outline-2 outline-[var(--c-ink)]',
+                    )}
+                    title={VARIANT_META[v.variant].name}
+                  >
+                    {cardName(c.card_id)} ◆{VARIANT_META[v.variant].short}
+                    {v.foil ? '✦' : ''}×{v.quantity}
+                    {pickedQty(list, c.card_id, v.foil, v.variant) > 0 &&
+                      ` [${pickedQty(list, c.card_id, v.foil, v.variant)}]`}
+                  </button>
+                ))}
             </React.Fragment>
           );
         })}
@@ -1192,7 +1258,7 @@ function TradeComposerModal({
           </p>
 
           <div className="heading-font text-xs mb-1">YOU GIVE</div>
-          {renderPicker(collection, offer, setOffer, locked, serializedReserved)}
+          {renderPicker(collection, offer, setOffer, locked, serializedReserved, myVariants)}
           <div className="flex items-center gap-2 mt-2 mb-4">
             <Coins className="w-4 h-4" />
             <input

@@ -7,6 +7,7 @@
  * value) and the things you can do with it: pin it to your profile, stand it
  * up in the 3D Showroom, quicksell it or crack it back into a raw card.
  */
+import { asVariant } from './variants';
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Pin, PinOff, Hammer, Coins, Box, FlaskConical } from 'lucide-react';
@@ -91,6 +92,7 @@ export function SlabDetailModal({
   const price = graded
     ? gradedQuicksellPrice(def?.rarity, g.foil, g.grade!, g.service, {
         pristine: g.pristine,
+        variant: asVariant(g.variant),
         favourite: collectorFavourite(),
       })
     : 0;

@@ -53,7 +53,7 @@ export function recordPack(packName: string, pulls: PackPull[], now = new Date()
 /** The pull fields a recap needs — a subset of PackPull, so both live pulls
  * and stored history entries fit. */
 type RecapPull = Pick<PackPull, 'rarity' | 'foil'> &
-  Partial<Pick<PackPull, 'card_id' | 'name' | 'serialized' | 'converted_to_credits'>>;
+  Partial<Pick<PackPull, 'card_id' | 'name' | 'serialized' | 'converted_to_credits' | 'variant'>>;
 
 /**
  * How "good" a pull is, for picking a best pull: rarity first, then kept
@@ -64,6 +64,8 @@ export function pullScore(p: RecapPull): number {
     rarityTier(p.rarity) * 100 +
     (p.converted_to_credits ? 0 : 10) +
     (p.foil ? 1 : 0) +
+    // a variant beats a plain pull of its rarity (Shattered over elemental)
+    (p.variant ? (p.variant === 'shattered' ? 6 : 4) : 0) +
     (p.serialized ? 1000 : 0)
   );
 }
