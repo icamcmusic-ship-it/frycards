@@ -232,3 +232,16 @@ describe('rewardFloorMs (A20) mirrors the server floor', () => {
     expect(rewardFloorMs(1 * MIN, 2)).toBe(45_000);
   });
 });
+
+describe('action guards (S-7, S-12)', () => {
+  test('confirm big bets', async () => {
+    const { needsAllInConfirm, potOddsPct } = await import('./matchPrefs');
+    expect(needsAllInConfirm('off', 100, 100)).toBe(false);
+    expect(needsAllInConfirm('allin', 99, 100)).toBe(false);
+    expect(needsAllInConfirm('allin', 100, 100)).toBe(true);
+    expect(needsAllInConfirm('half', 50, 100)).toBe(true);
+    expect(needsAllInConfirm('half', 49, 100)).toBe(false);
+    expect(potOddsPct(10, 30)).toBe(25);
+    expect(potOddsPct(0, 30)).toBe(0);
+  });
+});

@@ -280,6 +280,8 @@ async function runScenario(browser: Browser, sc: Scenario): Promise<Outcome> {
   await ctx.addInitScript(() => {
     try {
       localStorage.setItem('frycards_coach_done', '1');
+      // A random clicker cannot answer the all-in confirm; the guard has unit tests.
+      localStorage.setItem('frycards:allin-confirm', 'off');
     } catch {
       /* storage blocked */
     }

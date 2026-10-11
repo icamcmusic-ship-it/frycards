@@ -784,9 +784,8 @@ export function PokerTable({
       const o = betOptions(m, HUMAN);
       if (action.type === 'fold' && foldGuard && o?.canCheck) {
         // Never fold when checking is free: check instead.
-        const ok = humanAct({ type: 'check', seat: HUMAN });
-        if (ok) setNotice('Checked instead of folding — checking was free.');
-        return ok;
+        // (The CHECK bubble on your plate shows what happened.)
+        return humanAct({ type: 'check', seat: HUMAN });
       }
       if (action.type === 'raise' && m.hand) {
         const behind = m.seats[HUMAN].stack + m.hand.streetBet[HUMAN];
