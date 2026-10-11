@@ -30,6 +30,7 @@ import {
   tearRelease,
 } from './pack/revealTier';
 import { FoilShimmer } from './pack/FoilShimmer';
+import { asVariant, variantName, VARIANT_META } from './variants';
 import { buzz, useCountUp } from './pack/useCountUp';
 
 /**
@@ -826,6 +827,7 @@ function RevealStage({
                 def={currentDef!}
                 size="full"
                 foil={current.foil}
+                variant={asVariant(current.variant)}
                 dimmed={current.converted_to_credits}
                 serial={
                   current.serialized
@@ -890,6 +892,10 @@ function RevealStage({
             {current.converted_to_credits
               ? `OVER COPY CAP — ${(current.rarity || 'COMMON').toUpperCase()} → CREDITS`
               : `${(current.rarity || 'COMMON').toUpperCase()}${current.foil ? ' · FOIL ✦' : ''}${
+                  current.variant
+                    ? ` · ${(variantName(asVariant(current.variant)) ?? '').toUpperCase()} ◆`
+                    : ''
+                }${
                   current.serialized
                     ? ` · SERIALIZED #${current.serial_number}/${current.serial_cap}`
                     : ''
@@ -976,6 +982,7 @@ function SummaryStage({
   );
   const convertedCount = pulls.filter((p) => p.converted_to_credits).length;
   const foilCount = pulls.filter((p) => p.foil).length;
+  const variantCount = pulls.filter((p) => p.variant).length;
 
   // Best pull: highest rarity (kept copies beat credit conversions, foils win ties).
   const bestIndex = useMemo(() => {
@@ -996,7 +1003,7 @@ function SummaryStage({
     const m = new Map<string, { pull: PackPull; count: number; indices: number[] }>();
     pulls.forEach((p, i) => {
       if (i === bestIndex) return; // the spotlight already shows this copy
-      const key = `${p.card_id}:${p.foil}:${p.serialized ? `s${p.serial_number}` : ''}:${p.converted_to_credits}`;
+      const key = `${p.card_id}:${p.foil}:${p.variant ?? ''}:${p.serialized ? `s${p.serial_number}` : ''}:${p.converted_to_credits}`;
       const g = m.get(key) || { pull: p, count: 0, indices: [] };
       g.count += 1;
       g.indices.push(i);
@@ -1005,6 +1012,7 @@ function SummaryStage({
     return [...m.values()].sort(
       (a, b) =>
         rarityRank(b.pull.rarity) - rarityRank(a.pull.rarity) ||
+        Number(!!b.pull.variant) - Number(!!a.pull.variant) ||
         Number(b.pull.foil) - Number(a.pull.foil) ||
         (a.pull.name || '').localeCompare(b.pull.name || ''),
     );
@@ -1086,6 +1094,8 @@ function SummaryStage({
       (i) =>
         !sold.has(i) &&
         !pulls[i].converted_to_credits &&
+        // variants are never "clutter" — they sell from Collection on purpose
+        !pulls[i].variant &&
         (pulls[i].rarity === 'Common' || pulls[i].rarity === 'Uncommon'),
     );
   const clutterValue = clutterIndices.reduce(
@@ -1106,7 +1116,7 @@ function SummaryStage({
       s +
       (p.converted_to_credits || sold.has(i) || p.serialized
         ? 0
-        : quicksellPrice(p.rarity, p.foil)),
+        : quicksellPrice(p.rarity, p.foil, asVariant(p.variant))),
     0,
   );
 
@@ -1219,6 +1229,9 @@ function SummaryStage({
       <div className="flex flex-wrap justify-center gap-2 mt-3 mb-4">
         <StatTile label="CARDS" value={String(pulls.length)} />
         {foilCount > 0 && <StatTile label="FOILS ✦" value={String(foilCount)} accent="yellow" />}
+        {variantCount > 0 && (
+          <StatTile label="VARIANTS ◆" value={String(variantCount)} accent="yellow" />
+        )}
         {newCount > 0 && <StatTile label="NEW" value={`×${newCount}`} accent="yellow" />}
         <StatTile
           label="TOP PULL"
@@ -1255,6 +1268,7 @@ function SummaryStage({
             def={pullToDef(best)}
             size="full"
             foil={best.foil}
+            variant={asVariant(best.variant)}
             dimmed={best.converted_to_credits || sold.has(bestIndex)}
             serial={
               best.serialized ? { number: best.serial_number!, cap: best.serial_cap! } : undefined
@@ -1338,6 +1352,7 @@ function SummaryStage({
                   def={pullToDef(grp.pull)}
                   size="compact"
                   foil={grp.pull.foil}
+                  variant={asVariant(grp.pull.variant)}
                   count={grp.count > 1 ? grp.count : undefined}
                   dimmed={spent}
                   serial={
@@ -1506,6 +1521,7 @@ function MythicTakeover({
             def={def}
             size="full"
             foil={pull.foil}
+            variant={asVariant(pull.variant)}
             serial={
               pull.serialized ? { number: pull.serial_number!, cap: pull.serial_cap! } : undefined
             }
@@ -1577,6 +1593,8 @@ function PullBadges({
     tags.push(nd.isNew ? { t: 'NEW', c: 'po-b-new' } : { t: `DUPE ×${nd.copies}`, c: 'po-b-dupe' });
   if (pull.serialized) tags.push({ t: `#${pull.serial_number}`, c: 'po-b-serial' });
   if (pull.foil) tags.push({ t: 'FOIL', c: 'po-b-foil' });
+  const v = asVariant(pull.variant);
+  if (v) tags.push({ t: VARIANT_META[v].name.toUpperCase(), c: 'po-b-variant' });
   if (wish) tags.push({ t: '♥ WISH', c: 'po-b-wish' });
   if (!tags.length) return null;
   return (

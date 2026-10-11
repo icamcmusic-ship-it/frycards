@@ -1,4 +1,5 @@
 import { createClient, Session } from '@supabase/supabase-js';
+import { type CardVariant, type OwnedVariant, isCardVariant } from '../meta/variants';
 import { CardTemplate } from '../types';
 import { isMeteredStorageUrl, METERED_ART_MESSAGE } from './media';
 import { cachedFetch } from './cache';
@@ -178,9 +179,9 @@ export interface Profile {
   equipped_banner: string | null;
   equipped_avatar: string | null;
   last_free_pack_at: string | null;
+  /** Up to 6 pinned entries: card ids, and graded slabs as `slab:<id>`
+   * (see SLAB_SHOWCASE_PREFIX). */
   showcase_cards: string[];
-  /** Up to 3 graded slab ids pinned on the profile (graded_cards.id). */
-  showcase_slabs?: string[];
   /** Opt out of username recognition in the News Center's Serialized-pull
    * feed — the pull itself always still posts, just as "A collector". */
   hide_serialized_announcements: boolean;
@@ -309,6 +310,8 @@ export interface PackPull {
   serial_number?: number;
   /** Total supply for this pull's rarity tier (75/100/50 for Full-Art/Ultra-Rare/Mythic — see the `serialized_supply` table, the source of truth). */
   serial_cap?: number;
+  /** Cosmetic variant rolled on this card (null = none) — see meta/variants.ts. */
+  variant?: CardVariant | null;
 }
 
 export interface OpenPackResult {
@@ -434,6 +437,21 @@ export async function fetchCollection(userId: string): Promise<PlayerCard[]> {
   return (data as PlayerCard[]) || [];
 }
 
+/** The player's variant copies (player_card_variants) — a subset of the
+ * copies `fetchCollection` already counts. Rows at quantity 0 are history. */
+export async function fetchCardVariants(userId: string): Promise<OwnedVariant[]> {
+  const { data, error } = await supabase
+    .from('player_card_variants')
+    .select('card_id, foil, variant, quantity')
+    .eq('user_id', userId)
+    .gt('quantity', 0);
+  if (error) {
+    console.error('fetchCardVariants failed:', error.message);
+    throw error;
+  }
+  return ((data as OwnedVariant[]) || []).filter((r) => isCardVariant(r.variant));
+}
+
 export async function fetchCosmetics(userId: string): Promise<PlayerCosmetic[]> {
   const { data, error } = await supabase
     .from('player_cosmetics')
@@ -518,19 +536,20 @@ export async function setUsername(name: string): Promise<string | null> {
   return rpcError(error);
 }
 
-/** Pin up to 6 owned cards to show off on the profile (own or when viewed by others). */
+/** Showcase entries that are graded slabs are stored as `slab:<graded_cards.id>`
+ * in profiles.showcase_cards, mixed with plain card ids (20261013000000). */
+export const SLAB_SHOWCASE_PREFIX = 'slab:';
+export const slabShowcaseEntry = (gradedId: string) => SLAB_SHOWCASE_PREFIX + gradedId;
+export const slabIdOfShowcaseEntry = (entry: string): string | null =>
+  entry.startsWith(SLAB_SHOWCASE_PREFIX) ? entry.slice(SLAB_SHOWCASE_PREFIX.length) : null;
+
+/** Pin up to 6 owned cards and/or graded slabs to the profile (own or when viewed by others). */
 export async function setShowcaseCards(cardIds: string[]): Promise<string | null> {
   const { error } = await supabase.rpc('set_showcase_cards', { p_card_ids: cardIds });
   return rpcError(error);
 }
 
-/** Pin up to 3 of your own graded slabs to the profile. */
-export async function setShowcaseSlabs(ids: string[]): Promise<string | null> {
-  const { error } = await supabase.rpc('set_showcase_slabs', { p_ids: ids });
-  return rpcError(error);
-}
-
-/** Anyone's pinned slabs (graded_cards rows), in pin order. */
+/** Anyone's pinned slabs (graded_cards rows from their showcase), in pin order. */
 export async function fetchShowcaseSlabs(userId: string): Promise<
   {
     id: string;
@@ -1259,6 +1278,8 @@ export interface TradeCardItem {
   card_id: string;
   quantity: number;
   foil: boolean;
+  /** Variant copies (20261013000010): transfer_cards moves the variant too. */
+  variant?: CardVariant | null;
 }
 
 export interface Trade {
@@ -1377,6 +1398,8 @@ export interface MarketListing {
   slab_grade?: number | null;
   slab_service?: 'tca' | 'amg' | 'keeper' | null;
   slab_pristine?: boolean;
+  /** Cosmetic variant on the listed copies / slab (20261013000010). */
+  variant?: CardVariant | null;
 }
 
 /** Marketplace fee taken from the seller's proceeds — mirror of finalize_sale. */
@@ -1393,7 +1416,7 @@ export const MARKET_LIST_LIMIT = 200;
  * to every player by default.
  */
 const MARKET_LISTING_COLUMNS =
-  'id, seller, card_id, foil, quantity, listing_type, price, buyout, current_bid, current_bidder, bid_count, status, created_at, ends_at, cpu_leading, cpu_bidder_name, graded_id, slab_grade, slab_service, slab_pristine';
+  'id, seller, card_id, foil, quantity, listing_type, price, buyout, current_bid, current_bidder, bid_count, status, created_at, ends_at, cpu_leading, cpu_bidder_name, graded_id, slab_grade, slab_service, slab_pristine, variant';
 
 export async function fetchMarketListings(): Promise<MarketListing[]> {
   // Expired listings are swept by the 5-minute pg_cron job (the RPC is no
@@ -1502,7 +1525,22 @@ export async function createListing(opts: {
   price: number;
   buyout?: number | null;
   hours?: number;
+  /** List variant copies (create_variant_listing) instead of plain ones. */
+  variant?: CardVariant | null;
 }): Promise<string | null> {
+  if (opts.variant) {
+    const { error } = await supabase.rpc('create_variant_listing', {
+      p_card_id: opts.cardId,
+      p_foil: opts.foil,
+      p_variant: opts.variant,
+      p_quantity: opts.quantity,
+      p_type: opts.type,
+      p_price: opts.price,
+      p_buyout: opts.buyout ?? null,
+      p_hours: opts.hours ?? 24,
+    });
+    return rpcError(error);
+  }
   const { error } = await supabase.rpc('create_listing', {
     p_card_id: opts.cardId,
     p_foil: opts.foil,
@@ -1611,6 +1649,8 @@ export interface QuicksellManyItem {
   card_id: string;
   qty: number;
   foil: boolean;
+  /** Sell variant copies (paid at the variant multiplier). */
+  variant?: CardVariant | null;
 }
 
 export interface QuicksellManyResult {
@@ -1813,6 +1853,8 @@ export interface ShopListingCardItem {
   card_id: string;
   foil: boolean;
   quantity: number;
+  /** Cosmetic variant of these copies (20261013000010). */
+  variant?: CardVariant | null;
   /** Set when the item is a graded slab (20261012000009). */
   graded_id?: string;
   grade?: number;
@@ -1957,6 +1999,8 @@ export interface ListableCard {
   spare_foil: number;
   value_normal: number;
   value_foil: number;
+  /** Variant copies, kept apart from spare_normal / spare_foil (20261013000010). */
+  variants?: { variant: CardVariant; foil: boolean; quantity: number; value: number }[];
 }
 
 export interface MysteryLiveStats {
@@ -2469,6 +2513,10 @@ export interface CardSubmission {
   art_url?: string | null;
   art_error?: string | null;
   art_updated_at?: string | null;
+  /** Uploaded original in the private submission-art bucket (migration
+   * 20261013000002); image_url then holds a placeholder. Null for links. */
+  art_path?: string | null;
+  art_removed_at?: string | null;
 }
 
 export type ArtPipelineStatus = 'pending' | 'published' | 'failed';
@@ -2541,6 +2589,84 @@ export async function submitCard(input: {
     p_treatment: input.treatment,
   });
   return { data: (data as CardSubmission) || null, error: rpcError(error) };
+}
+
+/** Submit a card whose art was uploaded with uploadSubmissionArt. */
+export async function submitCardWithArt(input: {
+  name: string;
+  type: string;
+  flavor: string;
+  artPath: string;
+  treatment: SubmissionTreatment;
+}): Promise<{ data: CardSubmission | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('submit_card_art', {
+    p_name: input.name,
+    p_type: input.type,
+    p_flavor: input.flavor,
+    p_art_path: input.artPath,
+    p_treatment: input.treatment,
+  });
+  return { data: (data as CardSubmission) || null, error: rpcError(error) };
+}
+
+export const SUBMISSION_ART_BUCKET = 'submission-art';
+
+/**
+ * Upload a submission's art straight to the private submission-art bucket as
+ * `<uid>/<uuid>.<ext>` (RLS: own folder, 3 pending uploads, 8 MB, image /
+ * mp4 / webm). Plain XHR rather than supabase-js so the form can show upload
+ * progress. Resolves to the object path, or rejects with a player-facing
+ * message.
+ */
+export async function uploadSubmissionArt(
+  file: File,
+  ext: string,
+  onProgress?: (fraction: number) => void,
+): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const session = data.session;
+  if (!session) throw new Error('Sign in to upload art.');
+  const path = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${SUPABASE_URL}/storage/v1/object/${SUBMISSION_ART_BUCKET}/${path}`);
+    xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
+    xhr.setRequestHeader('apikey', SUPABASE_KEY);
+    xhr.setRequestHeader('Content-Type', file.type);
+    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      let msg = '';
+      try {
+        msg = JSON.parse(xhr.responseText)?.message ?? '';
+      } catch {
+        /* not json */
+      }
+      reject(
+        new Error(
+          /row-level security|policy/i.test(msg)
+            ? 'Upload refused — you may already have 3 uploads awaiting review.'
+            : /size|too large|payload/i.test(msg)
+              ? 'That file is over the 8 MB limit.'
+              : msg || `Upload failed (HTTP ${xhr.status}).`,
+        ),
+      );
+    };
+    xhr.onerror = () => reject(new Error('Upload failed — check your connection and try again.'));
+    xhr.send(file);
+  });
+  return path;
+}
+
+/** Creator only (RLS): a short-lived link to preview an uploaded original. */
+export async function signedSubmissionArtUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(SUBMISSION_ART_BUCKET)
+    .createSignedUrl(path, 3600);
+  return error ? null : data.signedUrl;
 }
 
 export async function withdrawSubmission(id: string): Promise<string | null> {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShowcaseSlabsRow } from './SlabDetailModal';
+import { ShowcaseGrid } from './SlabDetailModal';
 import { useMeta } from './MetaContext';
 import { fetchPlayerProfileCard, PlayerProfileCard, PlayerRole } from '../lib/supabase';
 import { RoleBadge } from './RoleBadge';
@@ -187,7 +187,6 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                   </div>
                 ))}
               </div>
-              <ShowcaseSlabsRow userId={userId} heading="GRADED SHOWCASE" />
               <h2 className="heading-font text-sm mb-2 mt-3 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
                 SHOWCASE
               </h2>
@@ -198,14 +197,16 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                     : `${card.username} hasn't pinned any showcase cards yet.`}
                 </p>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {(card.showcase_cards || []).map((id) => {
+                <ShowcaseGrid
+                  userId={userId}
+                  entries={card.showcase_cards || []}
+                  size="compact"
+                  renderCard={(id) => {
                     const def = POOL_BY_ID[id];
-                    if (!def)
-                      return <UnavailableShowcaseTile key={id} cardId={id} size="compact" />;
-                    return <CardFace key={id} def={def} size="compact" />;
-                  })}
-                </div>
+                    if (!def) return <UnavailableShowcaseTile cardId={id} size="compact" />;
+                    return <CardFace def={def} size="compact" />;
+                  }}
+                />
               )}
             </div>
           </>

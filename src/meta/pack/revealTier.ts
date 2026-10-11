@@ -9,11 +9,14 @@ import { RARITY_HEX, rarityTier } from '../rarity';
  * mythic: full-screen takeover. Serialized is an add-on stamp, not a tier. */
 export type RevealTier = 'fast' | 'rare' | 'burst' | 'mythic';
 
-export function revealTier(pull: Pick<PackPull, 'rarity' | 'converted_to_credits'>): RevealTier {
+export function revealTier(
+  pull: Pick<PackPull, 'rarity' | 'converted_to_credits'> & Partial<Pick<PackPull, 'variant'>>,
+): RevealTier {
   if (pull.converted_to_credits) return 'fast';
   const t = rarityTier(pull.rarity);
   if (t >= rarityTier('Mythic')) return 'mythic';
-  if (t >= rarityTier('Super-Rare')) return 'burst';
+  // A variant (Shattered / elemental) always gets at least the SR moment.
+  if (t >= rarityTier('Super-Rare') || pull.variant) return 'burst';
   if (t >= rarityTier('Rare')) return 'rare';
   return 'fast';
 }

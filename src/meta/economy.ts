@@ -22,6 +22,7 @@ export function fmtVouchers(n: number | null | undefined): string {
  * the server always recomputes and is the source of truth.
  */
 import { Rarity } from '../types';
+import { type CardVariant, variantMult } from './variants';
 
 export const QUICKSELL_PRICES: Record<Rarity, number> = {
   // 2026-10-06 rescale: at the old table (10/25/100/300/800/1000/1800/3000)
@@ -38,9 +39,15 @@ export const QUICKSELL_PRICES: Record<Rarity, number> = {
 
 export const FOIL_QUICKSELL_MULTIPLIER = 2.5;
 
-export function quicksellPrice(rarity: string | undefined, foil: boolean): number {
+export function quicksellPrice(
+  rarity: string | undefined,
+  foil: boolean,
+  variant?: CardVariant | null,
+): number {
   const base = QUICKSELL_PRICES[(rarity as Rarity) || 'Common'] ?? QUICKSELL_PRICES.Common;
-  return foil ? Math.ceil(base * FOIL_QUICKSELL_MULTIPLIER) : base;
+  const f = foil ? Math.ceil(base * FOIL_QUICKSELL_MULTIPLIER) : base;
+  // quicksell_many: ceil(foil-adjusted price x variant_mult) — stacks with foil.
+  return variant ? Math.ceil(f * variantMult(variant)) : f;
 }
 
 /**

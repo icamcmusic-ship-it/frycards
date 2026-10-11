@@ -31,6 +31,7 @@
 import React from 'react';
 import { Clock } from 'lucide-react';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
+import { asVariant, variantName } from './variants';
 import { POOL_BY_ID } from '../game/poker/cardpool';
 import { cn } from '../lib/utils';
 import { GradedCard, GRADING_SERVICE_BY_ID, GRADE_WORDS, fmtGrade } from './grading';
@@ -445,7 +446,11 @@ export function GradedSlab({
             style={{ fontSize: tier.cert + 1 }}
           >
             {def.rarity ?? 'Common'}
-            {g.foil ? ' · FOIL ✦' : ''} · {def.set ?? 'FRYCARDS'}
+            {g.foil ? ' · FOIL ✦' : ''}
+            {variantName(asVariant(g.variant))
+              ? ` · ${variantName(asVariant(g.variant))!.toUpperCase()}`
+              : ''}{' '}
+            · {def.set ?? 'FRYCARDS'}
           </div>
         </div>
         <div
@@ -496,7 +501,7 @@ export function GradedSlab({
                   : undefined,
           }}
         >
-          <CardFace def={def} size={tier.face} foil={g.foil} />
+          <CardFace def={def} size={tier.face} foil={g.foil} variant={asVariant(g.variant)} />
         </div>
         {condition > 0 && <Damage level={condition as 1 | 2 | 3} seed={certSeed} />}
         {/* Static glare across the top-left of the glass. */}

@@ -3,7 +3,8 @@ name: Showcase art
 # Moves approved Player Showcase art onto Cloudflare Pages and points each
 # card at it, and mirrors every hot-linked cosmetic image (shop_items: card
 # backs, banners, avatars) to Cosmetics/<id>.webp on the same Pages project
-# (scripts/publish-showcase-art.ts, docs/CARD_SUBMISSIONS.md).
+# (scripts/publish-showcase-art.ts, docs/CARD_SUBMISSIONS.md), and publishes
+# the card backs committed under art/cardbacks/ as CardBacks/<slug>.webp.
 #
 # MANUAL FIRST. Run it from Actions > Showcase art > Run workflow after
 # approving cards. The daily schedule is only a safety net: it does nothing
@@ -23,6 +24,11 @@ name: Showcase art
 # Without the token the job exits successfully having done nothing.
 
 on:
+  # New card backs committed under art/cardbacks/ publish on merge (the app
+  # serves its bundled public/cardbacks/ copy until then).
+  push:
+    branches: [main]
+    paths: ['art/cardbacks/**']
   workflow_dispatch:
     inputs:
       dry_run:

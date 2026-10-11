@@ -38,6 +38,10 @@ import {
   parseModsInput,
   slugifyCardId,
   validateSubmission,
+  UPLOAD_LIMITS,
+  aspectHint,
+  uploadExt,
+  validateArtFile,
 } from './submissions';
 import { CardEditorPanel } from './CardEditorPanel';
 import { buildEditedPayload } from './cardEditor';
@@ -56,6 +60,9 @@ import {
   reviewSubmission,
   setSubmissionBan,
   submitCard,
+  submitCardWithArt,
+  signedSubmissionArtUrl,
+  uploadSubmissionArt,
   withdrawSubmission,
 } from '../lib/supabase';
 
@@ -192,6 +199,171 @@ function StatusChip({ status }: { status: string }) {
 // ---------------------------------------------------------------------------
 // Player: submit a card + track your own queue
 // ---------------------------------------------------------------------------
+/** A chosen art file: local preview URL, natural size, and — once it has
+ * been uploaded — its storage path (kept so a failed submit can retry
+ * without uploading, and spending a pending-upload slot, again). */
+interface ArtFile {
+  file: File;
+  url: string;
+  width: number;
+  height: number;
+  path: string | null;
+}
+
+function ArtUploadField({
+  value,
+  onChange,
+  treatment,
+  progress,
+  disabled,
+}: {
+  value: ArtFile | null;
+  onChange: (f: ArtFile | null) => void;
+  treatment: Treatment;
+  progress: number | null;
+  disabled?: boolean;
+}) {
+  const [over, setOver] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const accept = [...UPLOAD_LIMITS.imageTypes, ...UPLOAD_LIMITS.videoTypes].join(',');
+  // Free the local preview when the file is replaced or removed (keyed on the
+  // URL: recording the uploaded path keeps the same preview).
+  const previewUrl = value?.url;
+  useEffect(() => () => void (previewUrl && URL.revokeObjectURL(previewUrl)), [previewUrl]);
+
+  const pick = (file: File | undefined) => {
+    if (!file) return;
+    const problem = validateArtFile(file, treatment);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setError('');
+    const url = URL.createObjectURL(file);
+    const done = (width: number, height: number) =>
+      onChange({ file, url, width, height, path: null });
+    if (file.type.startsWith('video/')) {
+      const v = document.createElement('video');
+      v.preload = 'metadata';
+      v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight);
+      v.onerror = () => done(0, 0);
+      v.src = url;
+    } else {
+      const img = new Image();
+      img.onload = () => done(img.naturalWidth, img.naturalHeight);
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        setError('That image could not be read — try another file.');
+      };
+      img.src = url;
+    }
+  };
+
+  const hint = value ? aspectHint(value.width, value.height) : null;
+  const isVideo = value?.file.type.startsWith('video/');
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Choose or drop an art file"
+        aria-disabled={disabled}
+        onClick={() => !disabled && inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          if (!disabled) pick(e.dataTransfer.files?.[0]);
+        }}
+        className={cn(
+          'ink-border-sm border-dashed px-3 py-3 text-center fs-xs font-bold cursor-pointer',
+          over ? 'bg-[var(--c-yellow)]' : 'bg-[var(--c-paper)]',
+          disabled && 'opacity-50 cursor-not-allowed',
+        )}
+      >
+        {value
+          ? `${value.file.name} · ${(value.file.size / 1048576).toFixed(1)} MB${
+              value.width ? ` · ${value.width}×${value.height}` : ''
+            } — click or drop to replace`
+          : 'Drop your art here, or click to choose a file'}
+        <div className="text-[var(--c-steel)] mt-0.5">
+          PNG, JPEG or WebP (MP4 / WebM for a video Mythic) · up to 8 MB · 5:7 portrait
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={accept}
+          className="hidden"
+          onChange={(e) => {
+            pick(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
+      </div>
+      {value && (
+        <div className="flex items-start gap-3">
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="w-[72px] aspect-[5/7] ink-border-sm overflow-hidden bg-[var(--c-ink)]">
+              {isVideo ? (
+                <video
+                  src={value.url}
+                  muted
+                  loop
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <img src={value.url} alt="Crop preview" className="w-full h-full object-cover" />
+              )}
+            </div>
+            <span className="fs-xs font-black text-[var(--c-steel)]">5:7 CROP</span>
+          </div>
+          <div className="flex flex-col gap-1 min-w-0 fs-xs font-bold">
+            {hint ? (
+              <span className="text-[var(--c-red)]">{hint}</span>
+            ) : value.width ? (
+              <span className="text-[var(--c-steel)]">Already 5:7 — prints uncropped.</span>
+            ) : null}
+            <button
+              type="button"
+              className="self-start underline text-[var(--c-steel)]"
+              disabled={disabled}
+              onClick={() => onChange(null)}
+            >
+              Remove file
+            </button>
+          </div>
+        </div>
+      )}
+      {progress != null && (
+        <div
+          className="h-2 ink-border-sm bg-[var(--c-paper)] overflow-hidden"
+          role="progressbar"
+          aria-label="Upload progress"
+          aria-valuenow={Math.round(progress * 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div className="h-full bg-[var(--c-yellow)]" style={{ width: `${progress * 100}%` }} />
+        </div>
+      )}
+      {error && <Notice text={error} />}
+    </div>
+  );
+}
+
 function SubmitPanel({
   mine,
   reload,
@@ -207,6 +379,9 @@ function SubmitPanel({
   const [type, setType] = useState<CardType>('Unit');
   const [treatment, setTreatment] = useState<Treatment>('standard');
   const [imageUrl, setImageUrl] = useState('');
+  const [artSource, setArtSource] = useState<'upload' | 'link'>('upload');
+  const [artFile, setArtFile] = useState<ArtFile | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const [flavor, setFlavor] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -231,8 +406,20 @@ function SubmitPanel({
     (t === 'full_art' && held.full_art >= SUBMISSION_LIMITS.fullArtPerAccount) ||
     (t === 'video_mythic' && held.video_mythic >= SUBMISSION_LIMITS.videoMythicPerAccount);
 
-  const draft = { title, type, flavor, imageUrl, treatment };
-  const validation = validateSubmission(draft);
+  const uploading = artSource === 'upload';
+  const draft = {
+    title,
+    type,
+    flavor,
+    imageUrl,
+    treatment,
+    artFile: uploading && artFile ? artFile.file : null,
+  };
+  const validation =
+    uploading && !artFile && title.trim() !== ''
+      ? 'Choose an art file to upload (or switch to PASTE LINK).'
+      : validateSubmission(draft);
+  const previewImage = uploading ? (artFile?.url ?? '') : imageUrl.trim();
   const queueFull = held.pending >= SUBMISSION_LIMITS.maxPending;
 
   // Preview card. `deriveCardMechanics` is the same assignment every client
@@ -246,10 +433,10 @@ function SubmitPanel({
         type,
         rarity: PREVIEW_RARITY[treatment],
         set: SHOWCASE_SET,
-        image: imageUrl.trim(),
+        image: previewImage,
         flavor: flavor.trim() || 'Your flavor text lands here.',
       }),
-    [title, type, treatment, imageUrl, flavor],
+    [title, type, treatment, previewImage, flavor],
   );
 
   const submit = async () => {
@@ -270,13 +457,36 @@ function SubmitPanel({
     setError('');
     setNotice('');
     try {
-      const { error: err } = await submitCard({
-        name: title.trim(),
-        type,
-        flavor: flavor.trim(),
-        imageUrl: imageUrl.trim(),
-        treatment,
-      });
+      let err: string | null;
+      if (uploading && artFile) {
+        // Upload first (straight to Storage), then attach. A path that was
+        // already uploaded is reused when only the submit step failed.
+        let path = artFile.path;
+        if (!path) {
+          setProgress(0);
+          path = await uploadSubmissionArt(
+            artFile.file,
+            uploadExt(artFile.file.type) ?? 'bin',
+            setProgress,
+          );
+          setArtFile({ ...artFile, path });
+        }
+        ({ error: err } = await submitCardWithArt({
+          name: title.trim(),
+          type,
+          flavor: flavor.trim(),
+          artPath: path,
+          treatment,
+        }));
+      } else {
+        ({ error: err } = await submitCard({
+          name: title.trim(),
+          type,
+          flavor: flavor.trim(),
+          imageUrl: imageUrl.trim(),
+          treatment,
+        }));
+      }
       if (err) {
         setError(err);
         return;
@@ -284,13 +494,19 @@ function SubmitPanel({
       setNotice('Submitted — Fry will review it. You can withdraw it until then.');
       setTitle('');
       setImageUrl('');
+      setArtFile(null);
       setFlavor('');
       setTreatment('standard');
       await reload();
-    } catch {
-      setError('Something went wrong — check your connection and try again.');
+    } catch (e) {
+      setError(
+        e instanceof Error && e.message
+          ? e.message
+          : 'Something went wrong — check your connection and try again.',
+      );
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -340,15 +556,51 @@ function SubmitPanel({
               </select>
             </label>
           </div>
-          <label className={label}>
-            ART URL (Midjourney link, https://…)
-            <input
-              className={input}
-              value={imageUrl}
-              placeholder="https://cdn.midjourney.com/…/0_0.png"
-              onChange={(e) => setImageUrl(e.target.value)}
-            />
-          </label>
+          <div className={label}>
+            <span className="flex items-center gap-2">
+              ART
+              <span className="flex gap-1" role="group" aria-label="Art source">
+                {(
+                  [
+                    ['upload', 'UPLOAD FILE'],
+                    ['link', 'PASTE LINK'],
+                  ] as const
+                ).map(([id, text]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={artSource === id}
+                    onClick={() => setArtSource(id)}
+                    className={cn(
+                      'px-1.5 py-0.5 ink-border-sm fs-xs font-black',
+                      artSource === id
+                        ? 'bg-[var(--c-ink)] text-[var(--c-yellow)]'
+                        : 'bg-[var(--c-paper)] text-[var(--c-ink)]',
+                    )}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </span>
+            </span>
+            {uploading ? (
+              <ArtUploadField
+                value={artFile}
+                onChange={setArtFile}
+                treatment={treatment}
+                progress={progress}
+                disabled={busy}
+              />
+            ) : (
+              <input
+                className={input}
+                value={imageUrl}
+                aria-label="Art URL"
+                placeholder="https://cdn.midjourney.com/…/0_0.png"
+                onChange={(e) => setImageUrl(e.target.value)}
+              />
+            )}
+          </div>
           <label className={label}>
             FLAVOR TEXT ({flavor.trim().length}/{SUBMISSION_LIMITS.flavorMax})
             <textarea
@@ -389,7 +641,13 @@ function SubmitPanel({
               disabled={!guest && (busy || !agreed || !!validation || queueFull)}
               onClick={submit}
             >
-              {guest ? 'SIGN IN TO SUBMIT ▸' : busy ? 'SUBMITTING…' : 'SUBMIT CARD ▸'}
+              {guest
+                ? 'SIGN IN TO SUBMIT ▸'
+                : busy
+                  ? progress != null
+                    ? `UPLOADING ${Math.round(progress * 100)}%…`
+                    : 'SUBMITTING…'
+                  : 'SUBMIT CARD ▸'}
             </PopButton>
             {/* U68: a disabled SUBMIT always says why. */}
             {!guest && !busy && (validation || !agreed) && (
@@ -871,6 +1129,20 @@ function ReviewCard({
   const [type, setType] = useState<CardType>(sub.card_type as CardType);
   const [flavor, setFlavor] = useState(sub.flavor_text);
   const [imageUrl, setImageUrl] = useState(sub.image_url);
+  // An uploaded original is private: preview it through a short-lived signed
+  // link (Creator-only RLS). The approval keeps sending the placeholder
+  // image_url; the art pipeline swaps in the Cloudflare URL.
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sub.art_path || sub.art_removed_at) return;
+    let cancelled = false;
+    void signedSubmissionArtUrl(sub.art_path).then((u) => {
+      if (!cancelled) setUploadPreview(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sub.art_path, sub.art_removed_at]);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -887,10 +1159,10 @@ function ReviewCard({
       type,
       rarity,
       set: sub.set_name,
-      image: imageUrl.trim(),
+      image: (imageUrl === sub.image_url && uploadPreview) || imageUrl.trim(),
       flavor: flavor.trim(),
     }),
-    [cardId, name, type, rarity, sub.set_name, sub.card_name, imageUrl, flavor],
+    [cardId, name, type, rarity, sub.set_name, sub.card_name, imageUrl, flavor, uploadPreview],
   );
   const generated = useMemo(() => deriveCardMechanics(identity), [identity]);
 

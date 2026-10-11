@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { asVariant, type CardVariant, type OwnedVariant, VARIANT_META } from './variants';
 import { clampWholeText, parseWhole } from './wholeField';
 import { useRouteTab, useRouter } from './useHashRouter';
 import { FilterSelect } from './FilterSelect';
@@ -116,6 +117,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     serializedCards,
     refreshProfile,
     refreshCollection,
+    cardVariants,
   } = useMeta();
   const userId = session?.user?.id;
   const [tab, setTab] = useRouteTab<Tab>('market', TABS, 'browse', 'market.tab');
@@ -313,7 +315,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
         )}
         <div className="p-3 flex gap-3 flex-1">
           <div className="shrink-0">
-            <CardFace def={def} size={size} foil={l.foil} />
+            <CardFace def={def} size={size} foil={l.foil} variant={asVariant(l.variant)} />
           </div>
           <div className="flex-1 min-w-0 flex flex-col">
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -329,6 +331,14 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               {l.foil && (
                 <span className="fs-xs font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">
                   FOIL ✦
+                </span>
+              )}
+              {asVariant(l.variant) && (
+                <span
+                  className="fs-xs font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]"
+                  title={VARIANT_META[asVariant(l.variant)!].blurb}
+                >
+                  ◆ {VARIANT_META[asVariant(l.variant)!].name.toUpperCase()}
                 </span>
               )}
               {l.quantity > 1 && <span className="fs-xs font-black">×{l.quantity}</span>}
@@ -517,6 +527,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
           <span className="heading-font fs-sm block truncate">
             {def.name}
             {l.foil ? ' ✦' : ''}
+            {asVariant(l.variant) ? ` ◆ ${VARIANT_META[asVariant(l.variant)!].short}` : ''}
             {l.quantity > 1 ? ` ×${l.quantity}` : ''}
           </span>
           <span className="fs-xs font-bold text-[var(--c-steel)] block truncate">
@@ -725,6 +736,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             collection={collection}
             decksLocked={decks}
             serializedCards={serializedCards}
+            cardVariants={cardVariants ?? []}
             busy={busy}
             onSubmit={(opts) =>
               run(
@@ -832,12 +844,16 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
 // Sell form: pick an owned card, choose fixed price or auction.
 // ---------------------------------------------------------------------------
 function SellForm({
-  collection,
+  collection: rawCollection,
   decksLocked,
   busy,
   serializedCards,
+  cardVariants,
   onSubmit,
 }: {
+  /** Variant copies: listed on their own (create_variant_listing), and kept
+   * out of the plain spare counts. */
+  cardVariants: OwnedVariant[];
   collection: { card_id: string; quantity: number; foil_quantity: number }[];
   decksLocked: { card_ids: string[] }[];
   /** Owned Serialized prints — never listable, so that many NORMAL copies
@@ -852,10 +868,37 @@ function SellForm({
     price: number;
     buyout: number | null;
     hours: number;
+    variant?: CardVariant | null;
   }) => void;
 }) {
   const [cardId, setCardId] = useState('');
   const [foil, setFoil] = useState(false);
+  /** '' = plain copies; otherwise `${variant}|${foil ? 1 : 0}`. */
+  const [copyKind, setCopyKind] = useState('');
+  const variantsByCard = useMemo(() => {
+    const m = new Map<string, OwnedVariant[]>();
+    for (const v of cardVariants) {
+      if (v.quantity <= 0) continue;
+      m.set(v.card_id, [...(m.get(v.card_id) ?? []), v]);
+    }
+    return m;
+  }, [cardVariants]);
+  // Plain copies only: variant copies sell through their own picker below.
+  const collection = useMemo(
+    () =>
+      rawCollection.map((c) => {
+        const vs = variantsByCard.get(c.card_id) ?? [];
+        const vq = vs.filter((v) => !v.foil).reduce((n, v) => n + v.quantity, 0);
+        const vf = vs.filter((v) => v.foil).reduce((n, v) => n + v.quantity, 0);
+        return {
+          ...c,
+          quantity: Math.max(0, c.quantity - vq),
+          foil_quantity: Math.max(0, c.foil_quantity - vf),
+          total: c.quantity + c.foil_quantity,
+        };
+      }),
+    [rawCollection, variantsByCard],
+  );
   // Raw text, parsed below and clamped on blur (B8).
   const [qtyText, setQtyText] = useState('1');
   const [type, setType] = useState<'fixed' | 'auction'>('fixed');
@@ -895,12 +938,12 @@ function SellForm({
               { q: c.quantity, f: c.foil_quantity },
               locked.get(c.card_id) || 0,
               serializedReserved.get(c.card_id) || 0,
-            ).total > 0
+            ).total > 0 || (variantsByCard.get(c.card_id)?.length ?? 0) > 0
           );
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
         .filter((c) => !search || c.def.name.toLowerCase().includes(search.toLowerCase())),
-    [collection, locked, serializedReserved, search],
+    [collection, locked, serializedReserved, search, variantsByCard],
   );
 
   // Look the selected card up in the full collection, not the search-filtered
@@ -917,7 +960,16 @@ function SellForm({
     locked.get(cardId) || 0,
     serializedReserved.get(cardId) || 0,
   );
-  const listable = foil ? spare.foil : spare.normal;
+  const selVariants = variantsByCard.get(cardId) ?? [];
+  const selVariant = copyKind
+    ? selVariants.find((v) => `${v.variant}|${v.foil ? 1 : 0}` === copyKind)
+    : undefined;
+  // A variant lot: its own copies, but deck locks still count every copy.
+  const variantListable = selVariant
+    ? Math.max(0, Math.min(selVariant.quantity, (selected?.total ?? 0) - (locked.get(cardId) || 0)))
+    : 0;
+  const listFoil = selVariant ? selVariant.foil : foil;
+  const listable = selVariant ? variantListable : foil ? spare.foil : spare.normal;
   // create_listing caps a single listing at 20 copies and a price of 1,000,000
   // credits; the form must offer only what the RPC will accept rather than
   // inviting a value that comes back as a bare "Invalid quantity/price" error.
@@ -926,7 +978,9 @@ function SellForm({
   const maxQty = Math.min(LISTING_MAX_QTY, listable);
   const quantity = parseWhole(qtyText, 1, Math.max(1, maxQty)) ?? 0;
   const price = parseWhole(priceText, 1, LISTING_MAX_PRICE) ?? 0;
-  const suggested = selected ? quicksellPrice(selected.def.rarity, foil) : 0;
+  const suggested = selected
+    ? quicksellPrice(selected.def.rarity, listFoil, selVariant?.variant ?? null)
+    : 0;
 
   // Buyout only applies to auctions — a stale buyout value left over from
   // auction mode must neither block a fixed-price listing's validation nor
@@ -969,6 +1023,9 @@ function SellForm({
               const sellableNormal = s.normal;
               setCardId(c.card_id);
               setFoil(sellableNormal <= 0 && s.foil > 0);
+              // Only variants left? Start on the first variant lot.
+              const vs = variantsByCard.get(c.card_id) ?? [];
+              setCopyKind(s.total <= 0 && vs[0] ? `${vs[0].variant}|${vs[0].foil ? 1 : 0}` : '');
               setQtyText('1');
             }}
             className={cn(
@@ -980,6 +1037,7 @@ function SellForm({
           >
             {c.def.name} ×{c.quantity}
             {c.foil_quantity > 0 ? ` ✦${c.foil_quantity}` : ''}
+            {(variantsByCard.get(c.card_id)?.length ?? 0) > 0 ? ' ◆' : ''}
           </button>
         ))}
         {sellable.length === 0 && (
@@ -992,9 +1050,39 @@ function SellForm({
       {selected && (
         <>
           <div className="flex gap-4 mb-4 items-start flex-wrap">
-            <CardFace def={selected.def} size="compact" foil={foil} />
+            <CardFace
+              def={selected.def}
+              size="compact"
+              foil={listFoil}
+              variant={selVariant?.variant ?? null}
+            />
             <div className="flex flex-col gap-2">
-              {selected.foil_quantity > 0 && (
+              {selVariants.length > 0 && (
+                <label className="flex items-center gap-2 text-xs font-bold">
+                  Copies
+                  <select
+                    className={select}
+                    value={copyKind}
+                    aria-label="Which copies to list"
+                    onChange={(e) => {
+                      setCopyKind(e.target.value);
+                      setQtyText('1');
+                    }}
+                  >
+                    <option value="">Plain</option>
+                    {selVariants.map((v) => (
+                      <option
+                        key={`${v.variant}|${v.foil}`}
+                        value={`${v.variant}|${v.foil ? 1 : 0}`}
+                      >
+                        ◆ {VARIANT_META[v.variant].name}
+                        {v.foil ? ' ✦' : ''} ×{v.quantity}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {!selVariant && selected.foil_quantity > 0 && (
                 <label className="flex items-center gap-2 text-xs font-bold">
                   <input
                     type="checkbox"
@@ -1126,7 +1214,8 @@ function SellForm({
             onClick={() =>
               onSubmit({
                 cardId,
-                foil,
+                foil: listFoil,
+                variant: selVariant?.variant ?? null,
                 quantity,
                 type,
                 price,

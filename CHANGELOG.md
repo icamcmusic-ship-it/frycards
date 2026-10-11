@@ -9,6 +9,37 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v35.6 — Card variants
+
+- **Card variants**: a cosmetic version of a card, rolled per pack card
+  independently of foil. **Shattered** (any colour, 1 in 150 cards, value
+  x6) splits the card into 3-4 shards with parallax; seven **elemental
+  overlays** (1 in 40 cards of the paired colour, value x3): Ember Sparks,
+  Tide Frost, Root Overgrown, Gale Lightning, Light Radiant, Shadow Ink and
+  Void Rift. Foil + variant multiplies both.
+- Variants are their own collection entries (card + foil + variant) with a
+  Variant filter, badges, and quicksell / market / shop / trade / grading
+  support; slabs keep the variant. Pack odds, "what's inside" and the pack
+  summary show them, and a variant always gets at least the Super-Rare reveal.
+- Overlay art is procedural for now; a transparent 750x1050 WebP at
+  `frycards-art.pages.dev/Overlays/<variant>.webp` replaces it automatically
+  (see `src/meta/variants.ts`).
+- Achievements: Something Different, Glass Half Full, Elemental Binder.
+
+### v35.4 — One showcase, full-screen showroom, nine new card backs
+
+- **Nine new card backs** in the Store: Salt & Stack, Doodle Deep and
+  Glimmerroot (299), Breach, Ignited Palm and Shh Protocol (499), Hothead
+  Protocol and Hot Hand Ace (799 or 8 vouchers), Hellfry (1,199 or 12
+  vouchers).
+- **Slabs pin to your main showcase**: graded slabs and cards now share the
+  one profile showcase (6 slots) instead of a separate graded row.
+- **Upload your card art**: Player Showcase submissions take the art file
+  itself (drag-drop or pick, up to 8 MB, with a 5:7 crop preview and upload
+  progress); pasting a link still works.
+- **3D Showroom fullscreen** fills the whole screen instead of leaving the
+  bottom half black.
+
 ### v35.3 — The 2026-10-11 audit round (PR #171)
 
 - **Match bugs fixed** (audit §1 A1–A25): no inspector on hover, no

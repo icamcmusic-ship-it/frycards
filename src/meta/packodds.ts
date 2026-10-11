@@ -12,6 +12,7 @@
  *    fallback path is real — don't delete it without also retiring the
  *    server-side `roll_slot_rarity` function.
  */
+import { ELEMENTAL_ODDS, SHATTERED_ODDS } from './variants';
 import { PackSlot, PackType } from '../lib/supabase';
 import { RARITY_ORDER as RARITY_LADDER, rarityTier } from './rarity';
 import { FOIL_QUICKSELL_MULTIPLIER, quicksellPrice } from './economy';
@@ -126,6 +127,24 @@ export function packFoilChance(pack: PackType): { bonus: number; guaranteed: num
     else missAll *= Math.pow(1 - row.foilChance, row.count);
   }
   return { bonus: 1 - missAll, guaranteed };
+}
+
+/**
+ * Variant odds (20261013000010 roll_card_variant): every non-Leader card
+ * rolls Shattered at 1 in 150, then — if it has a colour — its paired
+ * elemental at 1 in 40. `colouredShare` is the share of the pack's pool that
+ * has a colour (colourless cards can only roll Shattered); 1 if unknown.
+ */
+export function packVariantOdds(
+  pack: PackType,
+  colouredShare = 1,
+): { cards: number; shattered: number; elemental: number; any: number } {
+  let cards = 0;
+  for (const row of packOdds(pack)) if (row.cardType !== 'Leader') cards += row.count;
+  const pS = SHATTERED_ODDS;
+  const pE = (1 - SHATTERED_ODDS) * ELEMENTAL_ODDS * Math.max(0, Math.min(1, colouredShare));
+  const perPack = (p: number) => 1 - Math.pow(1 - p, cards);
+  return { cards, shattered: perPack(pS), elemental: perPack(pE), any: perPack(pS + pE) };
 }
 
 /** Collapse identical adjacent legacy slots so the modal reads "×4 FOUNDATION"

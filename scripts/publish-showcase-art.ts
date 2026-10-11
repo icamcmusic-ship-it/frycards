@@ -27,10 +27,16 @@
  * webp and published as Cosmetics/<id>.webp in the same deployment, then
  * cosmetics_mirror_report points shop_items.image_url at it (compare-and-set).
  * Cosmetics already mirrored are re-downloaded into every deployment, like
- * published cards. `--dry-run` lists what would change and deploys nothing.
+ * published cards. Card backs committed to art/cardbacks/ are copied into
+ * every deployment as CardBacks/<slug>.webp (+ CardBacks/thumb/); a run with
+ * nothing else to do still deploys when one of them is not live yet. `--dry-run` lists what would change and deploys nothing.
  *
- * The player's original link is never deleted: it stays on the submission row
- * (card_submissions.image_url), which is the retention policy for showcase art.
+ * A player's original link is never deleted: it stays on the submission row
+ * (card_submissions.image_url). An UPLOADED original (art_path, private
+ * submission-art bucket) is fetched through a signed URL from the
+ * submission-art Edge Function and deleted by the same function once the
+ * art is published (or 30 days after a denial/withdrawal); see
+ * docs/CARD_SUBMISSIONS.md.
  *
  * Environment:
  *   ART_PIPELINE_TOKEN       shared secret; its SHA-256 is set in the DB with
@@ -60,6 +66,8 @@ import {
   cosmeticKey,
   parseCosmetics,
   planCosmetics,
+  repoCardBackKeys,
+  submissionArtCall,
 } from './lib/showcase';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
@@ -89,6 +97,23 @@ if (error) {
 const jobs = parseJobs(data);
 console.log(`${jobs.pending.length} pending, ${jobs.published.length} already published.`);
 
+// Uploaded originals (private submission-art bucket) that are published,
+// denied/withdrawn 30+ days ago, or orphaned are deleted through the
+// submission-art Edge Function: one small call per run, never fatal.
+if (!DRY_RUN) {
+  try {
+    const { removed } = await submissionArtCall<{ removed: string[] }>(
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      TOKEN,
+      'cleanup',
+    );
+    if (removed.length > 0) console.log(`Removed ${removed.length} uploaded original(s).`);
+  } catch (e) {
+    console.log(`Upload cleanup skipped: ${(e as Error).message}`);
+  }
+}
+
 const cos = await supabase.rpc('cosmetics_mirror_jobs', { p_token: TOKEN });
 if (cos.error) {
   console.error('cosmetics_mirror_jobs failed:', cos.error.message);
@@ -104,7 +129,40 @@ for (const c of cosmetics.pending) {
     `  ${DRY_RUN ? 'WOULD MIRROR' : 'MIRROR'} ${c.id}: ${c.image_url} -> ${BASE}/${cosmeticKey(c.id)}`,
   );
 }
-if (jobs.pending.length === 0 && cosmetics.pending.length === 0) process.exit(0);
+// Card backs committed under art/cardbacks/ ship in every deployment as
+// CardBacks/<slug>.webp (+ thumb/). The app falls back to its bundled copy in
+// public/cardbacks/ until they are live; a run deploys when any is missing.
+const CARDBACK_DIR = path.join(
+  path.dirname(new URL(import.meta.url).pathname),
+  '..',
+  'art',
+  'cardbacks',
+);
+const cardBacks = fs.existsSync(CARDBACK_DIR)
+  ? repoCardBackKeys(
+      fs
+        .readdirSync(CARDBACK_DIR, { recursive: true, encoding: 'utf8' })
+        .map((f) => f.split(path.sep).join('/')),
+    )
+  : [];
+const missingBacks: string[] = [];
+for (const b of cardBacks) {
+  try {
+    const res = await fetch(`${BASE}/${b.key}`, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) missingBacks.push(b.key);
+  } catch {
+    missingBacks.push(b.key);
+  }
+}
+console.log(`Card backs: ${cardBacks.length} in the repo, ${missingBacks.length} not live yet.`);
+for (const k of missingBacks)
+  console.log(`  ${DRY_RUN ? 'WOULD PUBLISH' : 'PUBLISH'} ${BASE}/${k}`);
+
+if (jobs.pending.length === 0 && cosmetics.pending.length === 0 && missingBacks.length === 0)
+  process.exit(0);
 if (DRY_RUN) {
   for (const j of jobs.pending) {
     console.log(`  WOULD PUBLISH card ${j.card_id}: ${j.source_url}`);
@@ -193,11 +251,32 @@ for (const url of [
   }
 }
 
-// 2. Encode the queue.
+// Repo card backs, always (a Pages deploy replaces the whole site).
+for (const b of cardBacks) write(b.key, fs.readFileSync(path.join(CARDBACK_DIR, b.rel)));
+
+// 2. Encode the queue. Uploaded originals are fetched through short-lived
+// signed URLs (one Edge Function call for the whole queue).
+let signed: Record<string, string> = {};
+if (jobs.pending.some((j) => j.art_path)) {
+  try {
+    signed = (
+      await submissionArtCall<{ urls: Record<string, string> }>(
+        SUPABASE_URL,
+        SUPABASE_KEY,
+        TOKEN,
+        'sign',
+      )
+    ).urls;
+  } catch (e) {
+    console.log(`Could not sign uploaded art (${(e as Error).message}).`);
+  }
+}
 type Result = { submission_id: string; ok: boolean; art_url?: string; error?: string };
 const results: Result[] = [];
 async function processJob(j: PendingJob): Promise<Result> {
-  const src = await download(j.source_url);
+  const from = j.art_path ? signed[j.art_path] : j.source_url;
+  if (!from) throw new Error('uploaded art could not be signed');
+  const src = await download(from);
   let key: string;
   let body: Buffer;
   if (isVideoSource(j.source_url, j.treatment)) {
@@ -240,7 +319,7 @@ for (const c of cosmetics.pending) {
 fs.writeFileSync(path.join(site, '_headers'), SHOWCASE_HEADERS);
 
 // 4. Deploy (only when something new landed; failures alone need no deploy).
-if (results.some((r) => r.ok) || cosmeticResults.length > 0) {
+if (results.some((r) => r.ok) || cosmeticResults.length > 0 || missingBacks.length > 0) {
   try {
     execFileSync(
       'npx',

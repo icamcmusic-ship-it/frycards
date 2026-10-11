@@ -15,6 +15,9 @@ export interface PendingJob {
   card_id: string;
   source_url: string;
   treatment: string;
+  /** Uploaded original in the private submission-art bucket (20261013000002);
+   * fetched through a signed URL from the submission-art Edge Function. */
+  art_path?: string | null;
 }
 export interface PublishedJob {
   card_id: string;
@@ -58,7 +61,20 @@ export const SHOWCASE_HEADERS = `# Written by scripts/publish-showcase-art.ts.
 /Cosmetics/*
   Cache-Control: public, max-age=86400
   Access-Control-Allow-Origin: *
+/CardBacks/*
+  Cache-Control: public, max-age=86400
+  Access-Control-Allow-Origin: *
 `;
+
+/** Card backs committed to the repo (art/cardbacks/<slug>.webp and
+ * thumb/<slug>.webp), published as CardBacks/<same path>. Returns
+ * [Pages key, path relative to the dir] pairs, thumbs included. */
+export function repoCardBackKeys(files: string[]): { key: string; rel: string }[] {
+  return files
+    .filter((f) => /^(thumb\/)?[a-z0-9-]+\.webp$/.test(f))
+    .sort()
+    .map((rel) => ({ key: `CardBacks/${rel}`, rel }));
+}
 
 /** Validate the RPC's response shape. */
 export function parseJobs(raw: unknown): Jobs {
@@ -119,4 +135,22 @@ export function planCosmetics(
     pending: items.filter((i) => !isOurUrl(i.image_url, b)),
     published: items.filter((i) => i.image_url.startsWith(`${b}/Cosmetics/`)),
   };
+}
+
+/** POST to the submission-art Edge Function (token-checked server side). */
+export async function submissionArtCall<T>(
+  supabaseUrl: string,
+  apiKey: string,
+  token: string,
+  action: 'sign' | 'cleanup',
+): Promise<T> {
+  const res = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/submission-art`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: apiKey },
+    body: JSON.stringify({ action, token }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  const body = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  return body;
 }

@@ -42,6 +42,7 @@ vi.mock('../lib/supabase', () => ({
   fetchProfile: mocks.fetchProfile,
   fetchCollection: mocks.fetchCollection,
   fetchMySerializedCards: () => Promise.resolve([]),
+  fetchCardVariants: () => Promise.resolve([]),
   fetchCosmetics: () => Promise.resolve([]),
   fetchDecks: () => Promise.resolve([]),
   fetchInventory: () => Promise.resolve([]),

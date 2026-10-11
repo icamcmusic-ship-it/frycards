@@ -123,10 +123,13 @@ test('the derived key keeps the source extension so two sources cannot collide',
 test('image callers fall back to the original when a derivative fails', () => {
   // A derivative is a real object that may simply not have been generated
   // yet; art must still paint when one 404s.
-  for (const path of ['src/meta/SafeImage.tsx', 'src/components/CardFaceV4.tsx']) {
+  for (const [path, retry] of [
+    ['src/meta/SafeImage.tsx', /setAttempt\(attempt \+ 1\)/],
+    ['src/components/CardFaceV4.tsx', /setFullSize\(true\)/],
+  ] as const) {
     const source = readFileSync(path, 'utf8');
     expect(source).toContain('originalMediaUrl');
-    expect(source).toMatch(/setFullSize\(true\)/);
+    expect(source).toMatch(retry);
   }
 });
 
