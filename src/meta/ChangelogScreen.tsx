@@ -11,23 +11,38 @@ interface ChangelogEntry {
 // players actually care about (new features, balance headlines), not every
 // internal playtest data point tracked in the full file.
 //
-// This screen holds the TWO most recent updates only. It is a "what changed
-// since you last played" board, not an archive: `CHANGELOG.md` is the complete
-// history and stays complete. When a release adds an entry here, the oldest of
-// the three comes out. NewsCenterScreen reads ENTRIES[0] for its headline, so
-// the newest entry must stay first.
+// This board covers everything since the FryCards Poker launch (v35), one
+// entry per round, newest first. `CHANGELOG.md` is the complete history.
+// NewsCenterScreen reads ENTRIES[0] for its headline, so the newest entry must
+// stay first.
 export const ENTRIES: ChangelogEntry[] = [
+  {
+    version: 'Polish & Balance (v35.4)',
+    date: 'October 2026',
+    items: [
+      'NEW THEMES. Five new table themes, plus a dark INK theme.',
+      'CLEANER CHIPS. Starting stacks are whole numbers again: 480, 800 or 1,280 chips by match length. Chips slide into the pot and out to the winner.',
+      'RELAXED BY DEFAULT. Table timers now start OFF \u2014 turn them on in Settings if you want a clock.',
+      'EASIER TO READ THE CPU. Clearer labels and callouts for what each CPU seat is doing.',
+      'BALANCE PASS. Many powers retuned and new keywords added. Card keyword weights and rarity were rebalanced, so some cards\u2019 powers have changed.',
+      'MISSIONS. Missions now rotate, and new collection missions reward building out your cards.',
+      'DIFFICULTY PAYS. Rewards now scale with difficulty: easier tables pay \u00d70.8, normal \u00d71, harder tables \u00d71.15.',
+      'MORE WAYS TO PLAY. Deck formats, a weekly rule twist and the DAILY TABLE, plus quick wins to get you into a match faster.',
+      'YOUR PRESETS. Bet presets are now editable in Settings.',
+      'CARD FACES. Small cards hide flavour text so the rules stay readable; tap any card to read all of it.',
+    ],
+  },
   {
     version: 'The Audit Round (v35.3)',
     date: 'October 2026',
     items: [
       'MATCH BUGS FIXED. No more inspector popping up on hover, no double-click acting twice, response windows that cannot stall the table, a raise slider that reaches all-in, and many rules edge cases settled.',
       'FOLLOW THE CPU. Every seat shows its last action in a speech burst, one loud ON THE CLOCK seat, a ticker of what just happened, a cast spotlight that says what the card did, pause and step, and a tap-a-seat summary of its hand.',
-      'CHIPS MOVE. Bets slide into the pot at the end of each street and the pot slides to the winner (off under Reduced motion).',
-      'TABLE SETTINGS. Timers (STANDARD / RELAXED / OFF), auto-deal, pause when a power targets you, amounts in big blinds, don\u2019t fold when check is free, confirm big bets, pre-action buttons, pot odds, a SHARK difficulty \u2014 and now your own BET PRESETS and a DEFAULT TABLE in Settings.',
-      'MORE WAYS TO PLAY. Deck formats (Singleton, Pauper, Monochrome, Low Stakes), a weekly rule twist, RANDOM FROM MY CARDS, the DAILY TABLE, practice tables, replay seeds, challenge links, a weekly FEATURED LEADER, and PLAY WITH IT on the Card of the Day.',
-      'DECK BUILDER. Records and notes per deck, auto names, saved versions, sample decks, gap-filler suggestions with an ADD button, unowned cards you can wishlist (plus ADD MISSING TO WISHLIST), and power-hand odds against a Location. Deck codes now remember their deck format.',
-      'CARD FACES. Small cards (deck pool, grading, showroom) drop the flavor text so the rules stay readable; tap any card to read all of it.',
+      'TABLE SETTINGS. Timers, auto-deal, pause when a power targets you, amounts in big blinds, don\u2019t fold when check is free, confirm big bets, pre-action buttons, pot odds, a SHARK difficulty and a DEFAULT TABLE in Settings.',
+      'FAIRER REWARDS. Payouts now account for table size and how long you lasted, and a reload never loses a finished match\u2019s reward.',
+      'GAME OVER SCREEN. Your match in numbers, your place against last match, and SHARE RESULT.',
+      'MORE WAYS TO PLAY. RANDOM FROM MY CARDS, practice tables with any deck code, replay seeds, challenge links, a weekly FEATURED LEADER, and PLAY WITH IT on the Card of the Day.',
+      'DECK BUILDER. Records and notes per deck, auto names, saved versions, sample decks, gap-filler suggestions with an ADD button, unowned cards you can wishlist, and power-hand odds against a Location.',
     ],
   },
   {
