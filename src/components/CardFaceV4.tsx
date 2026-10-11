@@ -2431,21 +2431,36 @@ function CardFaceBase({
           ✦ FOIL
         </span>
       )}
+      {/* U38: count, serial and foil-count pills share one shape and size
+          (the deck builder and the Collection read the same). */}
       {serial && (
         <span
-          className={cn('serial-plate font-black rounded-full tracking-wide', cfg.foilBadge)}
+          className={cn(
+            'serial-plate font-black rounded-full tracking-wide border border-[var(--c-ink)]/40',
+            cfg.foilBadge,
+          )}
           title={`Serialized print — #${serial.number} of ${capText(serial.cap)} ever made`}
         >
           #{serial.number}/{capText(serial.cap)}
         </span>
       )}
       {count !== undefined && count > 0 && (
-        <span className="bg-[var(--c-ink)] text-[var(--c-yellow)] text-[8px] font-black px-1 rounded-full">
+        <span
+          className={cn(
+            'bg-[var(--c-ink)] text-[var(--c-yellow)] font-black rounded-full border border-[var(--c-ink)]/40',
+            cfg.foilBadge,
+          )}
+        >
           ×{count}
         </span>
       )}
       {(foilCount || 0) > 0 && (
-        <span className="bg-[var(--c-yellow)] text-[var(--c-ink)] text-[8px] font-black px-1 rounded-full">
+        <span
+          className={cn(
+            'bg-[var(--c-yellow)] text-[var(--c-ink)] font-black rounded-full border border-[var(--c-ink)]/40',
+            cfg.foilBadge,
+          )}
+        >
           ✦ {foilCount}
         </span>
       )}
@@ -2775,6 +2790,14 @@ export function CardReadingPanel({ def }: { def: CardDef }) {
         {typeLineText(def)} · {def.rarity ?? 'Unspecified rarity'}
       </p>
       {costSummary(def) && <p>{cap1(costSummary(def)!)}.</p>}
+      {/* U70: what the corner plate's "+" means. */}
+      {isPower(def) && !!def.tier && (
+        <p className="opacity-75" data-testid="cost-legend">
+          Cost plate: chips by tier (
+          {[1, 2, 3, 4, 5].map((t) => fmtUnits(COST_LADDER_UNITS[t])).join(' · ')}); a
+          &ldquo;+&rdquo; (tier {SECOND_COST_TIER}–5) means it also needs a second cost.
+        </p>
+      )}
       {def.type === 'Leader' && <p>Starts the match with {NERVE.start} nerve.</p>}
       {lines.map((line, i) => (
         <p className="mt-2" key={i}>
