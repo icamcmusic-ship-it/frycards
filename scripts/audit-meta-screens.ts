@@ -93,6 +93,9 @@ const ALL_SCREENS = [
   'social',
   'store',
   'market',
+  // The SELL desk: picker, price guide and active-listings panel sit behind
+  // the tab, so the bare entry never measured them.
+  'market@sell',
   'shops',
   'battlepass',
   'achievements',
@@ -161,6 +164,7 @@ const PRELUDE: Record<string, string[]> = {
   'pack@summary': ['JUST TEAR IT OPEN FOR ME', 'REVEAL ALL'],
   'grading@limbo': ['AT THE GRADERS'],
   'grading@vault': ['MY SLABS'],
+  'market@sell': ['SELL A CARD'],
   'decks@editor': ['EDIT'],
   // The empty editor is a different layout from the full one: no leader, no
   // curve, an empty deck list and a pool grid with nothing dimmed.
