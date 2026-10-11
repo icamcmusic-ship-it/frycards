@@ -27,7 +27,9 @@
  * webp and published as Cosmetics/<id>.webp in the same deployment, then
  * cosmetics_mirror_report points shop_items.image_url at it (compare-and-set).
  * Cosmetics already mirrored are re-downloaded into every deployment, like
- * published cards. `--dry-run` lists what would change and deploys nothing.
+ * published cards. Card backs committed to art/cardbacks/ are copied into
+ * every deployment as CardBacks/<slug>.webp (+ CardBacks/thumb/); a run with
+ * nothing else to do still deploys when one of them is not live yet. `--dry-run` lists what would change and deploys nothing.
  *
  * The player's original link is never deleted: it stays on the submission row
  * (card_submissions.image_url), which is the retention policy for showcase art.
@@ -60,6 +62,7 @@ import {
   cosmeticKey,
   parseCosmetics,
   planCosmetics,
+  repoCardBackKeys,
 } from './lib/showcase';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
@@ -104,7 +107,40 @@ for (const c of cosmetics.pending) {
     `  ${DRY_RUN ? 'WOULD MIRROR' : 'MIRROR'} ${c.id}: ${c.image_url} -> ${BASE}/${cosmeticKey(c.id)}`,
   );
 }
-if (jobs.pending.length === 0 && cosmetics.pending.length === 0) process.exit(0);
+// Card backs committed under art/cardbacks/ ship in every deployment as
+// CardBacks/<slug>.webp (+ thumb/). The app falls back to its bundled copy in
+// public/cardbacks/ until they are live; a run deploys when any is missing.
+const CARDBACK_DIR = path.join(
+  path.dirname(new URL(import.meta.url).pathname),
+  '..',
+  'art',
+  'cardbacks',
+);
+const cardBacks = fs.existsSync(CARDBACK_DIR)
+  ? repoCardBackKeys(
+      fs
+        .readdirSync(CARDBACK_DIR, { recursive: true, encoding: 'utf8' })
+        .map((f) => f.split(path.sep).join('/')),
+    )
+  : [];
+const missingBacks: string[] = [];
+for (const b of cardBacks) {
+  try {
+    const res = await fetch(`${BASE}/${b.key}`, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) missingBacks.push(b.key);
+  } catch {
+    missingBacks.push(b.key);
+  }
+}
+console.log(`Card backs: ${cardBacks.length} in the repo, ${missingBacks.length} not live yet.`);
+for (const k of missingBacks)
+  console.log(`  ${DRY_RUN ? 'WOULD PUBLISH' : 'PUBLISH'} ${BASE}/${k}`);
+
+if (jobs.pending.length === 0 && cosmetics.pending.length === 0 && missingBacks.length === 0)
+  process.exit(0);
 if (DRY_RUN) {
   for (const j of jobs.pending) {
     console.log(`  WOULD PUBLISH card ${j.card_id}: ${j.source_url}`);
@@ -193,6 +229,9 @@ for (const url of [
   }
 }
 
+// Repo card backs, always (a Pages deploy replaces the whole site).
+for (const b of cardBacks) write(b.key, fs.readFileSync(path.join(CARDBACK_DIR, b.rel)));
+
 // 2. Encode the queue.
 type Result = { submission_id: string; ok: boolean; art_url?: string; error?: string };
 const results: Result[] = [];
@@ -240,7 +279,7 @@ for (const c of cosmetics.pending) {
 fs.writeFileSync(path.join(site, '_headers'), SHOWCASE_HEADERS);
 
 // 4. Deploy (only when something new landed; failures alone need no deploy).
-if (results.some((r) => r.ok) || cosmeticResults.length > 0) {
+if (results.some((r) => r.ok) || cosmeticResults.length > 0 || missingBacks.length > 0) {
   try {
     execFileSync(
       'npx',

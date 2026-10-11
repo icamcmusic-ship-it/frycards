@@ -8,6 +8,7 @@ import {
   parseJobs,
   planCosmetics,
   publicBase,
+  repoCardBackKeys,
   showcaseKey,
 } from './showcase';
 
@@ -71,5 +72,16 @@ describe('cosmetics mirror helpers', () => {
     expect(
       parseCosmetics([{ id: 'bad', image_url: 'x' }, null, { id, image_url: 'u' }]),
     ).toHaveLength(1);
+  });
+});
+
+describe('repo card backs', () => {
+  test('publishes webp backs and thumbs under CardBacks/, ignores anything else', () => {
+    expect(
+      repoCardBackKeys(['hellfry.webp', 'thumb/hellfry.webp', 'notes.txt', 'Bad Name.webp']),
+    ).toEqual([
+      { key: 'CardBacks/hellfry.webp', rel: 'hellfry.webp' },
+      { key: 'CardBacks/thumb/hellfry.webp', rel: 'thumb/hellfry.webp' },
+    ]);
   });
 });

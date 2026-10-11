@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { cn } from '../lib/utils';
 import { mediaUrl, originalMediaUrl } from '../lib/media';
+import { cardBackSources } from './cardBackAssets';
 
 /**
  * <img> with a graceful fallback — if the source 404s or never loads, shows
@@ -43,17 +44,17 @@ export function SafeImage({
   onLoad?: (e: React.SyntheticEvent<HTMLImageElement>) => void;
 }) {
   const [broken, setBroken] = useState(false);
-  // When a resized derivative fails, fall back to the full-size original once
-  // before giving up: the derivatives are pre-generated, so a key the
-  // generator has not reached yet 404s, and art must still paint when it does.
-  const [fullSize, setFullSize] = useState(false);
-  // Reset the broken flag whenever the source changes — otherwise a
-  // component instance that's reused across a changing `src` (e.g. an
-  // equipped avatar/banner swap) would keep showing the fallback forever
-  // after one bad load, even once `src` points at a good image again.
+  // Sources tried in order: the resized derivative, then the full-size
+  // original (derivatives are pre-generated, so a key the generator has not
+  // reached yet 404s, and art must still paint when it does). Repo card backs
+  // try their Cloudflare copy, then the copy bundled with the app.
+  const [attempt, setAttempt] = useState(0);
+  // Reset whenever the source changes — otherwise a component instance that's
+  // reused across a changing `src` (e.g. an equipped avatar/banner swap) would
+  // keep showing the fallback forever after one bad load.
   useEffect(() => {
     setBroken(false);
-    setFullSize(false);
+    setAttempt(0);
   }, [src]);
   if (!src || broken) {
     return (
@@ -71,7 +72,10 @@ export function SafeImage({
       </div>
     );
   }
-  const resolved = fullSize ? originalMediaUrl(src) : (mediaUrl(src, boxWidth) ?? src);
+  const sources = cardBackSources(src, boxWidth) ?? [
+    ...new Set([mediaUrl(src, boxWidth) ?? src, originalMediaUrl(src)]),
+  ];
+  const resolved = sources[Math.min(attempt, sources.length - 1)];
   return (
     <img
       src={resolved}
@@ -82,7 +86,7 @@ export function SafeImage({
       decoding="async"
       onLoad={onLoad}
       onError={() => {
-        if (!fullSize && resolved !== originalMediaUrl(src)) setFullSize(true);
+        if (attempt < sources.length - 1) setAttempt(attempt + 1);
         else setBroken(true);
       }}
     />

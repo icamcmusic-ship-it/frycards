@@ -58,7 +58,20 @@ export const SHOWCASE_HEADERS = `# Written by scripts/publish-showcase-art.ts.
 /Cosmetics/*
   Cache-Control: public, max-age=86400
   Access-Control-Allow-Origin: *
+/CardBacks/*
+  Cache-Control: public, max-age=86400
+  Access-Control-Allow-Origin: *
 `;
+
+/** Card backs committed to the repo (art/cardbacks/<slug>.webp and
+ * thumb/<slug>.webp), published as CardBacks/<same path>. Returns
+ * [Pages key, path relative to the dir] pairs, thumbs included. */
+export function repoCardBackKeys(files: string[]): { key: string; rel: string }[] {
+  return files
+    .filter((f) => /^(thumb\/)?[a-z0-9-]+\.webp$/.test(f))
+    .sort()
+    .map((rel) => ({ key: `CardBacks/${rel}`, rel }));
+}
 
 /** Validate the RPC's response shape. */
 export function parseJobs(raw: unknown): Jobs {
