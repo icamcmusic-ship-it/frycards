@@ -253,3 +253,127 @@ export const loadHandHelper = (fallback = false) => loadFlag(HELPER_KEY, fallbac
 export const saveHandHelper = (on: boolean) => saveFlag(HELPER_KEY, on);
 export const loadFourColor = () => loadFlag(FOUR_COLOR_KEY, false);
 export const saveFourColor = (on: boolean) => saveFlag(FOUR_COLOR_KEY, on);
+
+// ---------------------------------------------------------------------------
+// Table timers (AUDIT-2026-10-11 §3.1.0): STANDARD / RELAXED / OFF.
+//
+// The blind clock and the time cap are a VIRTUAL clock — they only move by
+// the `dt` stamped on each action — so the wall-clock deadlines that force a
+// human action (turn timer, response-window auto-pass, hole-card auto-pick)
+// can be turned off without touching the blind structure. RELAXED and OFF
+// also charge every human action a fixed think time instead of the real one,
+// so the blinds rise by the number of actions played ("blinds by hands"),
+// not by how long the player thinks.
+// ---------------------------------------------------------------------------
+export const TIMER_MODES = [
+  { id: 'standard', label: 'STANDARD', blurb: '30s turns + time bank' },
+  { id: 'relaxed', label: 'RELAXED', blurb: '60s turns, bigger bank' },
+  { id: 'off', label: 'OFF', blurb: 'No clocks at all' },
+] as const;
+export type TimerMode = (typeof TIMER_MODES)[number]['id'];
+export const TIMER_KEY = 'frycards:timers';
+export const DEFAULT_TIMER_MODE: TimerMode = 'standard';
+
+export interface TimerPreset {
+  /** Soft turn timer; null = never auto-check/fold. */
+  turnMs: number | null;
+  /** Starting time bank, spent once the turn timer runs out. */
+  bankMs: number;
+  /** Added to the bank at every blind level (TM-3), up to `bankCapMs`. */
+  bankPerLevelMs: number;
+  bankCapMs: number;
+  /** Response-window auto-pass; null = wait for an explicit PASS. */
+  windowMs: number | null;
+  /** Hole-card choice auto-pick; null = wait. */
+  choiceMs: number | null;
+  /** Match-clock charge per human action: the real think time (capped by the
+   * engine's HUMAN_ACTION_CAP_MS) or a fixed amount (TM-5). */
+  humanChargeMs: number | 'real';
+}
+
+/** A fixed per-action charge sits inside the bots' 1–7 s range (mean ≈ 3.5 s),
+ * so a level lasts about as many hands as it does at a bot-only table. */
+export const FIXED_THINK_CHARGE_MS = 5000;
+
+export const TIMER_PRESETS: Record<TimerMode, TimerPreset> = {
+  standard: {
+    turnMs: 30_000,
+    bankMs: 60_000,
+    bankPerLevelMs: 15_000,
+    bankCapMs: 120_000,
+    windowMs: 10_000,
+    choiceMs: 30_000,
+    humanChargeMs: 'real',
+  },
+  relaxed: {
+    turnMs: 60_000,
+    bankMs: 120_000,
+    bankPerLevelMs: 30_000,
+    bankCapMs: 240_000,
+    windowMs: 20_000,
+    choiceMs: 60_000,
+    humanChargeMs: FIXED_THINK_CHARGE_MS,
+  },
+  off: {
+    turnMs: null,
+    bankMs: 0,
+    bankPerLevelMs: 0,
+    bankCapMs: 0,
+    windowMs: null,
+    choiceMs: null,
+    humanChargeMs: FIXED_THINK_CHARGE_MS,
+  },
+};
+
+export function loadTimerMode(): TimerMode {
+  if (typeof window === 'undefined') return DEFAULT_TIMER_MODE;
+  try {
+    const raw = window.localStorage.getItem(TIMER_KEY)?.trim();
+    return TIMER_MODES.find((t) => t.id === raw)?.id ?? DEFAULT_TIMER_MODE;
+  } catch {
+    return DEFAULT_TIMER_MODE;
+  }
+}
+
+export function saveTimerMode(id: TimerMode): void {
+  if (!TIMER_MODES.some((t) => t.id === id)) return;
+  try {
+    window.localStorage.setItem(TIMER_KEY, id);
+  } catch {
+    /* private mode — the choice just won't persist */
+  }
+}
+
+/** AUTO-DEAL (any timer preset): off shows a DEAL ▸ button between hands. */
+export const AUTO_DEAL_KEY = 'frycards:auto-deal';
+export const loadAutoDeal = () => loadFlag(AUTO_DEAL_KEY, true);
+export const saveAutoDeal = (on: boolean) => saveFlag(AUTO_DEAL_KEY, on);
+
+/** Hold a power cast at you on screen (and the bots with it) until you tap. */
+export const PAUSE_ON_TARGET_KEY = 'frycards:pause-on-target';
+export const loadPauseOnTarget = () => loadFlag(PAUSE_ON_TARGET_KEY, true);
+export const savePauseOnTarget = (on: boolean) => saveFlag(PAUSE_ON_TARGET_KEY, on);
+
+/** Show table amounts in big blinds instead of chips (S-14). */
+export const AMOUNTS_BB_KEY = 'frycards:amounts-bb';
+export const loadAmountsInBB = () => loadFlag(AMOUNTS_BB_KEY, false);
+export const saveAmountsInBB = (on: boolean) => saveFlag(AMOUNTS_BB_KEY, on);
+
+/** An amount for display: whole chips, or big blinds to one decimal. */
+export function fmtAmount(chips: number, bb: number | null): string {
+  if (bb && bb > 0) {
+    const v = Math.round((chips / bb) * 10) / 10;
+    return `${Number.isInteger(v) ? v : v.toFixed(1)} BB`;
+  }
+  return `${Math.round(chips)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Reward floor (AUDIT-2026-10-11 A20 / TM-1). Mirrors the server's
+// `record_match_placement` floor: greatest(45 s, mode minimum × seats / 6),
+// measured from the ticket's mint. A result posted earlier is refused as
+// `too_early` and pays nothing, so the table holds it until the floor passes.
+// ---------------------------------------------------------------------------
+export function rewardFloorMs(modeMinMatchMs: number, seats: number): number {
+  return Math.max(45_000, Math.round((modeMinMatchMs * seats) / 6));
+}

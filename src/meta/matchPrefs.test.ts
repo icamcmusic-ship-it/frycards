@@ -19,6 +19,19 @@ import {
   loadHandSort,
   saveCpuSpeed,
   saveHandSort,
+  TIMER_KEY,
+  TIMER_MODES,
+  TIMER_PRESETS,
+  FIXED_THINK_CHARGE_MS,
+  AUTO_DEAL_KEY,
+  loadTimerMode,
+  saveTimerMode,
+  loadAutoDeal,
+  saveAutoDeal,
+  loadPauseOnTarget,
+  loadAmountsInBB,
+  fmtAmount,
+  rewardFloorMs,
 } from './matchPrefs';
 
 const store = new Map<string, string>();
@@ -156,5 +169,66 @@ describe('loadHandSort / saveHandSort', () => {
     expect(HAND_SORTS.some((s) => s.id === DEFAULT_HAND_SORT)).toBe(true);
     expect(HAND_SORTS.every((s) => s.label.length > 0 && s.blurb.length > 0)).toBe(true);
     expect(new Set(HAND_SORTS.map((s) => s.id)).size).toBe(HAND_SORTS.length);
+  });
+});
+
+describe('table timers (AUDIT-2026-10-11 §3.1.0)', () => {
+  test('unset or junk is STANDARD; every preset round-trips by id', () => {
+    expect(loadTimerMode()).toBe('standard');
+    store.set(TIMER_KEY, 'lunch');
+    expect(loadTimerMode()).toBe('standard');
+    for (const { id } of TIMER_MODES) {
+      saveTimerMode(id);
+      expect(store.get(TIMER_KEY)).toBe(id);
+      expect(loadTimerMode()).toBe(id);
+    }
+  });
+
+  test('OFF has no forced action and a fixed think charge; STANDARD keeps today', () => {
+    const off = TIMER_PRESETS.off;
+    expect(off.turnMs).toBeNull();
+    expect(off.windowMs).toBeNull();
+    expect(off.choiceMs).toBeNull();
+    expect(off.humanChargeMs).toBe(FIXED_THINK_CHARGE_MS);
+    expect(TIMER_PRESETS.relaxed.humanChargeMs).toBe(FIXED_THINK_CHARGE_MS);
+    const std = TIMER_PRESETS.standard;
+    expect(std).toMatchObject({
+      turnMs: 30_000,
+      bankMs: 60_000,
+      windowMs: 10_000,
+      choiceMs: 30_000,
+    });
+    expect(std.humanChargeMs).toBe('real');
+    // The bank refills per level but never past its cap (TM-3).
+    for (const p of Object.values(TIMER_PRESETS))
+      expect(p.bankCapMs).toBeGreaterThanOrEqual(p.bankMs);
+  });
+
+  test('AUTO-DEAL and "pause when targeted" default on; amounts in BB default off', () => {
+    expect(loadAutoDeal()).toBe(true);
+    expect(loadPauseOnTarget()).toBe(true);
+    expect(loadAmountsInBB()).toBe(false);
+    saveAutoDeal(false);
+    expect(store.get(AUTO_DEAL_KEY)).toBe('0');
+    expect(loadAutoDeal()).toBe(false);
+  });
+});
+
+describe('fmtAmount (S-14)', () => {
+  test('chips are whole; big blinds to one decimal', () => {
+    expect(fmtAmount(123.4, null)).toBe('123');
+    expect(fmtAmount(48, 16)).toBe('3 BB');
+    expect(fmtAmount(72, 16)).toBe('4.5 BB');
+    expect(fmtAmount(10, 16)).toBe('0.6 BB');
+  });
+});
+
+describe('rewardFloorMs (A20) mirrors the server floor', () => {
+  test('greatest(45 s, mode minimum × seats / 6)', () => {
+    const MIN = 60_000;
+    expect(rewardFloorMs(6 * MIN, 6)).toBe(6 * MIN);
+    expect(rewardFloorMs(12 * MIN, 2)).toBe(4 * MIN);
+    expect(rewardFloorMs(6 * MIN, 2)).toBe(2 * MIN);
+    expect(rewardFloorMs(1 * MIN, 2)).toBe(45_000);
   });
 });
