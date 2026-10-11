@@ -634,8 +634,15 @@ async function check(screen: string, width: number, path: number[] = [], expect 
             let y1 = cy + h / 2;
             for (let a = el.parentElement; a; a = a.parentElement) {
               const st2 = getComputedStyle(a);
-              const clipX = st2.overflowX !== 'visible';
-              const clipY = st2.overflowY !== 'visible';
+              // A SCROLL container (auto/scroll) is not a clip on the target:
+              // scrolling brings the control fully into view, so a chip that
+              // merely sits part-way past the scrollport's edge at the moment
+              // of measurement (the pack summary scrolled to the card just
+              // inspected) is not an undersized target. Only a hidden/clip
+              // overflow cuts the hit area for good.
+              const clips = (v: string) => v === 'hidden' || v === 'clip';
+              const clipX = clips(st2.overflowX);
+              const clipY = clips(st2.overflowY);
               if (!clipX && !clipY) continue;
               const ar = a.getBoundingClientRect();
               if (clipX) {
