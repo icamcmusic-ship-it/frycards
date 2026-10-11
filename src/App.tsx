@@ -658,7 +658,7 @@ function AppInner({
       case 'decks':
         return <DeckBuilderScreen onBack={back} />;
       case 'history':
-        return <MatchHistoryScreen onBack={back} />;
+        return <MatchHistoryScreen onBack={back} onReplay={startMatch} />;
       case 'profile':
         return <ProfileScreen onBack={back} onManageShowcase={() => go('collection')} />;
       case 'settings':

@@ -126,6 +126,37 @@ export interface HistorySummary {
   form: number[];
   /** Per human deck: records grouped by deck code (or label), most-played first. */
   byDeck: { key: string; label: string; games: number; wins: number; avgPlace: number }[];
+  /** Q17: top-2 finishes in a row — now, and the best run kept. */
+  streak: { current: number; best: number };
+  /** Q17: per Leader you played (records that name it). */
+  byLeader: { leader: string; games: number; wins: number; avgPlace: number }[];
+  /** Q17: per mode. */
+  byMode: { mode: string; games: number; winPct: number; avgPlace: number }[];
+  /** Q17: your average place when this Leader sat at the table. */
+  byOpponent: { leader: string; games: number; avgPlace: number }[];
+}
+
+function groupAvg(
+  records: MatchRecord[],
+  keysOf: (r: MatchRecord) => string[],
+): { key: string; games: number; wins: number; avgPlace: number }[] {
+  const g = new Map<string, { games: number; wins: number; places: number }>();
+  for (const r of records)
+    for (const k of keysOf(r)) {
+      const e = g.get(k) ?? { games: 0, wins: 0, places: 0 };
+      e.games++;
+      e.places += placeOf(r);
+      if (placeOf(r) === 1) e.wins++;
+      g.set(k, e);
+    }
+  return [...g.entries()]
+    .map(([key, e]) => ({
+      key,
+      games: e.games,
+      wins: e.wins,
+      avgPlace: Math.round((e.places / e.games) * 10) / 10,
+    }))
+    .sort((a, b) => b.games - a.games || a.avgPlace - b.avgPlace);
 }
 
 export function summarizeMatchHistory(records: MatchRecord[]): HistorySummary {
@@ -153,6 +184,33 @@ export function summarizeMatchHistory(records: MatchRecord[]): HistorySummary {
     winPct: winRatePct(wins, records.length),
     avgPlace: avg(places, records.length),
     form: records.slice(0, 10).map(placeOf),
+    streak: (() => {
+      // Newest first: the current run counts from the front.
+      let current = 0;
+      while (current < records.length && placeOf(records[current]) <= 2) current++;
+      let best = 0;
+      let run = 0;
+      for (const r of records) {
+        run = placeOf(r) <= 2 ? run + 1 : 0;
+        best = Math.max(best, run);
+      }
+      return { current, best };
+    })(),
+    byLeader: groupAvg(records, (r) => (r.leader ? [r.leader] : [])).map(({ key, ...e }) => ({
+      leader: key,
+      ...e,
+    })),
+    byMode: groupAvg(records, (r) => (r.mode ? [r.mode] : [])).map((e) => ({
+      mode: e.key,
+      games: e.games,
+      winPct: winRatePct(e.wins, e.games),
+      avgPlace: e.avgPlace,
+    })),
+    byOpponent: groupAvg(records, (r) => [...new Set(r.opponents ?? [])]).map((e) => ({
+      leader: e.key,
+      games: e.games,
+      avgPlace: e.avgPlace,
+    })),
     byDeck: [...decks.values()]
       .map((d) => ({
         key: d.key,
