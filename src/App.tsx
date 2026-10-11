@@ -629,7 +629,12 @@ function AppInner({
         // only covers the moment before the profile (role) has loaded.
         if (!rulesKnown) return <ScreenFallback />;
         return (
-          <PlayScreen onStart={startMatch} onBack={back} practice={route.sub[0] === 'practice'} />
+          <PlayScreen
+            onStart={startMatch}
+            onBack={back}
+            practice={route.sub[0] === 'practice'}
+            onBuild={() => go('decks')}
+          />
         );
       case 'store':
         return <StoreScreen onBack={back} />;
@@ -692,6 +697,7 @@ function AppInner({
           <MainMenu
             onNavigate={go}
             onRematch={lastSetup ? () => startMatch(lastSetup) : undefined}
+            onPlaySetup={startMatch}
             rematchLabel={lastSetup ? describeSetup(lastSetup) : undefined}
           />
         );

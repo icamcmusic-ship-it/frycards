@@ -22,7 +22,8 @@ import { PopButton } from './ui';
 import { SafeImage } from './SafeImage';
 import { decodeDeckCode, encodeDeckCode, takeChallengeDeck } from './deckcode';
 import { quickbuildIds } from './deckEdits';
-import { utcDayKey } from './cardOfTheDay';
+import { setBuildWith, utcDayKey } from './cardOfTheDay';
+import { weeklyFeatured } from './weeklyFeatured';
 import { loadMatchHistory, summarizeMatchHistory } from './matchHistory';
 import {
   CPU_DIFFICULTIES,
@@ -78,9 +79,12 @@ export function PlayScreen({
   onStart,
   onBack,
   practice = false,
+  onBuild,
 }: {
   onStart: (setup: PlaySetup) => void;
   onBack: () => void;
+  /** Q19: open the deck builder (after `setBuildWith`). */
+  onBuild?: () => void;
   /** Arrived from a How to Play "Try it": offer the guided first game. */
   practice?: boolean;
 }) {
@@ -94,6 +98,7 @@ export function PlayScreen({
   const fmt: FormatId = FORMAT_IDS.includes(format) ? format : 'open';
   const tableSeats = Math.max(MIN_SEATS, Math.min(MAX_SEATS, Number(seats) || MAX_SEATS));
   const twist = weeklyMutator();
+  const featured = useMemo(() => weeklyFeatured(POOL), []);
   const base = {
     mode: m.id,
     seats: tableSeats,
@@ -164,6 +169,32 @@ export function PlayScreen({
             >
               START THE GUIDED GAME ▸
             </button>
+          </div>
+        )}
+
+        {featured.leader && (
+          <div
+            className="ink-border-sm bg-[var(--c-paper)] shadow-hard-black-xs px-3 py-2 mb-4 max-w-2xl flex flex-wrap items-center gap-3"
+            data-testid="featured-week"
+          >
+            <span className="heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-0.5">
+              FEATURED THIS WEEK
+            </span>
+            <span className="fs-sm font-black">
+              {featured.leader.name}
+              {featured.location ? ` · ${featured.location.name}` : ''}
+            </span>
+            {onBuild && !guest && (
+              <button
+                onClick={() => {
+                  setBuildWith(featured.leader!.id);
+                  onBuild();
+                }}
+                className="btn-pop heading-font text-xs px-3 py-1.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm ml-auto"
+              >
+                NEW DECK ▸
+              </button>
+            )}
           </div>
         )}
 
