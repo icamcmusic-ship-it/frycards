@@ -23,7 +23,7 @@ import {
   TradeCardItem,
   PlayerCard,
   CardsLeaderboardEntry,
-  subscribeTable,
+  onUserTableChange,
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, Credits, Tabs, EmptyState } from './ui';
 import { cn } from '../lib/utils';
@@ -230,12 +230,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
         reload().catch(() => setLoadError(true));
       }, 400);
     };
-    const offFriends = subscribeTable('friendships', bump);
-    const offTrades = subscribeTable('trades', bump);
+    // S7: the user channel MetaContext holds carries this user's own rows.
+    const off = onUserTableChange(['friendships', 'trades'], bump);
     return () => {
       window.clearTimeout(timer);
-      offFriends();
-      offTrades();
+      off();
     };
   }, [reload, userId]);
 

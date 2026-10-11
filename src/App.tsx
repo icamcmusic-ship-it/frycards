@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
   fetchCardTemplates,
+  fetchCatalogVersion,
   beginMatch,
   MatchResult,
   MatchResultStatus,
@@ -14,7 +15,7 @@ import { legalModes } from './game/poker/deck';
 import { type ModeId } from './game/poker/constants';
 import { applyCardPool } from './game/poker/cardpool';
 import { newMatchSeed, withTimeout } from './lib/utils';
-import { readCache, writeCache } from './lib/cache';
+import { readCache, writeCache, versionedFetch } from './lib/cache';
 import {
   CHALLENGE_PARAM,
   DECK_LINK_PARAM,
@@ -777,7 +778,26 @@ export default function App() {
     // just never resolves — which would otherwise strand players on this
     // screen forever with no retry button. 20s is generous enough for a
     // slow connection but bounded.
-    withTimeout(fetchCardTemplates(), 20_000, null)
+    // S6: ask the server for the catalog version first; an unchanged
+    // catalog is served from the versioned cache with no full download.
+    withTimeout(
+      fetchCatalogVersion()
+        .then((ver) =>
+          versionedFetch(
+            CATALOG_CACHE_KEY + ':v',
+            ver,
+            async () => {
+              const t = await fetchCardTemplates();
+              if (!t) throw new Error('catalog fetch failed');
+              return t;
+            },
+            CATALOG_TTL_MS,
+          ),
+        )
+        .catch(() => null),
+      20_000,
+      null,
+    )
       .then((templates) => {
         if (cancelled) return;
         if (attempt > 0) {

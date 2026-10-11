@@ -18,7 +18,7 @@ import {
   MarketListing,
   PublicProfile,
   MARKET_FEE,
-  subscribeTable,
+  subscribeTopic,
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
 import { usePersistedState } from './usePersistedState';
@@ -177,7 +177,8 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   // action forced a reload.
   useEffect(() => {
     let timer: number | undefined;
-    const off = subscribeTable('market_listings', () => {
+    // S7: one broadcast per statement on the public `market` topic.
+    const off = subscribeTopic('market', () => {
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         void reload();

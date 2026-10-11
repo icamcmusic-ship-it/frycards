@@ -74,6 +74,7 @@ import {
   DeckRow,
   PlayerCard,
   subscribeTable,
+  subscribeTopic,
   fetchMysteryPoolPublic,
   fetchListableInventory,
   updateShop,
@@ -971,12 +972,11 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
       window.clearTimeout(timer);
       timer = window.setTimeout(() => setAttempt((n) => n + 1), 600);
     };
-    const offShops = subscribeTable('player_shops', bump);
-    const offListings = subscribeTable('shop_listings', bump);
+    // S7: the public `shops` topic (player_shops + shop_listings).
+    const off = subscribeTopic('shops', bump);
     return () => {
       window.clearTimeout(timer);
-      offShops();
-      offListings();
+      off();
     };
   }, []);
 
