@@ -375,6 +375,11 @@ const SUBMISSIONS = Array.from({ length: 6 }, (_, i) => ({
 // revealed slabs across all three services, which is what the vault shelf and
 // its SELL / CRACK controls need in order to exist at all.
 // ---------------------------------------------------------------------------
+// `?slabGrade=9.5` re-grades the first vault slab, so the showroom-slab entry
+// can photograph every case tier (5.x … 10) from one fixture row.
+const SLAB_GRADE_OVERRIDE = Number(
+  new URLSearchParams(globalThis.location?.search ?? '').get('slabGrade') ?? NaN,
+);
 const GRADED_CARDS = [
   ...(['tca', 'amg', 'keeper'] as const).map((service, i) => ({
     id: `preview-graded-pending-${i}`,
@@ -407,7 +412,7 @@ const GRADED_CARDS = [
     fee_paid: 400,
     submitted_at: T0,
     ready_at: T0,
-    grade,
+    grade: i === 0 && Number.isFinite(SLAB_GRADE_OVERRIDE) ? SLAB_GRADE_OVERRIDE : grade,
     revealed_at: T0,
   })),
 ];
