@@ -255,3 +255,17 @@ backend; these are the server-side gaps it works around today.
    first" by tier (see 2.).
 6. **`submit_card` has no star-hint parameter.** The Creator sets a submitted
    card's tier at review.
+
+### `cards` mechanics resync — applied live 2026-10-11 (pool reprint, audit C-1/C-2/F-7)
+
+The generated pool was reprinted (keyword weights, `MIN_TIER.Snuff` 2,
+`RARITY_BIAS` 0.04, two Snuff reprints). 72 of 297 rows changed and were
+rewritten with plain `UPDATE … FROM (VALUES …)` statements on `keywords`,
+`might`, `card_subtype` and `rules_text` only (no colour changed; names, art,
+templates untouched; no DROP/DELETE, no backup table this time). Live had no
+Creator `overrides`. Verified by the same md5 fingerprint over every row's
+id | keywords | tier | subtype | rules text | colours: before
+`5a65f5759d533d37f8d1a03be9ef0943` (matched the pre-reprint derivation),
+after `81cd6c6644c4079059073abe7e480932`, equal to the local derivation.
+Rollback = rerun the old derivation (git `3ef8a06`) through
+`scripts/sync-cards-db.ts`.
