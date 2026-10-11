@@ -200,6 +200,7 @@ export const CPU_DIFFICULTIES = [
   { id: 'easy', label: 'EASY', blurb: 'Loose bots that misread hands', skill: 0.25 },
   { id: 'normal', label: 'NORMAL', blurb: 'The standard table', skill: 0.6 },
   { id: 'hard', label: 'HARD', blurb: 'Sharp reads, well-timed casts', skill: 0.9 },
+  { id: 'shark', label: 'SHARK', blurb: 'No mistakes: the best the bots can play', skill: 1.0 },
 ] as const;
 export type CpuDifficultyId = (typeof CPU_DIFFICULTIES)[number]['id'];
 export const CPU_DIFFICULTY_KEY = 'frycards:cpu-difficulty';
