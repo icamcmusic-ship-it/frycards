@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MODES, UNIT, type ModeId } from './constants';
+import { MODES, type ModeId } from './constants';
 import { chipsInPlay, replay } from './engine';
 import { cpuTableSetup, simulateMatch } from './sim';
 
@@ -11,7 +11,7 @@ describe('bot-versus-bot fuzz', () => {
       const setup = cpuTableSetup({ seed: seed * 1013, mode, seats });
       const { match, actions } = simulateMatch(setup, seed);
       expect(match.phase).toBe('over');
-      expect(chipsInPlay(match)).toBe(seats * MODES[mode].stackUnits * UNIT);
+      expect(chipsInPlay(match)).toBe(seats * MODES[mode].stackChips);
       expect(match.placements).toHaveLength(seats);
       if (seed % 6 === 0) expect(replay(setup, actions).placements).toEqual(match.placements);
     }

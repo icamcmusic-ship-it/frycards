@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { sellableSplit } from './sellable';
 import { askConfirm } from './confirm';
 import { useMeta } from './MetaContext';
 import {
@@ -55,7 +56,12 @@ import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL, POOL_BY_ID } from '../game/poker/cardpool';
 import { CardDef } from '../game/poker/cards';
 import { RARITIES } from '../types';
-import { quicksellCards, setShowcaseCards } from '../lib/supabase';
+import {
+  quicksellCards,
+  quicksellMany,
+  setShowcaseCards,
+  type QuicksellManyItem,
+} from '../lib/supabase';
 import { GradedCard, fetchGradedCards, gradedQuicksellPrice } from './grading';
 import { GradedSlab } from './GradedSlab';
 import { SlabDetailModal } from './SlabDetailModal';
@@ -91,34 +97,25 @@ async function runBulkQuicksell(
   serializedByCard: Map<string, unknown[]>,
   onProgress: (cardsSoFar: number) => void,
 ): Promise<{ credits: number; cards: number; error: string | null }> {
-  let totalCredits = 0;
-  let totalCards = 0;
+  // Every lot goes in ONE quicksell_many call (audit §7 S3), all or nothing.
+  const items: QuicksellManyItem[] = [];
   for (const c of POOL) {
     if (c.type === 'Leader' || (c.rarity || 'Common') !== targetRarity) continue;
     const o = owned.get(c.id);
     if (!o) continue;
     const locked = lockedByDecks.get(c.id) || 0;
-    const { normal: spareNormalRaw, foil: spareFoil } = spareSplit(o, locked);
     const reserved = serializedByCard.get(c.id)?.length || 0;
-    const spareNormal = Math.max(0, spareNormalRaw - reserved);
-    if (spareNormal + spareFoil <= 0) continue;
-    for (const [foil, qty] of [
-      [false, spareNormal],
-      [true, spareFoil],
-    ] as const) {
-      if (qty <= 0) continue;
-      const { data, error } = await quicksellCards(c.id, qty, foil);
-      if (error) {
-        return { credits: totalCredits, cards: totalCards, error };
-      }
-      if (data) {
-        totalCredits += data.total;
-        totalCards += data.sold;
-        onProgress(totalCards);
-      }
-    }
+    // Normal copies first, then whatever foil the deck locks still allow.
+    const s = sellableSplit(o, locked, reserved);
+    if (s.total <= 0) continue;
+    if (s.normal > 0) items.push({ card_id: c.id, qty: s.normal, foil: false });
+    if (s.total - s.normal > 0) items.push({ card_id: c.id, qty: s.total - s.normal, foil: true });
   }
-  return { credits: totalCredits, cards: totalCards, error: null };
+  if (items.length === 0) return { credits: 0, cards: 0, error: null };
+  const { data, error } = await quicksellMany(items);
+  if (error || !data) return { credits: 0, cards: 0, error: error ?? 'Sale failed' };
+  onProgress(data.sold);
+  return { credits: data.total, cards: data.sold, error: null };
 }
 
 /**
@@ -481,11 +478,9 @@ export function CollectionScreen({
   // Spare (unlocked) copies across the whole collection — Leaders excluded
   // (they're never bulk-fodder) — per card (the SPARES view) and per rarity
   // with what they would sell for (the "QUICKSELL ALL <rarity>" bulk actions).
-  // Same arithmetic as runBulkQuicksell above (spareSplit, then reserves out
-  // of the normal split only) — a flat q+f−locked−reserved diverges when a
-  // deck lock spills into foil copies on a card with serialized reserves, and
-  // the progress bar's total disagrees with what the loop actually sells
-  // ("SELLING 3/2").
+  // Same arithmetic as runBulkQuicksell above (sellableSplit: deck locks and
+  // Serialized prints are two independent server checks, normal copies sell
+  // first), so the progress bar's total matches what the loop actually sells.
   const { spareByCard, spareValues } = useMemo(() => {
     const byCard = new Map<string, number>();
     const rows: { rarity: string; normal: number; foil: number }[] = [];
@@ -494,11 +489,10 @@ export function CollectionScreen({
       const o = owned.get(c.id);
       if (!o) continue;
       const reserved = serializedByCard.get(c.id)?.length || 0;
-      const { normal, foil } = spareSplit(o, lockedByDecks.get(c.id) || 0);
-      const spareNormal = Math.max(0, normal - reserved);
-      if (spareNormal + foil <= 0) continue;
-      byCard.set(c.id, spareNormal + foil);
-      rows.push({ rarity: c.rarity || 'Common', normal: spareNormal, foil });
+      const s = sellableSplit(o, lockedByDecks.get(c.id) || 0, reserved);
+      if (s.total <= 0) continue;
+      byCard.set(c.id, s.total);
+      rows.push({ rarity: c.rarity || 'Common', normal: s.normal, foil: s.total - s.normal });
     }
     return { spareByCard: byCard, spareValues: spareValueByRarity(rows) };
   }, [owned, lockedByDecks, serializedByCard]);
@@ -718,8 +712,10 @@ export function CollectionScreen({
   // and foil buttons, which could show a normal copy as sellable when every
   // normal copy was actually deck-locked (and only foil was spare), or vice
   // versa.
-  const { normal: spareNormal, foil: spareFoil } = spareSplit(inspectOwned, inspectLocked);
-  const normalSellable = Math.max(0, spareNormal - inspectSerializedReserved);
+  // Two independent server checks (deck locks vs Serialized), see sellable.ts.
+  const inspectSellable = sellableSplit(inspectOwned, inspectLocked, inspectSerializedReserved);
+  const normalSellable = inspectSellable.normal;
+  const spareFoil = inspectSellable.foil;
   // `q` (player_cards.quantity) INCLUDES serialized copies — the grid
   // subtracts them for the normal tile's count, and the inspector must agree
   // or "Normal ×3" appears beside sell buttons that can only move 1.
@@ -758,6 +754,8 @@ export function CollectionScreen({
   ];
 
   const bulkRarities = (['Common', 'Uncommon'] as const).filter((r) => spareCount(r) > 0);
+  const spareCredits = bulkRarities.reduce((n, r) => n + (spareValues.get(r)?.credits ?? 0), 0);
+  const [extrasOpen, setExtrasOpen] = usePersistedState('collection.extras', false);
 
   return (
     <div ref={rootRef} className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
@@ -958,272 +956,286 @@ export function CollectionScreen({
         </aside>
 
         <main className="min-w-0">
-          {/* Collection progress */}
-          <CollapsiblePanel
-            id="progress"
-            title="COLLECTION PROGRESS"
-            summary={
-              <>
-                {uniqueOwned}/{POOL.length} ({pctOwned}%)
-              </>
-            }
-            peek={
-              <ProgressBar value={uniqueOwned} max={POOL.length} ariaLabel="Collection progress" />
-            }
+          {/* U35: on a phone the four panels below pushed the first card to
+              y≈580. They fold behind one compact stat row there; from sm up
+              they show as before. */}
+          <button
+            type="button"
+            aria-expanded={extrasOpen}
+            aria-controls="collection-extras"
+            onClick={() => setExtrasOpen(!extrasOpen)}
+            className="sm:hidden w-full mb-3 flex items-center justify-between gap-2 min-h-[44px] px-3 bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs fs-xs font-black text-left"
           >
-            <Tabs
-              ariaLabel="Completion by"
-              value={progressBy}
-              onChange={setProgressBy}
-              tabs={[
-                { id: 'rarity', label: 'BY RARITY' },
-                { id: 'set', label: 'BY SET' },
-                { id: 'colour', label: 'BY COLOUR' },
-              ]}
-            />
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
-              {(progressBy === 'rarity'
-                ? rarityProgress.map((e) => ({ label: e.rarity, owned: e.owned, total: e.total }))
-                : groupProgress
-              ).map((e) => (
-                <div key={e.label}>
-                  <div className="flex justify-between fs-xs font-black mb-0.5">
-                    <span className="truncate pr-1">{e.label.toUpperCase()}</span>
-                    <span className="font-mono">
-                      {e.owned}/{e.total}
-                    </span>
-                  </div>
-                  <ProgressBar
-                    value={e.owned}
-                    max={e.total}
-                    className="h-1.5"
-                    ariaLabel={`${e.label} cards collected`}
-                  />
-                </div>
-              ))}
-            </div>
-          </CollapsiblePanel>
-
-          {/* Showcase strip */}
-          <CollapsiblePanel
-            id="showcase"
-            title="MY SHOWCASE"
-            summary={
-              <>
-                {showcase.length}/{MAX_SHOWCASE}
-              </>
-            }
-          >
-            {showcaseError && (
-              <div className="mb-2">
-                <Notice text={showcaseError} />
-              </div>
-            )}
-            {showcase.length === 0 ? (
-              <div className="flex flex-col items-start gap-2 py-1">
-                <p className="fs-sm font-bold text-[var(--c-steel)]">
-                  No showcase cards yet — pin your favorites so friends can see them on your
-                  profile.
-                </p>
-                <PopButton color="yellow" onClick={startPinning}>
-                  PIN CARDS →
-                </PopButton>
-              </div>
-            ) : (
-              <>
-                <p className="fs-xs font-bold text-[var(--c-steel)] mb-2">
-                  Tap a pinned card to unpin it. To pin more, open an owned card and choose ☆ ADD TO
-                  SHOWCASE.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {showcase.map((id) => {
-                    const def = POOL_BY_ID[id];
-                    // This is the player's own showcase, so the placeholder is
-                    // the recovery path: tapping it unpins the dead slot.
-                    if (!def)
-                      return (
-                        <UnavailableShowcaseTile
-                          key={id}
-                          cardId={id}
-                          size="compact"
-                          onUnpin={() => toggleShowcase(id)}
-                        />
-                      );
-                    return (
-                      <CardFace
-                        key={id}
-                        def={def}
-                        size="compact"
-                        onClick={() => toggleShowcase(id)}
-                        badge="★ UNPIN"
-                      />
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </CollapsiblePanel>
-
-          {/* Graded shelf — encased slabs, each in its service's case style.
-              Slabs are display/sale pieces (not deck-legal); selling and
-              case-cracking live in the Grading Lab, so the shelf deep-links. */}
-          <AnimatePresence>
-            {slabOpen &&
-              (() => {
-                const g = gradedCards.find((x) => x.id === slabOpen);
-                if (!g) return null;
-                return (
-                  <SlabDetailModal
-                    key={g.id}
-                    g={g}
-                    pinned={profile?.showcase_slabs ?? []}
-                    onClose={() => setSlabOpen(null)}
-                    onChanged={async (gone) => {
-                      await Promise.all([
-                        refreshProfile(),
-                        gone ? refreshCollection() : Promise.resolve(),
-                        reloadGraded(),
-                      ]);
-                    }}
-                    onShowroom={
-                      onShowroom && g.grade != null
-                        ? () => onShowroom({ kind: 'slab', gradedId: g.id })
-                        : undefined
-                    }
-                    onGrading={onGrading}
-                  />
-                );
-              })()}
-          </AnimatePresence>
-          {(gradedCards.length > 0 || (onGrading && !dataLoading)) && (
+            <span className="truncate">
+              {uniqueOwned}/{POOL.length} · {gradedCards.length} graded
+              {spareCredits > 0 && <> · ≈{fmtCredits(spareCredits)}cr spares</>}
+            </span>
+            <span aria-hidden>{extrasOpen ? '▴' : '▸'}</span>
+          </button>
+          <div id="collection-extras" className={extrasOpen ? undefined : 'hidden sm:block'}>
+            {/* Collection progress */}
             <CollapsiblePanel
-              id="graded"
-              title="GRADED CARDS"
+              id="progress"
+              title="COLLECTION PROGRESS"
               summary={
                 <>
-                  {gradedCards.length}
-                  {(profile?.showcase_slabs?.length ?? 0) > 0 &&
-                    ` · ${profile!.showcase_slabs!.length}/3 on your profile`}
+                  {uniqueOwned}/{POOL.length} ({pctOwned}%)
+                </>
+              }
+              peek={
+                <ProgressBar
+                  value={uniqueOwned}
+                  max={POOL.length}
+                  ariaLabel="Collection progress"
+                />
+              }
+            >
+              <Tabs
+                ariaLabel="Completion by"
+                value={progressBy}
+                onChange={setProgressBy}
+                tabs={[
+                  { id: 'rarity', label: 'BY RARITY' },
+                  { id: 'set', label: 'BY SET' },
+                  { id: 'colour', label: 'BY COLOUR' },
+                ]}
+              />
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
+                {(progressBy === 'rarity'
+                  ? rarityProgress.map((e) => ({ label: e.rarity, owned: e.owned, total: e.total }))
+                  : groupProgress
+                ).map((e) => (
+                  <div key={e.label}>
+                    <div className="flex justify-between fs-xs font-black mb-0.5">
+                      <span className="truncate pr-1">{e.label.toUpperCase()}</span>
+                      <span className="font-mono">
+                        {e.owned}/{e.total}
+                      </span>
+                    </div>
+                    <ProgressBar
+                      value={e.owned}
+                      max={e.total}
+                      className="h-1.5"
+                      ariaLabel={`${e.label} cards collected`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </CollapsiblePanel>
+
+            {/* Showcase strip */}
+            <CollapsiblePanel
+              id="showcase"
+              title="MY SHOWCASE"
+              summary={
+                <>
+                  {showcase.length}/{MAX_SHOWCASE}
                 </>
               }
             >
-              {gradedCards.length === 0 ? (
+              {showcaseError && (
+                <div className="mb-2">
+                  <Notice text={showcaseError} />
+                </div>
+              )}
+              {showcase.length === 0 ? (
                 <div className="flex flex-col items-start gap-2 py-1">
                   <p className="fs-sm font-bold text-[var(--c-steel)]">
-                    Nothing graded yet. The Grading Lab seals a spare copy in a slab you can display
-                    and sell.
+                    No showcase cards yet — pin your favorites so friends can see them on your
+                    profile.
                   </p>
-                  <PopButton color="yellow" onClick={onGrading}>
-                    OPEN THE GRADING LAB →
+                  <PopButton color="yellow" onClick={startPinning}>
+                    PIN CARDS →
                   </PopButton>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                    <label className="flex items-center gap-2 fs-xs font-black uppercase text-[var(--c-steel)]">
-                      Sort
-                      <select
-                        className="ink-border-sm fs-xs font-bold px-1 py-0.5 min-h-[28px] bg-[var(--c-paper)] text-[var(--c-ink)] normal-case"
-                        value={slabSort}
-                        onChange={(e) => setSlabSort(e.target.value as typeof slabSort)}
-                      >
-                        <option value="pinned">Pinned first</option>
-                        <option value="grade">Grade</option>
-                        <option value="value">Value</option>
-                        <option value="service">Service</option>
-                        <option value="newest">Newest</option>
-                      </select>
-                    </label>
-                    <span className="fs-xs font-bold text-[var(--c-steel)]">
-                      Tap a slab for details, showcasing, selling or cracking
-                    </span>
-                  </div>
-                  {/* The slab's own keyframes travel with it — a top-grade case
-                      shines on this shelf as well as in the Lab. */}
+                  <p className="fs-xs font-bold text-[var(--c-steel)] mb-2">
+                    Tap a pinned card to unpin it. To pin more, open an owned card and choose ☆ ADD
+                    TO SHOWCASE.
+                  </p>
                   <div className="flex flex-wrap gap-2">
-                    {sortSlabs(gradedCards, slabSort, profile?.showcase_slabs ?? []).map((g) => (
-                      <div key={g.id} className="flex flex-col gap-1 w-fit">
-                        <div className="relative">
-                          <GradedSlab g={g} onClick={() => setSlabOpen(g.id)} />
-                          {profile?.showcase_slabs?.includes(g.id) && (
-                            <span className="absolute -top-2 -right-2 heading-font fs-xs bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm z-20">
-                              ★ PINNED
-                            </span>
-                          )}
-                        </div>
-                        {/* Only a GRADED slab can be stood up in the room: a pending
-                            one has a frosted window and no grade to print, so the
-                            3D view would be a blurred card in an empty case. */}
-                        {onShowroom && g.grade != null && (
-                          <button
-                            onClick={() => onShowroom({ kind: 'slab', gradedId: g.id })}
-                            aria-label={`View ${POOL_BY_ID[g.card_id]?.name ?? 'this slab'} in the 3D Showroom`}
-                            className="btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 min-h-[28px] ink-border-sm shadow-hard-black-xs"
-                          >
-                            ⬛ VIEW IN 3D
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                    {showcase.map((id) => {
+                      const def = POOL_BY_ID[id];
+                      // This is the player's own showcase, so the placeholder is
+                      // the recovery path: tapping it unpins the dead slot.
+                      if (!def)
+                        return (
+                          <UnavailableShowcaseTile
+                            key={id}
+                            cardId={id}
+                            size="compact"
+                            onUnpin={() => toggleShowcase(id)}
+                          />
+                        );
+                      return (
+                        <CardFace
+                          key={id}
+                          def={def}
+                          size="compact"
+                          onClick={() => toggleShowcase(id)}
+                          badge="★ UNPIN"
+                        />
+                      );
+                    })}
                   </div>
                 </>
               )}
             </CollapsiblePanel>
-          )}
 
-          {/* Bulk quicksell — clear out common/uncommon clutter in one click
+            {/* Graded shelf — encased slabs, each in its service's case style.
+              Slabs are display/sale pieces (not deck-legal); selling and
+              case-cracking live in the Grading Lab, so the shelf deep-links. */}
+            <AnimatePresence>
+              {slabOpen &&
+                (() => {
+                  const g = gradedCards.find((x) => x.id === slabOpen);
+                  if (!g) return null;
+                  return (
+                    <SlabDetailModal
+                      key={g.id}
+                      g={g}
+                      pinned={profile?.showcase_slabs ?? []}
+                      onClose={() => setSlabOpen(null)}
+                      onChanged={async (gone) => {
+                        await Promise.all([
+                          refreshProfile(),
+                          gone ? refreshCollection() : Promise.resolve(),
+                          reloadGraded(),
+                        ]);
+                      }}
+                      onShowroom={
+                        onShowroom && g.grade != null
+                          ? () => onShowroom({ kind: 'slab', gradedId: g.id })
+                          : undefined
+                      }
+                      onGrading={onGrading}
+                    />
+                  );
+                })()}
+            </AnimatePresence>
+            {(gradedCards.length > 0 || (onGrading && !dataLoading)) && (
+              <CollapsiblePanel
+                id="graded"
+                title="GRADED CARDS"
+                summary={
+                  <>
+                    {gradedCards.length}
+                    {(profile?.showcase_slabs?.length ?? 0) > 0 &&
+                      ` · ${profile!.showcase_slabs!.length}/3 on your profile`}
+                  </>
+                }
+              >
+                {gradedCards.length === 0 ? (
+                  <div className="flex flex-col items-start gap-2 py-1">
+                    <p className="fs-sm font-bold text-[var(--c-steel)]">
+                      Nothing graded yet. The Grading Lab seals a spare copy in a slab you can
+                      display and sell.
+                    </p>
+                    <PopButton color="yellow" onClick={onGrading}>
+                      OPEN THE GRADING LAB →
+                    </PopButton>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                      <label className="flex items-center gap-2 fs-xs font-black uppercase text-[var(--c-steel)]">
+                        Sort
+                        <select
+                          className="ink-border-sm fs-xs font-bold px-1 py-0.5 min-h-[28px] bg-[var(--c-paper)] text-[var(--c-ink)] normal-case"
+                          value={slabSort}
+                          onChange={(e) => setSlabSort(e.target.value as typeof slabSort)}
+                        >
+                          <option value="pinned">Pinned first</option>
+                          <option value="grade">Grade</option>
+                          <option value="value">Value</option>
+                          <option value="service">Service</option>
+                          <option value="newest">Newest</option>
+                        </select>
+                      </label>
+                      <span className="fs-xs font-bold text-[var(--c-steel)]">
+                        Tap a slab for details, showcasing, selling or cracking
+                      </span>
+                    </div>
+                    {/* The slab's own keyframes travel with it — a top-grade case
+                      shines on this shelf as well as in the Lab. */}
+                    <div className="flex flex-wrap gap-2">
+                      {sortSlabs(gradedCards, slabSort, profile?.showcase_slabs ?? []).map((g) => (
+                        <div key={g.id} className="flex flex-col gap-1 w-fit">
+                          <div className="relative">
+                            <GradedSlab g={g} onClick={() => setSlabOpen(g.id)} />
+                            {profile?.showcase_slabs?.includes(g.id) && (
+                              <span className="absolute -top-2 -right-2 heading-font fs-xs bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm z-20">
+                                ★ PINNED
+                              </span>
+                            )}
+                          </div>
+                          {/* Only a GRADED slab can be stood up in the room: a pending
+                            one has a frosted window and no grade to print, so the
+                            3D view would be a blurred card in an empty case. */}
+                          {onShowroom && g.grade != null && (
+                            <button
+                              onClick={() => onShowroom({ kind: 'slab', gradedId: g.id })}
+                              aria-label={`View ${POOL_BY_ID[g.card_id]?.name ?? 'this slab'} in the 3D Showroom`}
+                              className="btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 min-h-[28px] ink-border-sm shadow-hard-black-xs"
+                            >
+                              ⬛ VIEW IN 3D
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </CollapsiblePanel>
+            )}
+
+            {/* Bulk quicksell — clear out common/uncommon clutter in one click
               instead of opening each card individually. Folded away like the
               other panels (it is a destructive tool, not something to scroll
               past every visit); the confirm and the panel both say what the
               spares are worth. Results stay outside the fold. */}
-          {(bulkError || bulkNotice) && (
-            <div className="mb-3">
-              {bulkError && <Notice text={bulkError} />}
-              {bulkNotice && <Notice text={bulkNotice} kind="success" />}
-            </div>
-          )}
-          {bulkRarities.length > 0 && (
-            <CollapsiblePanel
-              id="bulk"
-              title="BULK QUICKSELL"
-              summary={
-                <>
-                  ≈
-                  {fmtCredits(
-                    bulkRarities.reduce((n, r) => n + (spareValues.get(r)?.credits ?? 0), 0),
-                  )}{' '}
-                  credits
-                </>
-              }
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                {bulkRarities.map((r) => (
-                  <PopButton
-                    key={r}
-                    color="red"
-                    disabled={!!bulkBusy}
-                    onClick={async () => {
-                      const v = spareValues.get(r);
-                      if (v && (await askConfirm(quicksellConfirmText(r, v)))) bulkQuicksell(r);
-                    }}
-                  >
-                    {bulkBusy === r
-                      ? bulkProgress
-                        ? `SELLING ${bulkProgress.done}/${bulkProgress.total}…`
-                        : 'SELLING…'
-                      : `QUICKSELL ALL ${r.toUpperCase()} (${spareCount(r)}) · ≈${fmtCredits(spareValues.get(r)?.credits)}`}
-                  </PopButton>
-                ))}
+            {(bulkError || bulkNotice) && (
+              <div className="mb-3">
+                {bulkError && <Notice text={bulkError} />}
+                {bulkNotice && <Notice text={bulkNotice} kind="success" />}
               </div>
-              <p className="fs-xs font-bold text-[var(--c-steel)] mt-2">
-                Spare copies are worth about:{' '}
-                {RARITIES.filter((r) => spareCount(r) > 0)
-                  .map((r) => `${r} ${fmtCredits(spareValues.get(r)?.credits)}`)
-                  .join(' · ')}{' '}
-                credits. Cards in a saved deck, serialized prints and graded slabs are never sold.
-              </p>
-            </CollapsiblePanel>
-          )}
+            )}
+            {bulkRarities.length > 0 && (
+              <CollapsiblePanel
+                id="bulk"
+                title="BULK QUICKSELL"
+                summary={<>≈{fmtCredits(spareCredits)} credits</>}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  {bulkRarities.map((r) => (
+                    <PopButton
+                      key={r}
+                      color="red"
+                      disabled={!!bulkBusy}
+                      onClick={async () => {
+                        const v = spareValues.get(r);
+                        if (v && (await askConfirm(quicksellConfirmText(r, v)))) bulkQuicksell(r);
+                      }}
+                    >
+                      {bulkBusy === r
+                        ? bulkProgress
+                          ? `SELLING ${bulkProgress.done}/${bulkProgress.total}…`
+                          : 'SELLING…'
+                        : `QUICKSELL ALL ${r.toUpperCase()} (${spareCount(r)}) · ≈${fmtCredits(spareValues.get(r)?.credits)}`}
+                    </PopButton>
+                  ))}
+                </div>
+                <p className="fs-xs font-bold text-[var(--c-steel)] mt-2">
+                  Spare copies are worth about:{' '}
+                  {RARITIES.filter((r) => spareCount(r) > 0)
+                    .map((r) => `${r} ${fmtCredits(spareValues.get(r)?.credits)}`)
+                    .join(' · ')}{' '}
+                  credits. Cards in a saved deck, serialized prints and graded slabs are never sold.
+                </p>
+              </CollapsiblePanel>
+            )}
+          </div>
 
           <Tabs
             ariaLabel="Collection view"
@@ -1244,7 +1256,10 @@ export function CollectionScreen({
                 clear filters
               </button>
             )}
-            <span>Tap any card to inspect it — quicksell spare copies for credits.</span>
+            <span>
+              Tap a card to inspect it; its spare copies sell for credits there (the SPARES view
+              lists them all).
+            </span>
           </div>
           {pinHint && (
             <div

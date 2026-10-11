@@ -60,7 +60,7 @@ describe('every keyword resolves without breaking the table', () => {
       power({ kw: 'Straddle' }, { colors: ['Ember'], mods: [{ kw: 'Quickstrike' }] }),
     );
     act(m, { type: 'cast', seat, uid });
-    expect(m.hand!.currentBet).toBe(200);
+    expect(m.hand!.currentBet).toBe(32);
     expect(m.hand!.straddler).toBe(seat);
     expect(m.hand!.toAct).not.toBe(seat);
     let g = 0;

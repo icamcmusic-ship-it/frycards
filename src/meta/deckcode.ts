@@ -147,3 +147,40 @@ export function takePendingDeck(): string | null {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// "Beat this deck" links (AUDIT §6 Q22): `?vs=<code>` opens TAKE A SEAT with
+// the deck pre-filled as a practice opponent.
+// ---------------------------------------------------------------------------
+export const CHALLENGE_PARAM = 'vs';
+const CHALLENGE_KEY = 'frycards:challenge-deck';
+
+export function challengeLink(
+  code: string,
+  loc: { origin: string; pathname: string } = window.location,
+): string {
+  return `${loc.origin}${loc.pathname}?${CHALLENGE_PARAM}=${encodeURIComponent(code)}`;
+}
+
+export function challengeFromSearch(search: string): string | null {
+  const raw = new URLSearchParams(search).get(CHALLENGE_PARAM)?.trim();
+  return raw && raw.startsWith(`${PREFIX}:`) ? raw : null;
+}
+
+export function stashChallengeDeck(code: string): void {
+  try {
+    window.sessionStorage.setItem(CHALLENGE_KEY, code);
+  } catch {
+    /* storage blocked */
+  }
+}
+
+export function takeChallengeDeck(): string | null {
+  try {
+    const code = window.sessionStorage.getItem(CHALLENGE_KEY);
+    if (code) window.sessionStorage.removeItem(CHALLENGE_KEY);
+    return code;
+  } catch {
+    return null;
+  }
+}

@@ -333,6 +333,12 @@ async function runPrelude(
   for (const label of PRELUDE[screen] ?? []) {
     const before = await screenSig(page);
     let landed = false;
+    // v31: a prelude TAB the screen already opened on has landed. U50 opens
+    // grading on AT THE GRADERS when a slab is due, so clicking it is a no-op
+    // that changes nothing — which is the state being asked for, not a miss.
+    const sel = page
+      .locator(`[role="tab"][aria-selected="true"]:visible`, { hasText: label })
+      .first();
     // Three attempts, with a growing wait: a prelude that has to mount 241
     // controls (the deck editor) settles slower than one that swaps a form,
     // and the click sweep replays the prelude on EVERY one of its ~41 loads —
@@ -344,7 +350,7 @@ async function runPrelude(
       await target.click({ timeout: 4000 }).catch(() => undefined);
       for (let i = 0; i < 16 + attempt * 8; i++) {
         await page.waitForTimeout(250);
-        if ((await screenSig(page)) !== before) {
+        if ((await screenSig(page)) !== before || (await sel.count().catch(() => 0)) > 0) {
           landed = true;
           break;
         }

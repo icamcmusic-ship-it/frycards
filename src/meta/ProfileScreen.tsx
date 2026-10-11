@@ -236,11 +236,17 @@ export function ProfileScreen({
             max={levelXp.band}
             ariaLabel={`XP toward level ${profile.level + 1}`}
           />
-          <div className="fs-xs font-bold text-[var(--c-steel)] mt-1">
-            Earn XP from every match — the higher you finish, the more (Standard: +60 for 1st, +25
-            for last; Quick pays half, Deep half again). Each level pays a credits bonus; every 5th
-            level adds vouchers on top.
-          </div>
+          {/* U55: the rules sit behind a toggle instead of four lines on every visit. */}
+          <details className="fs-xs font-bold text-[var(--c-steel)] mt-1">
+            <summary className="cursor-pointer select-none min-h-6 inline-flex items-center underline">
+              How XP works
+            </summary>
+            <p className="mt-1">
+              Earn XP from every match — the higher you finish, the more (Standard: +60 for 1st, +25
+              for last; Quick pays half, Deep half again). Each level pays a credits bonus; every
+              5th level adds vouchers on top.
+            </p>
+          </details>
         </div>
 
         {/* Stats strip */}

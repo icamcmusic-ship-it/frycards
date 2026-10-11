@@ -10,11 +10,22 @@ import {
   SerializedFeedEntry,
   createNewsPost,
   deleteNewsPost,
+  fetchPublicProfiles,
   subscribeTable,
 } from '../lib/supabase';
 import { ENTRIES } from './ChangelogScreen';
 import { RARITY_CHIP } from './rarity';
 import { SafeImage } from './SafeImage';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (v: string | null | undefined): v is string => !!v && UUID_RE.test(v);
+/** A post's byline: the resolved username, a non-id author string as is, or
+ * nothing while an id is unresolved. */
+function authorLabel(author: string | null | undefined, names: Map<string, string>): string {
+  if (!author) return '';
+  if (isUuid(author)) return names.get(author) ?? '';
+  return author;
+}
 
 /** Derived from ChangelogScreen's newest entry so this pointer can never
  * drift out of date again (it used to be a hard-coded copy of an old
@@ -45,6 +56,31 @@ export function NewsCenterScreen({
   const { profile } = useMeta();
   const [posts, setPosts] = useState<NewsPost[]>([]);
   const [feed, setFeed] = useState<SerializedFeedEntry[]>([]);
+  // U63: posts store the author's user id; resolve it to a username, and
+  // never print a raw UUID when that fails.
+  const [authorNames, setAuthorNames] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    const ids = [...new Set<string>(posts.map((p) => p.author).filter(isUuid))].filter(
+      (id) => !authorNames.has(id),
+    );
+    if (ids.length === 0) return;
+    let cancelled = false;
+    fetchPublicProfiles(ids)
+      .then((rows) => {
+        if (cancelled) return;
+        setAuthorNames((m) => {
+          const next = new Map(m);
+          for (const r of rows) if (r.username) next.set(r.id, r.username);
+          return next;
+        });
+      })
+      .catch(() => {
+        /* names stay hidden */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [posts, authorNames]);
   const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(false);
   const [title, setTitle] = useState('');
@@ -289,7 +325,11 @@ export function NewsCenterScreen({
                 <p className="text-[12px] font-medium mt-1.5 whitespace-pre-wrap leading-snug">
                   {p.body}
                 </p>
-                <div className="fs-xs font-bold text-[var(--c-steel)] mt-2">— {p.author}</div>
+                {authorLabel(p.author, authorNames) && (
+                  <div className="fs-xs font-bold text-[var(--c-steel)] mt-2">
+                    — {authorLabel(p.author, authorNames)}
+                  </div>
+                )}
               </div>
             ))}
           </div>

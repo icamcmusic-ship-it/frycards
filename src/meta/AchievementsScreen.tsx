@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BingoPanel } from './BingoPanel';
-import { Trophy, Grid3x3, Target, Coins, Ticket, Package, Zap, Check } from 'lucide-react';
+import { Trophy, Grid3x3, Target, Coins, Ticket, Package, Zap, Check, Lock } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   fetchAchievements,
@@ -33,8 +33,38 @@ export const MATCH_MISSION_IDS: ReadonlySet<string> = new Set([
   'w_play_15',
   'w_win_8',
 ]);
-/** Stat keys that only move when a match is played. */
-export const MATCH_STAT_KEYS: ReadonlySet<string> = new Set(['games_played', 'wins']);
+/** Stat keys that only move when a match is played. Mirrors the server's
+ * `is_match_stat` (migration 20261011000002), which also keeps these out of
+ * the mission rotation for players who cannot start matches. */
+export const MATCH_STAT_KEYS: ReadonlySet<string> = new Set([
+  'games_played',
+  'wins',
+  'hands_won',
+  'showdown_wins',
+  'strong_showdowns',
+  'win_pair',
+  'made_straight',
+  'made_flush',
+  'made_full_house',
+  'made_quads',
+  'made_straight_flush',
+  'bluff_wins',
+  'big_pots',
+  'big_pots_50',
+  'seats_busted',
+  'triple_bust',
+  'short_stack_win',
+  'powers_cast',
+  'leader_uses',
+  'keywords_distinct',
+  'keywords_today',
+  'keywords_week',
+  'leaders_won_with',
+  'deep_wins',
+  'full_table_wins',
+  'podium_finishes',
+  'long_games',
+]);
 
 /** True when finishing the objective needs a match (mission list, stat keys or
  * the battle achievement category). */
@@ -48,6 +78,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   progress: 'PROGRESSION',
   social: 'SOCIAL',
   market: 'MARKETPLACE',
+  // Folded into `market` server-side (20261011000003); kept for old rows.
+  economy: 'MARKETPLACE',
   general: 'GENERAL',
 };
 
@@ -111,6 +143,21 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, attempt]);
+
+  // B5: missions roll over at 00:00 UTC (weekly: Monday). A screen left open
+  // across the reset re-renders its countdown every minute and reloads once
+  // the period changes, so yesterday's CLAIM buttons do not linger.
+  const [, setMinuteTick] = useState(0);
+  useEffect(() => {
+    if (!userId) return;
+    const tick = window.setInterval(() => setMinuteTick((n) => n + 1), 60_000);
+    const msToMidnight = nextUtcMidnight().getTime() - Date.now();
+    const reset = window.setTimeout(() => setAttempt((n) => n + 1), msToMidnight + 2_000);
+    return () => {
+      window.clearInterval(tick);
+      window.clearTimeout(reset);
+    };
   }, [userId, attempt]);
 
   const handleClaimAchievement = async (a: Achievement) => {
@@ -296,7 +343,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <MetaHeader title="MISSIONS & ACHIEVEMENTS" onBack={onBack} />
+      <MetaHeader title="MISSIONS" onBack={onBack} />
       <div className="p-5 max-w-5xl mx-auto">
         <Tabs<Tab>
           ariaLabel="Missions and achievements"
@@ -438,19 +485,18 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                             <div className="flex items-center gap-1 heading-font fs-xs px-3 py-1.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
                               <Check className="w-3 h-3" /> CLAIMED
                             </div>
+                          ) : locked && !done ? (
+                            // U58: a lock and the reason, not a grey button shaped like CLAIM.
+                            <span className="flex items-center gap-1 fs-xs font-bold text-[var(--c-steel)]">
+                              <Lock className="w-3 h-3" aria-hidden /> NEEDS BOT MATCHES
+                            </span>
                           ) : (
                             <PopButton
                               color={done ? 'yellow' : 'steel'}
                               disabled={!done || !!busyId}
                               onClick={() => handleClaimMission(m)}
                             >
-                              {busyId === m.id
-                                ? 'CLAIMING…'
-                                : done
-                                  ? 'CLAIM ▸'
-                                  : locked
-                                    ? 'LOCKED'
-                                    : 'IN PROGRESS'}
+                              {busyId === m.id ? 'CLAIMING…' : done ? 'CLAIM ▸' : 'IN PROGRESS'}
                             </PopButton>
                           )}
                         </div>
@@ -548,6 +594,11 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       </div>
     </div>
   );
+}
+
+/** The next 00:00 UTC after `now`. */
+export function nextUtcMidnight(now = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
 }
 
 /** Time until the next UTC mission reset (daily: midnight; weekly: Monday). */

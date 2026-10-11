@@ -38,7 +38,11 @@ function hidePowers(list: PowerInst[]): PowerInst[] {
 export function viewFor(m: Match, seat: number): Match {
   const v: Match = structuredClone(m);
   v.rng = 0;
-  v.log = m.log.filter((e) => e.to === undefined || e.to === seat);
+  // The seed plus the public action log replays every shuffle, so it would
+  // reveal every hole card and the board to come: hidden until the match is
+  // over (show a commitment such as a hash of it meanwhile).
+  if (m.phase !== 'over') v.seed = 0;
+  v.log = m.log.filter((e) => (e.to === undefined || e.to === seat) && !e.hideFrom?.includes(seat));
   v.bag = m.bag.slice(0, 2); // the forecast shows two; the rest of the bag is hidden
   for (const s of v.seats) {
     // Nobody sees any draw pile's order, including their own.
@@ -61,6 +65,23 @@ export function viewFor(m: Match, seat: number): Match {
       : null;
     h.burn = src.burn.map(() => HIDDEN_CARD(-1));
     h.muck = redactCards(src.muck, seat, null);
+    // A Veiled cast hides its target until the street ends: the marks it
+    // left (hit this street, Locked, poisoned, bountied, entropic) are hidden
+    // from every seat but the caster and the target. The engine keeps the
+    // real state, so a pick on that seat is refused with "No legal target".
+    for (const c of src.casts) {
+      if (!c.veiled || c.target === null || c.seat === seat || c.target === seat) continue;
+      const t = c.target;
+      h.hostileHit[t] = false;
+      if (c.effect.kw === 'Lock') h.locked[t] = false;
+      const drop = <T extends { from: number; to: number }>(list: T[]): T[] => {
+        const k = list.findIndex((x) => x.from === c.seat && x.to === t);
+        return k < 0 ? list : list.filter((_, i) => i !== k);
+      };
+      if (c.effect.kw === 'Venomous') h.venom = drop(h.venom);
+      if (c.effect.kw === 'Bounty') h.bounty = drop(h.bounty);
+      if (c.effect.kw === 'Entropic') h.entropic = h.entropic.filter((x) => x !== t);
+    }
     for (const c of h.casts) {
       if (c.seat !== seat) {
         if (!c.calledOut) c.feinted = false;

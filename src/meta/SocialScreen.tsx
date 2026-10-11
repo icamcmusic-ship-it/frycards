@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouteTab } from './useHashRouter';
 import { askConfirm } from './confirm';
 import { Users, UserPlus, ArrowLeftRight, Search, Coins, X, Trophy } from 'lucide-react';
 import { useMeta } from './MetaContext';
@@ -24,18 +25,17 @@ import {
   subscribeTable,
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
-import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/poker/cardpool';
-import { spareSplit } from './CollectionScreen';
+import { sellableSplit } from './sellable';
 import { RARITY_CHIP } from './rarity';
 import { PlayerLink } from './PlayerProfileModal';
 import { RoleBadge } from './RoleBadge';
 import { fmtCredits } from './economy';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
-type Tab = 'friends' | 'trades' | 'leaderboard';
-const isTab = (v: unknown): v is Tab => v === 'friends' || v === 'trades' || v === 'leaderboard';
+const TABS = ['friends', 'trades', 'leaderboard'] as const;
+type Tab = (typeof TABS)[number];
 
 /** One side of a trade as a short human string: "3 cards + 500 credits". */
 export function tradeSideSummary(
@@ -103,7 +103,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   const userId = session?.user?.id;
   // The remembered tab is a per-viewer convenience; a guest can only ever see
   // the leaderboard, whatever was stored.
-  const [storedTab, setTab] = usePersistedState<Tab>('social.tab', 'friends', isTab);
+  const [storedTab, setTab] = useRouteTab<Tab>('social', TABS, 'friends', 'social.tab');
   const tab: Tab = guest ? 'leaderboard' : storedTab;
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
@@ -1083,12 +1083,13 @@ function TradeComposerModal({
           // double-counts its spare, letting the picker offer more normal AND
           // foil than actually exist and building a trade createTrade then
           // rejects server-side.
-          const { normal: normalRaw, foil: foilMax } = spareSplit(
+          // Serialized prints (our side only) can never be traded; deck locks
+          // and Serialized are independent checks (sellable.ts, audit B4).
+          const { normal: normalMax, foil: foilMax } = sellableSplit(
             { q: c.quantity, f: c.foil_quantity },
             lockedMap.get(c.card_id) || 0,
+            reservedMap.get(c.card_id) || 0,
           );
-          // Serialized prints (our side only) can never be traded.
-          const normalMax = Math.max(0, normalRaw - (reservedMap.get(c.card_id) || 0));
           return (
             <React.Fragment key={c.card_id}>
               {normalMax > 0 && (

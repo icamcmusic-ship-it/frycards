@@ -41,6 +41,8 @@ const pack = {
 } as unknown as PackType;
 
 let inventoryQty = 2;
+const refreshPackTypes = vi.fn(async () => {});
+const refreshShopItems = vi.fn(async () => {});
 vi.mock('./MetaContext', () => ({
   useMeta: () => ({
     profile: { id: 'u1', credits: 1000, vouchers: 0, last_free_pack_at: null },
@@ -55,6 +57,9 @@ vi.mock('./MetaContext', () => ({
     refreshCosmetics: async () => {},
     refreshInventory: async () => {},
     refreshDecks: async () => {},
+    refreshPackTypes,
+    refreshShopItems,
+    collection: [],
   }),
 }));
 

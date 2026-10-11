@@ -385,8 +385,15 @@ function SubmitPanel({
             >
               {guest ? 'SIGN IN TO SUBMIT ▸' : busy ? 'SUBMITTING…' : 'SUBMIT CARD ▸'}
             </PopButton>
-            {!guest && validation && title.trim() !== '' && (
-              <span className="fs-xs font-bold text-[var(--c-red)]">{validation}</span>
+            {/* U68: a disabled SUBMIT always says why. */}
+            {!guest && !busy && (validation || !agreed) && (
+              <span className="fs-xs font-bold text-[var(--c-red)]">
+                {validation && title.trim() !== ''
+                  ? validation
+                  : !title.trim()
+                    ? 'Give your card a name'
+                    : 'Tick the rules box to submit'}
+              </span>
             )}
           </div>
         </div>

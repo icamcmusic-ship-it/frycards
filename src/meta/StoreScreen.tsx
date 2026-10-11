@@ -1,4 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouteTab } from './useHashRouter';
+import { msUntilNextUtcMidnight } from './utcReset';
+import { bountySellBlockedWhy } from './sellable';
 import { loadPackHistory, PackHistoryEntry } from './packHistory';
 import { Package, Percent, Backpack, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMeta } from './MetaContext';
@@ -20,8 +23,7 @@ import {
   BountyCard,
   Profile,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
-import { usePersistedState } from './usePersistedState';
+import { MetaHeader, PopButton, Notice, Credits, Vouchers, Tabs } from './ui';
 import { cn } from '../lib/utils';
 import { RARITY_CHIP, ALL_SET_NAMES, RARITY_ORDER } from './rarity';
 import { SafeImage } from './SafeImage';
@@ -64,7 +66,6 @@ const TAB_IDS = [
   'profile_avatar',
 ] as const;
 type Tab = (typeof TAB_IDS)[number];
-const isTab = (v: unknown): v is Tab => TAB_IDS.includes(v as Tab);
 
 /** What PackOpening is showing. `session` is the pulls of earlier packs in a
  * run of "Open next", and `left` how many unopened packs of `pack` remain
@@ -127,9 +128,23 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     refreshCosmetics,
     refreshInventory,
     refreshDecks,
+    refreshPackTypes,
+    refreshShopItems,
   } = useMeta();
-  const [tab, setTab] = usePersistedState<Tab>('store:tab', 'packs', isTab);
+  const [tab, setTab] = useRouteTab<Tab>('store', TAB_IDS, 'packs', 'store:tab');
   const [error, setError] = useState('');
+  // The catalogue loads at boot (and from a 30-minute cache); refetch it when
+  // the Store opens and after any purchase error, so prices, the SHORT gate
+  // and deactivated packs match what the server will charge (B6).
+  useEffect(() => {
+    void refreshPackTypes();
+    void refreshShopItems();
+  }, [refreshPackTypes, refreshShopItems]);
+  useEffect(() => {
+    if (!error) return;
+    void refreshPackTypes();
+    void refreshShopItems();
+  }, [error, refreshPackTypes, refreshShopItems]);
   const [notice, setNotice] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [opening, setOpening] = useState<OpeningState | null>(null);
@@ -1057,9 +1072,12 @@ function PackTile({
               {busyId === pack.id ? (
                 'OPENING…'
               ) : pack.price_credits === 0 ? (
-                'FREE'
+                'OPEN · FREE'
               ) : (
-                <Credits amount={pack.price_credits} className="justify-center" />
+                // U39: a verb on the primary button, not a bare price.
+                <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
+                  BUY &amp; OPEN · <Credits amount={pack.price_credits} />
+                </span>
               )}
             </PopButton>
             {profile && profile.credits < pack.price_credits && (
@@ -1085,7 +1103,13 @@ function PackTile({
               }
               onClick={() => onBuy(pack, 'vouchers')}
             >
-              {busyId === pack.id ? 'OPENING…' : `${fmtVouchers(pack.price_vouchers)} VOUCHERS`}
+              {busyId === pack.id ? (
+                'OPENING…'
+              ) : (
+                <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
+                  OPEN · <Vouchers amount={pack.price_vouchers} />
+                </span>
+              )}
             </PopButton>
             {profile && profile.vouchers < pack.price_vouchers && (
               <div className="mt-1 text-center fs-xs font-black text-[var(--c-steel)]">
@@ -1113,7 +1137,8 @@ function PackTile({
                   'OPENING…'
                 ) : (
                   <>
-                    OPEN ×{n} (<Credits amount={pack.price_credits! * n} />)
+                    {/* U40: no padded parentheses. */}
+                    OPEN {n} · <Credits amount={pack.price_credits! * n} />
                   </>
                 )}
               </button>
@@ -1131,10 +1156,10 @@ function PackTile({
             {busyId === 'inv:' + pack.id + ':credits' ? (
               'BUYING…'
             ) : pack.price_credits === 0 ? (
-              'SAVE FOR LATER (FREE)'
+              'SAVE FOR LATER · FREE'
             ) : (
               <>
-                SAVE FOR LATER (<Credits amount={pack.price_credits} />)
+                SAVE FOR LATER · <Credits amount={pack.price_credits} />
               </>
             )}
           </button>
@@ -1146,7 +1171,13 @@ function PackTile({
             className="flex-1 min-h-10 flex items-center justify-center gap-1 fs-xs font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Backpack className="w-3 h-3" />
-            {busyId === 'inv:' + pack.id + ':vouchers' ? 'BUYING…' : 'SAVE FOR LATER (VOUCHERS)'}
+            {busyId === 'inv:' + pack.id + ':vouchers' ? (
+              'BUYING…'
+            ) : (
+              <>
+                SAVE FOR LATER · <Vouchers amount={pack.price_vouchers} />
+              </>
+            )}
           </button>
         )}
       </div>
@@ -1186,7 +1217,7 @@ function BountiesTab({
   // is the client mirror of those two guards, on the same SUM-across-decks
   // reading every other sell surface uses (Collection, Marketplace, Player
   // Shops, Social).
-  const { decks, serializedCards } = useMeta();
+  const { decks, serializedCards, collection } = useMeta();
   const lockedByDecks = useMemo(() => {
     const m = new Map<string, number>();
     for (const d of decks) {
@@ -1202,20 +1233,20 @@ function BountiesTab({
     for (const s of serializedCards) m.set(s.card_id, (m.get(s.card_id) || 0) + 1);
     return m;
   }, [serializedCards]);
-  /** Why this bounty card can't be sold, or null when it can. */
+  /** Why this bounty card can't be sold, or null when it can. Mirrors the
+   * server's two independent checks (see `sellable.ts`, audit B4). */
+  const ownedSplit = useMemo(() => {
+    const m = new Map<string, { q: number; f: number }>();
+    for (const c of collection) m.set(c.card_id, { q: c.quantity, f: c.foil_quantity });
+    return m;
+  }, [collection]);
   const sellBlockedWhy = (card: BountyCard): string | null => {
-    const locked = lockedByDecks.get(card.card_id) || 0;
-    const reserved = serializedReserved.get(card.card_id) || 0;
-    // A deck lock and a Serialized print reserve DIFFERENT physical copies,
-    // so they ADD — checking each against the same `owned - 1` let a card
-    // that was both deck-locked and Serialized pass both gates and reach the
-    // server's refusal (v23). Every other sell surface sums them
-    // (Collection, Marketplace, Player Shops).
-    if (card.owned - 1 >= locked + reserved) return null;
-    if (card.owned - 1 < locked) return 'In use by one of your decks — remove it first';
-    if (reserved > 0 && card.owned - 1 < reserved)
-      return "You own a Serialized copy — it can't be sold";
-    return 'Your spare copies are deck-locked or Serialized — none can be sold';
+    const o = ownedSplit.get(card.card_id) ?? { q: card.owned, f: 0 };
+    return bountySellBlockedWhy(
+      o,
+      lockedByDecks.get(card.card_id) || 0,
+      serializedReserved.get(card.card_id) || 0,
+    );
   };
 
   const load = async () => {
@@ -1246,6 +1277,13 @@ function BountiesTab({
     return () => {
       cancelled = true;
     };
+  }, [attempt]);
+
+  // Bounties are keyed on the UTC day: reload at the reset so an open tab
+  // doesn't keep yesterday's list (whose SELL/BUY the server refuses, B5).
+  useEffect(() => {
+    const t = window.setTimeout(() => setAttempt((n) => n + 1), msUntilNextUtcMidnight() + 2_000);
+    return () => window.clearTimeout(t);
   }, [attempt]);
 
   const soldToday = bounties.filter((b) => b.already_sold).length;

@@ -24,11 +24,11 @@ export function CardOfTheDay({ onBuild }: { onBuild?: () => void } = {}) {
               CARD OF THE DAY
             </div>
             <div className="heading-font text-base leading-tight">{card.name}</div>
-            <div className="text-[10px] font-bold text-[var(--c-steel)] mt-0.5">
+            <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
               {card.rarity || 'Common'} · {card.type}
               {card.set ? ` · ${card.set}` : ''}
             </div>
-            <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
+            <div className="fs-xs font-bold text-[var(--c-steel)] mt-1">
               Tap the card to inspect it. A new one every day.
             </div>
             {onBuild && (
@@ -38,7 +38,7 @@ export function CardOfTheDay({ onBuild }: { onBuild?: () => void } = {}) {
                   setBuildWith(card.id);
                   onBuild();
                 }}
-                className="btn-pop heading-font text-[10px] mt-2 bg-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs"
+                className="btn-pop heading-font fs-xs mt-2 bg-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs"
               >
                 BUILD A DECK WITH IT ▸
               </button>

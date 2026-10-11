@@ -26,7 +26,7 @@ import {
   fetchDecks,
   fetchInventory,
   fetchMySerializedCards,
-  subscribeTable,
+  subscribeUserChannel,
   OwnedSerializedCard,
 } from '../lib/supabase';
 import { createStaleGuard, StaleGuard } from './staleGuard';
@@ -57,6 +57,12 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 /** How long cached shop items and pack types are reused before a re-fetch. */
+/** The per-user slices the database broadcasts changes for. */
+type UserSlice = 'profile' | 'player_cards' | 'player_inventory';
+/** A broadcast this soon after an explicit refresh of the same slice is the
+ * echo of the player's own action, so it is skipped. */
+const REFRESH_DEDUPE_MS = 2_000;
+
 const STORE_TTL_MS = 30 * 60 * 1000;
 
 /** Runs a per-user refresh and applies it only if it is still the newest
@@ -268,14 +274,14 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   // failing must keep whatever is already on screen, not blank the wallet or
   // wipe the collection, and must not surface as an unhandled rejection at a
   // call site that never expected one. So each catches and keeps prior state.
-  const refreshProfile = useCallback(
+  const fetchProfileSlice = useCallback(
     () =>
       userId
         ? refreshIfFresh(guards.profile, userId, userIdRef, fetchProfile, setProfile)
         : Promise.resolve(),
     [userId, guards],
   );
-  const refreshCollection = useCallback(
+  const fetchCollectionSlice = useCallback(
     () =>
       userId
         ? refreshIfFresh(
@@ -305,13 +311,34 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         : Promise.resolve(),
     [userId, guards],
   );
-  const refreshInventory = useCallback(
+  const fetchInventorySlice = useCallback(
     () =>
       userId
         ? refreshIfFresh(guards.inventory, userId, userIdRef, fetchInventory, setInventory)
         : Promise.resolve(),
     [userId, guards],
   );
+  // The refreshers screens call after the player's own action. Each records
+  // when it ran: the realtime broadcast for that same change lands moments
+  // later and is skipped inside REFRESH_DEDUPE_MS, so one action costs one
+  // fetch, not two (audit §7 S2b).
+  const lastRefreshAt = useRef<Record<UserSlice, number>>({
+    profile: 0,
+    player_cards: 0,
+    player_inventory: 0,
+  });
+  const refreshProfile = useCallback(() => {
+    lastRefreshAt.current.profile = Date.now();
+    return fetchProfileSlice();
+  }, [fetchProfileSlice]);
+  const refreshCollection = useCallback(() => {
+    lastRefreshAt.current.player_cards = Date.now();
+    return fetchCollectionSlice();
+  }, [fetchCollectionSlice]);
+  const refreshInventory = useCallback(() => {
+    lastRefreshAt.current.player_inventory = Date.now();
+    return fetchInventorySlice();
+  }, [fetchInventorySlice]);
   const refreshShopItems = useCallback(async () => {
     const ticket = guards.shopItems.begin();
     try {
@@ -404,39 +431,35 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
 
   // Currency, collection and unopened packs all move server-side without a
   // local action: a shop sale credits the seller, a trade lands cards, an
-  // admin grant arrives. Every screen used to depend on somebody remembering
-  // to call refreshProfile()/refreshCollection() after the fact. Subscribe to
-  // the caller's own rows instead — RLS already scopes these to `userId`, and
-  // the filter keeps the socket quiet.
+  // admin grant arrives. The database broadcasts one 'changed' message per
+  // statement to the private topic user:<uid> (migration 20261011000004; it
+  // replaced three postgres_changes subscriptions, whose WAL poller was ~70 %
+  // of all database time). Each slice has its own debounce timer, so a
+  // player_inventory event cannot cancel a pending player_cards refresh.
   useEffect(() => {
     if (!userId) return;
-    // Each subscription gets its own debounce timer — sharing one would let a
-    // player_inventory event cancel a pending player_cards refresh (and vice
-    // versa) when both tables change in the same transaction, leaving one of
-    // them stale.
-    const timers: Record<string, number | undefined> = {};
-    const debounced = (ref: string, fn: () => void): (() => void) => {
-      return () => {
-        window.clearTimeout(timers[ref]);
-        timers[ref] = window.setTimeout(fn, 350);
-      };
+    const timers: Partial<Record<UserSlice, number>> = {};
+    const fetchers: Record<UserSlice, () => Promise<void>> = {
+      profile: fetchProfileSlice,
+      player_cards: fetchCollectionSlice,
+      player_inventory: fetchInventorySlice,
     };
-    const offProfile = subscribeTable('profiles', debounced('profile', refreshProfile), {
-      filter: `id=eq.${userId}`,
-    });
-    const offCards = subscribeTable('player_cards', debounced('cards', refreshCollection), {
-      filter: `user_id=eq.${userId}`,
-    });
-    const offInv = subscribeTable('player_inventory', debounced('inventory', refreshInventory), {
-      filter: `user_id=eq.${userId}`,
+    const off = subscribeUserChannel(userId, (table) => {
+      const slice = (table === 'profiles' ? 'profile' : table) as UserSlice;
+      const run = fetchers[slice];
+      if (!run) return;
+      window.clearTimeout(timers[slice]);
+      timers[slice] = window.setTimeout(() => {
+        // The player's own action already refreshed this slice.
+        if (Date.now() - lastRefreshAt.current[slice] < REFRESH_DEDUPE_MS) return;
+        run().catch(() => {});
+      }, 350);
     });
     return () => {
       for (const t of Object.values(timers)) window.clearTimeout(t);
-      offProfile();
-      offCards();
-      offInv();
+      off();
     };
-  }, [userId, refreshProfile, refreshCollection, refreshInventory]);
+  }, [userId, fetchProfileSlice, fetchCollectionSlice, fetchInventorySlice]);
 
   const signOut = useCallback(async () => {
     try {

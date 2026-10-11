@@ -13,6 +13,7 @@ import { POOL_BY_ID, POOL_LEADERS, poolByType } from './cardpool';
 import { cardColors, isColorLegal, type Color } from './colors';
 import { MODES, MODE_IDS, type ModeConfig, type ModeId } from './constants';
 import { shuffle, type Rng } from './rng';
+import { formatCardOk, type FormatId } from './formats';
 
 export interface DeckDef {
   name: string;
@@ -159,13 +160,24 @@ const SITUATIONAL = new Set<string>(['Rerun', 'Snuff', 'Call Out']);
 /** Effects that rebuild a losing hand (the spec's revive target). */
 const REVIVES = new Set<string>(['Redraw', 'Windfall', 'Wild', 'Bloom', 'Exhume']);
 
-export function buildDeck(leader: CardDef, mode: ModeConfig, rng: Rng, name?: string): DeckDef {
+export function buildDeck(
+  leader: CardDef,
+  modeIn: ModeConfig,
+  rng: Rng,
+  name?: string,
+  /** A constructed format (R6): powers are filled inside its restriction. */
+  format: FormatId = 'open',
+): DeckDef {
+  const mode = format === 'singleton' ? { ...modeIn, maxCopies: 1 } : modeIn;
   const identity = cardColors(leader);
+  const mono = identity[0];
   const legal = (d: CardDef) => isColorLegal(d, identity);
   const locs = shuffle(poolByType('Location').filter(legal), rng);
   const location = locs[0] ?? defaultLocation(identity);
   const candidates = shuffle(
-    [...poolByType('Unit'), ...poolByType('Item'), ...poolByType('Event')].filter(legal),
+    [...poolByType('Unit'), ...poolByType('Item'), ...poolByType('Event')].filter(
+      (d) => legal(d) && formatCardOk(format, d, mono),
+    ),
     rng,
   );
   // On-colour cards first, colourless after.

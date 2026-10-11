@@ -31,12 +31,20 @@ import {
   MODE_IDS,
   NERVE,
   PLACE_FACTORS,
+  REWARD_BASE,
+  SEAT_REWARD_MULT,
   SECOND_COST_TIER,
   STACK_CAP_SHARE,
 } from '../game/poker/constants';
 import { LOCATION_TEMPLATES } from '../game/poker/locations';
-import { ordinal, placementReward } from '../game/poker/rewards';
+import { minPaidHands, ordinal, placementReward } from '../game/poker/rewards';
 import { COLOR_PIP } from '../meta/colors';
+import { rewardFloorMs } from '../meta/matchPrefs';
+
+/** A floor for display: whole minutes, or seconds under one. */
+function fmtFloor(ms: number): string {
+  return ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.ceil(ms / 60_000)} min`;
+}
 import { EssenceIcon } from './EssenceIcon';
 
 // Condensed view of docs/RULEBOOK.md (FryCards Poker rulebook v1.0), plus a
@@ -150,8 +158,22 @@ function rewardRows(): Row[] {
         '. XP and battle-pass XP scale the same way.',
     ],
     [
+      'Table size',
+      `Smaller tables are shorter, so they pay less per place: ${Object.entries(SEAT_REWARD_MULT)
+        .map(([n, x]) => `${n} seats ×${x}`)
+        .join(
+          ' · ',
+        )}. Each place pays ${REWARD_BASE.credits[0]} + ${REWARD_BASE.credits[1]} × its share, then the multipliers.`,
+    ],
+    [
+      'Short matches',
+      `Winning the table always pays. Any other finish — conceding included — pays nothing until the match has lasted ${[2, 4, 6].map((n) => `${minPaidHands(n)} hands at ${n} seats`).join(', ')} (3 hands a seat, at least 8).`,
+    ],
+    [
       'Minimum length',
-      `A match must run at least ${MODE_IDS.map((m) => `${MODES[m].minMatchMs / 60000} min (${MODES[m].label})`).join(', ')} to pay out.`,
+      // The server floor scales with the table size (A20): quote heads-up and
+      // six seats, rounded up to whole minutes, rather than the 6-seat base.
+      `A match must run long enough to pay out — from heads-up to six seats: ${MODE_IDS.map((m) => `${MODES[m].label} ${fmtFloor(rewardFloorMs(MODES[m].minMatchMs, 2))}–${fmtFloor(rewardFloorMs(MODES[m].minMatchMs, 6))}`).join(', ')}. Finish faster (say on INSTANT bots) and the table holds your result until the time is up, then pays it — even if you leave the table or reload.`,
     ],
   ];
 }
@@ -162,7 +184,7 @@ const SECTIONS: Section[] = [
     body: [
       [
         'Freezeout',
-        `FryCards Poker is Texas Hold'em for 2 to 6 seats. Everyone starts with the same stack (${STANDARD.stackUnits} chip units in Standard). Lose all your chips and you are out; the last seat with chips wins.`,
+        `FryCards Poker is Texas Hold'em for 2 to 6 seats. Everyone starts with the same stack (${STANDARD.stackChips} chips in Standard). Lose all your chips and you are out; the last seat with chips wins.`,
       ],
       [
         'The clock',
@@ -254,7 +276,7 @@ const SECTIONS: Section[] = [
         const m = MODES[id];
         return [
           m.label,
-          `${m.stackUnits}-unit stacks · blinds ×${m.blindGrowth} every ${m.levelMs / 60000} min · ~${m.capMs / 60000} min · ${m.powers} powers · up to ${m.maxCopies} copies, ${m.maxTier5} tier-5 card${m.maxTier5 === 1 ? '' : 's'} · power hand ${m.handStart} to start, draw ${m.handDraw} a hand, hold ${m.handCap} max.`,
+          `${m.stackChips}-chip stacks · blinds ×${m.blindGrowth} every ${m.levelMs / 60000} min · ~${m.capMs / 60000} min · ${m.powers} powers · up to ${m.maxCopies} copies, ${m.maxTier5} tier-5 card${m.maxTier5 === 1 ? '' : 's'} · power hand ${m.handStart} to start, draw ${m.handDraw} a hand, hold ${m.handCap} max.`,
         ] as Row;
       }),
       [
@@ -308,7 +330,7 @@ const SECTIONS: Section[] = [
       ],
       [
         'Cost ladder',
-        `Tier 1: ${tierCost(1)} · tier 2: ${tierCost(2)} · tier 3: ${tierCost(3)} · tier 4: ${tierCost(4)} · tier 5: ${tierCost(5)} chip units. Costs are fixed for the whole match, so powers get relatively cheaper as the blinds climb.`,
+        `Tier 1: ${tierCost(1)} · tier 2: ${tierCost(2)} · tier 3: ${tierCost(3)} · tier 4: ${tierCost(4)} · tier 5: ${tierCost(5)} chips. Costs are fixed for the whole match, so powers get relatively cheaper as the blinds climb.`,
       ],
       [
         'Into the pot',
@@ -430,7 +452,7 @@ const SECTIONS: Section[] = [
     body: [
       [
         'Reading a card',
-        'A power is one effect keyword plus modifiers. N is set by the tier; chip amounts are in chip units. Light owns reading other seats, Void owns denial: those keywords only appear on cards of that colour.',
+        'A power is one effect keyword plus modifiers. N is set by the tier; chip amounts are in chips. Light owns reading other seats, Void owns denial: those keywords only appear on cards of that colour.',
       ],
       ...keywordRows(),
     ],
@@ -674,7 +696,8 @@ function PlayingCard({
 /** Two hole cards, fanned. */
 function HoleCards() {
   return (
-    <div className="flex items-end h-12 pl-2" aria-hidden>
+    // U65: the cards are 60px tall — an h-12 box let them spill up over the step text.
+    <div className="flex items-end h-16 mt-2 pl-2" aria-hidden>
       {(['A♠', 'K♥'] as const).map((c, i) => (
         <span
           key={c}
@@ -768,7 +791,7 @@ const STEPS: StepCard[] = [
   },
   {
     title: 'Cast a power',
-    body: `Units ★, Items ⚙ and Events ϟ bend what players see and receive. A cast costs ${tierCost(1)}–${tierCost(5)} chip units into the pot, and everyone sees the card. Casting is a bluff too.`,
+    body: `Units ★, Items ⚙ and Events ϟ bend what players see and receive. A cast costs ${tierCost(1)}–${tierCost(5)} chips into the pot, and everyone sees the card. Casting is a bluff too.`,
     icon: Zap,
     art: <TierMarks />,
     action: { kind: 'practice' },

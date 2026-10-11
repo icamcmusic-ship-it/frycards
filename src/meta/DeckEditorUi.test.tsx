@@ -332,6 +332,14 @@ describe('deck editor', () => {
     expect(within(screen.getByRole('tabpanel')).getByText('×2')).toBeTruthy();
   });
 
+  test('a blocked pool card names why on its face (U28)', async () => {
+    const user = userEvent.setup();
+    const card = legal.find((c) => c.tier !== 5)!;
+    renderEditor([locations[0].id, card.id, card.id]);
+    await user.click(screen.getByRole('button', { name: 'EDIT' }));
+    expect(within(poolCard(card.id)).getByText('MAX')).toBeTruthy();
+  });
+
   test('on a phone the deck panel is a sheet that starts collapsed', async () => {
     const user = userEvent.setup();
     renderEditor(legal.map((c) => c.id));

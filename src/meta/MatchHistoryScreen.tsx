@@ -1,4 +1,9 @@
 import React, { useMemo, useState } from 'react';
+import type { PlaySetup } from '../components/PokerMatch';
+import type { DeckRow } from '../lib/supabase';
+import { POOL } from '../game/poker/cardpool';
+import { decodeDeckCode } from './deckcode';
+import { loadCpuDifficulty, type CpuDifficultyId } from './matchPrefs';
 import { MetaHeader, PopButton, Notice } from './ui';
 import {
   MatchRecord,
@@ -9,6 +14,10 @@ import {
   summarizeMatchHistory,
 } from './matchHistory';
 import { cn } from '../lib/utils';
+import { History } from 'lucide-react';
+import { useRouter } from './useHashRouter';
+import { useMeta } from './MetaContext';
+import { isCpuLocked } from './cpuAccess';
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -19,7 +28,16 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function StatTile({
+  label,
+  value,
+  sub,
+}: {
+  key?: React.Key;
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
     <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 min-w-[110px]">
       <div className="fs-xs font-bold text-[var(--c-steel)]">{label}</div>
@@ -36,11 +54,48 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub?: s
  * the network. Each match can be copied as a plain-text report (place, seed,
  * mode, deck code) for a bug report or a chat.
  */
-export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
+/** Q1: the setup that re-deals a recorded match (same seed, mode, seats and,
+ * when its code still decodes, the same deck). Unrewarded: the deal is known. */
+export function replaySetup(r: MatchRecord, difficulty: CpuDifficultyId): PlaySetup | null {
+  if (r.place === undefined || !r.mode || !r.seats) return null;
+  const base = {
+    mode: r.mode,
+    seats: r.seats,
+    difficulty,
+    seed: r.seed,
+    unrewarded: true as const,
+    tag: 'Replay',
+  };
+  if (!r.humanDeck) return { ...base, kind: 'random' };
+  const d = decodeDeckCode(r.humanDeck, new Map(POOL.map((c) => [c.id, c])));
+  if ('error' in d) return null;
+  return {
+    ...base,
+    kind: 'custom',
+    deck: {
+      id: `replay:${r.seed}`,
+      name: r.humanLabel,
+      leader_id: d.leaderId,
+      card_ids: d.cardIds,
+    } as DeckRow,
+  };
+}
+
+export function MatchHistoryScreen({
+  onBack,
+  onReplay,
+}: {
+  onBack: () => void;
+  /** Q1: start an unrewarded replay of a recorded match. */
+  onReplay?: (s: PlaySetup) => void;
+}) {
   const [records] = useState<MatchRecord[]>(loadMatchHistory);
   const summary = useMemo(() => summarizeMatchHistory(records), [records]);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const router = useRouter();
+  const { profile, guest } = useMeta();
+  const cpuLocked = isCpuLocked(profile, guest);
 
   const copy = async (text: string, what: string) => {
     setError('');
@@ -52,7 +107,7 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="MATCH HISTORY" onBack={onBack} />
       <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-        <p className="text-[11px] font-bold text-[var(--c-steel)] mb-4">
+        <p className="fs-xs font-bold text-[var(--c-steel)] mb-4">
           Your last {records.length === 50 ? 50 : 'matches'} on this device. History is stored in
           this browser only.
         </p>
@@ -68,8 +123,18 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
         )}
 
         {records.length === 0 ? (
-          <div className="ink-border-md bg-[var(--c-paper)] p-6 text-center font-bold text-[var(--c-steel)]">
-            No matches yet. Finish a match and it shows up here.
+          // U66: an empty state with a way forward, and the device-local note said plainly.
+          <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-6 flex flex-col items-center gap-3 text-center">
+            <History className="w-8 h-8 text-[var(--c-steel)]" aria-hidden />
+            <div className="font-bold">No matches yet. Finish a match and it shows up here.</div>
+            <div className="fs-xs font-bold text-[var(--c-steel)]">
+              History is kept on this device only — it won't follow you to another browser.
+            </div>
+            {router && !cpuLocked && (
+              <PopButton color="yellow" onClick={() => router.navigate('play')}>
+                PLAY A MATCH ▸
+              </PopButton>
+            )}
           </div>
         ) : (
           <>
@@ -108,6 +173,57 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
             </div>
+
+            <div className="flex flex-wrap gap-3 mb-4">
+              <StatTile
+                label="TOP-2 STREAK"
+                value={String(summary.streak.current)}
+                sub={`best ${summary.streak.best}`}
+              />
+              {summary.byMode.map((m) => (
+                <StatTile
+                  key={m.mode}
+                  label={m.mode.toUpperCase()}
+                  value={`${m.winPct}%`}
+                  sub={`${m.games} games · avg ${m.avgPlace.toFixed(1)}`}
+                />
+              ))}
+            </div>
+            {(summary.byLeader.length > 0 || summary.byOpponent.length > 0) && (
+              <div className="grid sm:grid-cols-2 gap-4 mb-6">
+                {(
+                  [
+                    ['AS LEADER', summary.byLeader.map((l) => [l.leader, l.games, l.avgPlace])],
+                    [
+                      'AGAINST LEADER',
+                      summary.byOpponent.slice(0, 8).map((l) => [l.leader, l.games, l.avgPlace]),
+                    ],
+                  ] as const
+                ).map(([title, rows]) =>
+                  rows.length ? (
+                    <table key={title} className="w-full text-xs font-bold ink-border-sm">
+                      <caption className="heading-font text-sm text-left mb-1">{title}</caption>
+                      <thead>
+                        <tr className="bg-[var(--c-ink)] text-[var(--c-paper)]">
+                          <th className="text-left px-2">Leader</th>
+                          <th className="px-2">Games</th>
+                          <th className="px-2">Avg place</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(([name, games, avg]) => (
+                          <tr key={name} className="border-t border-[var(--c-ink)]/20">
+                            <td className="px-2 truncate max-w-[12rem]">{name}</td>
+                            <td className="px-2 text-center">{games}</td>
+                            <td className="px-2 text-center">{Number(avg).toFixed(1)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : null,
+                )}
+              </div>
+            )}
 
             {summary.byDeck.length > 0 && (
               <>
@@ -159,9 +275,25 @@ export function MatchHistoryScreen({ onBack }: { onBack: () => void }) {
                         ? ` · ${r.seats ?? 2} seats · ${r.mode ?? 'standard'} · ${r.hands ?? 0} hands${r.capped ? ' · on the clock' : ''}`
                         : ` · retired game${r.turns ? ` · ${r.turns} turns` : ''}`}{' '}
                       · seed {r.seed}
+                      {r.tag ? ` · ${r.tag}` : ''}
                     </div>
+                    {r.recap && (
+                      <div className="fs-xs font-bold text-[var(--c-steel)]">
+                        won {r.recap.handsWon} hands · {r.recap.showdownWins} at showdown · biggest
+                        pot ◎{r.recap.biggestPot} · {r.recap.powersCast} powers cast
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {onReplay && !cpuLocked && replaySetup(r, 'normal') && (
+                      <PopButton
+                        color="steel"
+                        onClick={() => onReplay(replaySetup(r, loadCpuDifficulty())!)}
+                        title="Same deal, seats and bots — unrewarded"
+                      >
+                        REPLAY SEED
+                      </PopButton>
+                    )}
                     <PopButton color="yellow" onClick={() => copy(String(r.seed), 'Seed')}>
                       COPY SEED
                     </PopButton>

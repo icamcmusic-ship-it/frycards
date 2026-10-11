@@ -5,20 +5,21 @@
  * reward factors all live here. A rebalance is a code change; nothing here
  * needs a database migration.
  *
- * Money is held in integer CHIPS internally. One "chip unit" (the spec's unit
- * of account: a Standard stack is 50 units, the opening big blind is 1 unit)
- * is UNIT chips, so half-unit costs and ×1.5 blinds stay whole numbers.
+ * Money is held — and shown — in whole CHIPS. The tuning tables below are
+ * still written in "chip units" (the spec's unit of account: the opening big
+ * blind is 1 unit); one unit is UNIT chips. UNIT is a multiple of 4 so every
+ * ¼- and ½-unit number on the ladder and the tier tables lands on a whole chip.
  */
 
-export const UNIT = 100;
+export const UNIT = 16;
 
 export type ModeId = 'quick' | 'standard' | 'deep';
 
 export interface ModeConfig {
   id: ModeId;
   label: string;
-  /** Starting stack in chip units. */
-  stackUnits: number;
+  /** Starting stack in chips. */
+  stackChips: number;
   /** Big blind at level 0, in chip units (the small blind is half). */
   bigBlindUnits: number;
   /** Blinds multiply by `blindGrowth` every `levelMs` of match clock. */
@@ -45,7 +46,7 @@ export const MODES: Record<ModeId, ModeConfig> = {
   quick: {
     id: 'quick',
     label: 'Quick',
-    stackUnits: 30,
+    stackChips: 480,
     bigBlindUnits: 1,
     blindGrowth: 1.5,
     levelMs: 2 * MIN,
@@ -62,7 +63,7 @@ export const MODES: Record<ModeId, ModeConfig> = {
   standard: {
     id: 'standard',
     label: 'Standard',
-    stackUnits: 50,
+    stackChips: 800,
     bigBlindUnits: 1,
     blindGrowth: 1.5,
     levelMs: 3 * MIN,
@@ -79,7 +80,7 @@ export const MODES: Record<ModeId, ModeConfig> = {
   deep: {
     id: 'deep',
     label: 'Deep',
-    stackUnits: 80,
+    stackChips: 1280,
     bigBlindUnits: 1,
     blindGrowth: 1.5,
     levelMs: 4 * MIN,
@@ -99,12 +100,19 @@ export const MODE_IDS: ModeId[] = ['quick', 'standard', 'deep'];
 export const MIN_SEATS = 2;
 export const MAX_SEATS = 6;
 
-/** Big blind (in chips) at a blind level. Rounded to a whole half-unit step
- * once it passes 2 units so the numbers on the table stay readable. */
+/** Rounds a raw big blind to a readable, even chip count (so the small blind,
+ * half of it, is a whole chip too): steps of 2 below 60, 10 below 300, 50
+ * below 1,000 and 100 above. */
+export function roundBlind(raw: number): number {
+  // Boundaries at 60 / 300 keep every level step between ×1.48 and ×1.56
+  // (at 50 / 200 the curve jumped ×1.39 then ×1.60 twice).
+  const step = raw < 60 ? 2 : raw < 300 ? 10 : raw < 1000 ? 50 : 100;
+  return Math.max(2, Math.round(raw / step) * step);
+}
+
+/** Big blind (in chips) at a blind level: 16 → 24 → 36 → 54 → 80 → 120 … */
 export function bigBlindAt(mode: ModeConfig, level: number): number {
-  const raw = mode.bigBlindUnits * UNIT * Math.pow(mode.blindGrowth, level);
-  if (raw < 2 * UNIT) return Math.round(raw / 10) * 10;
-  return Math.round(raw / (UNIT / 2)) * (UNIT / 2);
+  return roundBlind(mode.bigBlindUnits * UNIT * Math.pow(mode.blindGrowth, level));
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +133,18 @@ export const STACK_CAP_SHARE = 0.25;
 
 /** Item with no Unit out: bonds to a hole card at +1 step. */
 export const ITEM_UNBONDED_STEP = 1;
+
+/** Soulbound (returns to hand at the end of the hand): one step more. */
+export const SOULBOUND_STEP = 1;
+
+/** Resonant (the effect resolves twice): one step more. */
+export const RESONANT_STEP = 1;
+
+/** Gambit: chips owed on a loss, as a multiple of the waived cost. */
+export const GAMBIT_OWED = 1.5;
+
+/** Tax charges at most this many opponents. */
+export const TAX_MAX_SEATS = 3;
 
 /** Tilted (zero nerve): powers cost one step more. */
 export const TILT_STEP = 1;
@@ -149,20 +169,28 @@ export const MAX_EXCLUSIONS = 2;
 // ---------------------------------------------------------------------------
 export const TIER_N: Record<string, number[]> = {
   Kindle: [0, 0.5, 1, 2, 3, 5],
-  Tax: [0, 0.5, 1, 1.5, 3, 4],
+  // Tax charges at most three opponents (the three with most chips in).
+  Tax: [0, 0.5, 1, 1.5, 2, 3],
   Bounty: [0, 2, 3, 5, 8, 12],
   Foresee: [0, 1, 2, 3, 4, 5],
-  Bulwark: [0, 1, 2, 3, 4, 6],
+  // One step under the cost, so a ★1 Bulwark is no longer a pure free-roll.
+  Bulwark: [0, 0.5, 1, 2, 3, 5],
   Fuse: [0, 1, 1, 1, 2, 2],
   Peek: [0, 1, 1, 1, 2, 2],
-  Toll: [0, 0.5, 1, 1.5, 2, 3],
+  Toll: [0, 0.5, 1, 2, 3, 5],
   Insurance: [0, 2, 3, 5, 8, 12],
-  Siphon: [0, 0.5, 1, 2, 3, 5],
-  Blessed: [0, 0.5, 1, 2, 3, 5],
+  // 1.5× the cost: a real steal from the pot (at 1× it was a null card).
+  Siphon: [0, 0.75, 1.5, 3, 4.5, 7.5],
+  // Refunds other powers' costs only (never its own), so N is larger.
+  Blessed: [0, 1, 2, 3, 5, 8],
   Needle: [0, 1, 1, 2, 2, 3],
   Venomous: [0, 1, 1.5, 2.5, 4, 6],
-  Erode: [0, 0.5, 0.5, 1, 1.5, 2],
+  // Grows with tier (★2–★5 used to be worse than ★1 for their cost).
+  Erode: [0, 0.5, 1, 1.5, 2.5, 4],
   Burn: [0, 1, 1, 1, 2, 2],
+  // Overbet's N is a pot multiplier, not chips.
+  Overbet: [0, 0.25, 0.5, 0.75, 1, 1.5],
+  'Boat Bonus': [0, 0.5, 1, 1.5, 2, 3],
 };
 
 /** Thriving: each later street the Unit stays out, its N grows by this share
@@ -224,7 +252,13 @@ export const PLACE_FACTORS: Record<number, number[]> = {
   5: [1, 0.6, 0.3, 0.1, 0],
   6: [1, 0.6, 0.35, 0.15, 0.05, 0],
 };
-export const REWARD_BASE = { credits: [40, 60], xp: [25, 35], bpXp: [20, 30] };
+/** [last place, win − last place] before the mode and seat multipliers
+ * (audit F-5: last place used to pay 40 % of a win, so idling to the server
+ * floor and conceding out-earned playing). Mirrored in record_match_placement. */
+export const REWARD_BASE = { credits: [15, 85], xp: [10, 50], bpXp: [8, 42] };
+/** Table-size multiplier: a heads-up match is far shorter than a six-seat one,
+ * so this roughly evens out reward per minute. Mirrored server-side. */
+export const SEAT_REWARD_MULT: Record<number, number> = { 2: 0.55, 3: 0.7, 4: 0.8, 5: 0.9, 6: 1 };
 
 // ---------------------------------------------------------------------------
 // Keyword weights for the card generator (relative chance a card of the right
@@ -246,4 +280,13 @@ export const KEYWORD_WEIGHT: Record<string, number> = {
   Siphon: 1.2,
   Bulwark: 0.8,
   Snuff: 1.2,
+  // Audit 2026-10-11 keywords: never rolled (that would reprint the pool);
+  // they print only on the hand-set cards in cardpool.ts.
+  Overbet: 0,
+  Tell: 0,
+  'Boat Bonus': 0,
+  'Last Stand': 0,
 };
+
+/** A stack at or under this many big blinds is a Last Stand. */
+export const LAST_STAND_BB = 10;

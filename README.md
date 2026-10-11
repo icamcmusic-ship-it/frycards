@@ -10,8 +10,8 @@ decks, open packs and grow a collection.
 ## The Game (FryCards Poker, one paragraph)
 
 A match is a **pot-limit Texas Hold'em freezeout** for 2–6 seats in one of
-three modes — **Quick** (30-unit stacks, 16 powers, ~12 min), **Standard** (50,
-24, ~25 min) and **Deep** (80, 36, ~40 min) — with blinds that rise ×1.5 on a
+three modes — **Quick** (480-chip stacks, 16 powers, ~12 min), **Standard** (800,
+24, ~25 min) and **Deep** (1,280, 36, ~40 min) — with blinds that rise ×1.5 on a
 clock and a hard time cap after which stacks are ranked. Every seat brings a
 deck of **1 Leader + 1 Location + power cards**. Powers are **Units** (★ stars,
 a token that stays out until showdown), **Items** (⚙ gears; Charm, Weapon or
@@ -19,8 +19,8 @@ Tool) and **Events** (ϟ bolts; Quick or Slow), each tier 1–5, built from ~45
 poker keywords grouped by the seven colours (Ember, Tide, Root, Gale, Light,
 Shadow, Void) — Peek, Reveal, Mark, Redraw, Windfall, Kindle, Siphon, Burn,
 Lock, Snuff, Feint, Call Out and so on. A cast is **public** (full card face,
-caster and target), costs fixed chip units **into the pot** on a ½ · 1 · 2 · 3½
-· 6 ladder (tiers 4–5 add a second cost: shed a power, blind a hole card, or a
+caster and target), costs a fixed whole number of chips **into the pot** on an 8 · 16 · 32
+· 56 · 96 ladder (the opening big blind is 16) (tiers 4–5 add a second cost: shed a power, blind a hole card, or a
 **hand exclusion**), and opens a short **response window** for Quick Events and
 Ambush cards — so casting is a bluff as much as a play. Each seat's
 **Location** joins a shared bag of 17 table rules (plus a Plain Table each
@@ -71,7 +71,7 @@ can be corrected without breaking determinism: every field left alone is still
 generated, and deleting the override restores the generated card exactly.
 Overrides live on the template because the template is the only thing the game
 client loads; the `cards` mechanics columns exist for the server's own queries
-and are written from the *overridden* card so the two agree.
+and are written from the _overridden_ card so the two agree.
 
 `Item` cards have the subtypes `Charm`, `Weapon` and `Tool`. The mechanics hash
 keeps seeding Items as `Charm` (`SEED_TYPE` in `cardpool.ts`), a holdover from
@@ -97,7 +97,7 @@ player submission, or a `BULK ADD` paste (see **Player Showcase** below). Those
 paths derive the mechanics with `deriveCardMechanics()` (the single-card export
 of the same `cardpool.ts` assignment) and write all sixteen `cards` columns in
 one call, so a freshly printed card is never left with the null mechanics
-columns that `pick_deck_bucket` reads as "colourless, cost 0". They do *not*
+columns that `pick_deck_bucket` reads as "colourless, cost 0". They do _not_
 touch `generated-cards.ts`: re-run `npm run fetch:cards` and commit the result
 after a batch, or `verify:pool` will (correctly) report every new card as
 `live-only`, and the sims will keep running on the old catalog.
@@ -121,6 +121,29 @@ and tier-5 limits per mode, colour legality) and a random-deck builder live in
 `src/game/poker/deck.ts`; players build their own decks in the Deck Builder,
 backed by the `decks` table. Decks and share links from the retired 60-card
 game are invalid.
+
+### Match tickets, rewards and the live feed (2026-10-11)
+
+- **Match tickets.** `begin_match(p_mode, p_seats)` mints a ticket that records
+  the table; `record_match_placement(…, p_stats, p_hands)` pays on the ticket's
+  mode and seats. A result that lands before the minimum length
+  (`max(45 s, mode minutes × seats / 6)`) answers `too_early` with
+  `retry_after` and stays redeemable; the client holds and resends it. CPU
+  matches are Creator-only on the server too, matching `src/meta/cpuAccess.ts`.
+- **Rewards** are `(15 + 85f, 10 + 50f, 8 + 42f) × mode × seat multiplier`
+  (`src/game/poker/rewards.ts` mirrors the SQL exactly; a test runs every
+  place/seat/mode against both). A non-winning finish before `max(3 × seats, 8)`
+  hands pays nothing.
+- **Per-match stats** (`MatchStats` in `src/lib/supabase.ts`) feed the poker
+  missions and achievements; the server clamps each value per match.
+- **Missions rotate**: each UTC day deals the core dailies plus 4 more, each
+  week the core weeklies plus 5 more, so adding rows never adds income.
+- **Live feed.** Profile, collection and pack-inventory changes arrive as one
+  Database Broadcast per statement on the private topic `user:<uid>`
+  (`subscribeUserChannel`), not as `postgres_changes`.
+- Destructive cleanup that needs a person to approve it is collected in
+  `supabase/migrations/20261011000090_pending_destructive.sql`; see
+  `docs/BACKEND_PENDING.md`.
 
 ## Meta-game
 

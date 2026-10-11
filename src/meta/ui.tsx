@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/utils';
 import { AlertTriangle, Coins, Ticket, TrendingUp } from 'lucide-react';
 import { useMeta } from './MetaContext';
@@ -94,12 +94,7 @@ export function Tabs<T extends string>({
     e.preventDefault();
   };
   return (
-    <div
-      role="tablist"
-      aria-label={ariaLabel}
-      onKeyDown={onKeyDown}
-      className={cn('flex flex-wrap gap-1.5', className)}
-    >
+    <TabStrip ariaLabel={ariaLabel} onKeyDown={onKeyDown} className={className} activeKey={value}>
       {tabs.map((t) => {
         const active = t.id === value;
         return (
@@ -108,11 +103,12 @@ export function Tabs<T extends string>({
             type="button"
             role="tab"
             aria-selected={active}
+            data-active={active || undefined}
             tabIndex={active ? 0 : -1}
             disabled={t.disabled}
             onClick={() => onChange(t.id)}
             className={cn(
-              'heading-font fs-sm px-3 py-2 min-h-[36px] ink-border-sm transition-colors',
+              'relative shrink-0 whitespace-nowrap heading-font fs-sm px-3 py-2 min-h-[36px] ink-border-sm transition-colors',
               active
                 ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] shadow-hard-black-xs'
                 : 'bg-[var(--c-steel)] text-[var(--c-paper)]/80 hover:text-[var(--c-paper)]',
@@ -120,14 +116,76 @@ export function Tabs<T extends string>({
             )}
           >
             {t.label}
+            {/* U52: one corner badge, not a block that repeats the label's count. */}
             {t.badge !== undefined && t.badge !== 0 && (
-              <span className="ml-1.5 px-1.5 bg-[var(--c-red)] text-[var(--c-paper)] fs-xs">
+              <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 flex items-center justify-center rounded-full bg-[var(--c-red)] text-[var(--c-paper)] fs-xs ink-border-sm leading-none">
                 {t.badge}
               </span>
             )}
           </button>
         );
       })}
+    </TabStrip>
+  );
+}
+
+/**
+ * U71: one tab pattern everywhere — a single row that scrolls sideways with
+ * an edge fade where more tabs hide, instead of wrapping to 2–3 rows on a
+ * phone. The active tab is kept in view.
+ */
+function TabStrip({
+  ariaLabel,
+  onKeyDown,
+  className,
+  activeKey,
+  children,
+}: {
+  ariaLabel: string;
+  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  className?: string;
+  activeKey: string;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const left = el.scrollLeft > 2;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+    setEdges((e) => (e.left === left && e.right === right ? e : { left, right }));
+  }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>('[data-active]');
+    if (active && typeof active.scrollIntoView === 'function' && el.scrollWidth > el.clientWidth)
+      active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    measure();
+  }, [activeKey, measure]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+  return (
+    <div
+      ref={ref}
+      role="tablist"
+      aria-label={ariaLabel}
+      onKeyDown={onKeyDown}
+      onScroll={measure}
+      data-fade-left={edges.left || undefined}
+      data-fade-right={edges.right || undefined}
+      className={cn(
+        'tab-strip flex flex-nowrap gap-1.5 overflow-x-auto pt-2 pr-2 pb-1 -mt-2',
+        className,
+      )}
+    >
+      {children}
     </div>
   );
 }
@@ -230,12 +288,12 @@ export function CardMarketValuePanel({ cardId, foil }: { cardId: string; foil?: 
       {value.avg_price != null ? (
         <div className="text-[13px] font-bold flex items-center gap-1">
           <Coins className="w-3.5 h-3.5" /> {fmtCredits(value.avg_price)}
-          <span className="text-[9px] font-bold text-[var(--c-steel)] ml-1">
+          <span className="fs-xs font-bold text-[var(--c-steel)] ml-1">
             avg · {value.sales} sale{value.sales === 1 ? '' : 's'}
           </span>
         </div>
       ) : (
-        <div className="text-[10px] font-bold text-[var(--c-steel)]">
+        <div className="fs-xs font-bold text-[var(--c-steel)]">
           Not enough player-market sales yet ({value.sales}/5)
         </div>
       )}
@@ -249,10 +307,14 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
   return (
     <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-[var(--c-ink)] px-4 py-2.5 border-b-4 border-[var(--c-ink)]">
       <div className="flex items-center gap-3 min-w-0">
-        <PopButton onClick={onBack} color="yellow">
+        {/* U62: the back button never wraps; a long title gets two lines at
+            a smaller size on a phone instead of truncating. */}
+        <PopButton onClick={onBack} color="yellow" className="shrink-0 whitespace-nowrap">
           &lt; MENU
         </PopButton>
-        <h1 className="heading-font text-xl text-[var(--c-yellow)] truncate">{title}</h1>
+        <h1 className="heading-font text-base sm:text-xl leading-tight text-[var(--c-yellow)] line-clamp-2 break-words min-w-0">
+          {title}
+        </h1>
       </div>
       {profile && (
         <div className="flex items-center gap-2">
@@ -336,12 +398,27 @@ export function LevelBadge({
   compact?: boolean;
 }) {
   const { into, band } = levelProgress(level, xp);
+  // A full bar that hasn't levelled yet (the level-up lands on the next
+  // reward) read as broken: say so instead (U25).
+  const ready = into >= band;
   return (
     <div className="flex items-center gap-2">
       <span className="bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-xs px-2 py-0.5 ink-border-sm">
         LV {level}
       </span>
-      {!compact && (
+      {compact ? (
+        // Phones: a bare bar, so progress is visible without the caption (U25).
+        <ProgressBar
+          value={into}
+          max={band}
+          className="h-1.5 w-14"
+          ariaLabel={
+            ready
+              ? `Ready for level ${level + 1}`
+              : `${into} of ${band} XP toward level ${level + 1}`
+          }
+        />
+      ) : (
         <div className="flex flex-col gap-0.5 w-28">
           <ProgressBar
             value={into}
@@ -349,8 +426,8 @@ export function LevelBadge({
             className="h-1.5"
             ariaLabel={`XP toward level ${level + 1}`}
           />
-          <span className="text-[8px] font-bold text-[var(--c-steel)] leading-none">
-            {into}/{band} XP TO LV {level + 1}
+          <span className="fs-xs font-bold text-[var(--c-steel)] leading-none whitespace-nowrap">
+            {ready ? `READY FOR LV ${level + 1}` : `${into}/${band} XP TO LV ${level + 1}`}
           </span>
         </div>
       )}
@@ -410,17 +487,14 @@ export function UnavailableShowcaseTile({
         strokeWidth={2.5}
       />
       <span
-        className={cn(
-          'heading-font leading-tight',
-          size === 'compact' ? 'text-[9px]' : 'text-[11px]',
-        )}
+        className={cn('heading-font leading-tight', size === 'compact' ? 'fs-xs' : 'text-[11px]')}
       >
         CARD UNAVAILABLE
       </span>
       <span
         className={cn(
           'font-bold text-[var(--c-steel)] break-all leading-tight',
-          size === 'compact' ? 'text-[7px]' : 'text-[8px]',
+          size === 'compact' ? 'fs-xs' : 'fs-xs',
         )}
       >
         {cardId}
@@ -429,7 +503,7 @@ export function UnavailableShowcaseTile({
         <span
           className={cn(
             'heading-font bg-[var(--c-red)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm',
-            size === 'compact' ? 'text-[8px]' : 'text-[9px]',
+            size === 'compact' ? 'fs-xs' : 'fs-xs',
           )}
         >
           ★ UNPIN

@@ -14,6 +14,30 @@
 
 ## Poker follow-ups (2026-10)
 
+- **Replayability modes (AUDIT-2026-10-11 §4), still to build.** PR #171
+  shipped the groundwork: deck formats (R6: Singleton, Pauper, Monochrome,
+  Low Stakes; `src/game/poker/formats.ts`), the weekly rule twist (R3,
+  `src/game/poker/mutators.ts`, merged through `modeOf`), forced Locations,
+  seeded replays, the local Daily Table and ghost opponents from deck codes.
+  The bigger modes stay here:
+  - **R1 The Circuit** — a CPU ladder of named opponents (the
+    "ELO-tracked CPU gauntlet"); the named bots and style tags (Q14) are its
+    roster seed. A server rating makes it L.
+  - **R2 Long Night** — a roguelike gauntlet run: one deck, a string of
+    tables, pick-ups between them, run ends on a bust.
+  - **R5 Sealed and Draft** — limited formats on the pack system (Sealed M,
+    Draft L); needs a server-side pool per event.
+  - **R13 Leader trials** — a curated campaign per Leader, the natural home
+    for printing `UNPRINTED_KEYWORDS`.
+  - Also open from §4: R4 Spot of the Day puzzles, R7 rewards for off-meta
+    choices (server), R8 synergy and gap-filler tools, R10 sandbox, R11
+    community ghost decks, R12 a server Daily Table board, the Showcase
+    format (after the Players Showcase 100-card bar) and a `FRY2` code field
+    for the format.
+  - §6 quick wins not yet built: Q5 Card of the Day "play with it", Q10
+    gap-filler suggestions, Q11 unowned cards to the wishlist, Q19 weekly
+    featured Leader, Q23 goldfish against a Location.
+
 - **Balance pass against the spec's four targets (2026-10-10).** `npm run
   sim:poker` prints all four (`--strict` exits 1 on a miss). Over seeds 1337,
   4242 and 99 at 200 matches: **skill gap** (61–69% finish above a naive

@@ -114,7 +114,7 @@ export function DeckLinkPreview({
                     className="flex items-center justify-between gap-2 text-xs font-bold ink-border-sm px-2 py-1 bg-[var(--c-ink)] text-[var(--c-paper)]"
                   >
                     <span className="truncate">{def.name}</span>
-                    <span className="text-[10px] shrink-0 opacity-80">
+                    <span className="fs-xs shrink-0 opacity-80">
                       Location{def.rule ? ` · ${ruleName(def.rule)}` : ''}
                     </span>
                   </li>
@@ -128,7 +128,7 @@ export function DeckLinkPreview({
                       {n > 1 ? `${n}× ` : ''}
                       {def.name}
                     </span>
-                    <span className="text-[10px] text-[var(--c-steel)] shrink-0">
+                    <span className="fs-xs text-[var(--c-steel)] shrink-0">
                       {def.type} · {tierLabel(def)}
                     </span>
                   </li>
@@ -152,7 +152,7 @@ export function DeckLinkPreview({
             </PopButton>
           </div>
           {!('error' in parsed) && !canOpenBuilder && (
-            <p className="text-[10px] font-bold text-[var(--c-steel)] mt-3">
+            <p className="fs-xs font-bold text-[var(--c-steel)] mt-3">
               Sign in to open this deck in your Deck Builder.
             </p>
           )}

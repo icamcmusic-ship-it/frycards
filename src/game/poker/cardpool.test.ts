@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { GENERATED_CARDS } from '../generated-cards';
-import { POOL, POOL_BY_ID, POOL_LEADERS, deriveCardMechanics, poolByType } from './cardpool';
+import {
+  LEADER_ABILITY_OVERRIDES,
+  POOL,
+  POOL_BY_ID,
+  POOL_LEADERS,
+  deriveCardMechanics,
+  poolByType,
+} from './cardpool';
 import { FROZEN_COLORS } from './frozenColors';
-import { KEYWORD_SPECS, keywordAllowed } from './keywords';
+import { CHIP_KEYWORDS, KEYWORD_SPECS, keywordAllowed } from './keywords';
 import { LEADER_COLORS } from './colors';
 
 describe('card pool', () => {
@@ -87,8 +94,18 @@ describe('Leader abilities', () => {
   const situational = ['Straddle', 'Rerun', 'Burn', 'Cut', 'Toll', 'Bounty', 'Lock'];
   it('no Leader rolls a situational effect (Straddle, Rerun, …) as either ability', () => {
     for (const l of POOL_LEADERS)
-      for (const a of l.abilities ?? [])
+      (l.abilities ?? []).forEach((a, i) => {
+        if (LEADER_ABILITY_OVERRIDES[l.id]?.[i as 0 | 1]) return; // hand-set
         expect(situational, `${l.name}: ${a.text}`).not.toContain(a.effect.kw);
+      });
+  });
+
+  it('a build ability never costs more chips than it moves', () => {
+    for (const l of POOL_LEADERS) {
+      const plus = l.abilities![1];
+      if (plus.chipCost && plus.effect.n !== undefined && CHIP_KEYWORDS.has(plus.effect.kw))
+        expect(plus.chipCost, `${l.name}: ${plus.text}`).toBeLessThanOrEqual(plus.effect.n);
+    }
   });
 
   it('hand-rebuilding abilities spend 3 nerve, the rest 2', () => {

@@ -90,6 +90,12 @@ Keyboard: **F** fold, **C** check/call, **R** raise (with a slider).
   `max raise-to = current bet + (pot + your call)`.
 - **Minimum raise:** the size of the last bet or raise on this street, and at
   least one big blind.
+- **Short all-in raises do not re-open the betting.** An all-in raise smaller
+  than a full minimum raise must still be called (or folded to) by the seats
+  that already acted, but they may not re-raise. A full raise re-opens the
+  action for everyone.
+- Power costs land in the pot before betting, so casting first raises your
+  own pot-limit cap: a cast is a bet.
 - A street ends when every seat still able to bet has acted and matched the
   current bet. If everyone left is all-in (or only one seat can still act and
   owes nothing), the rest of the board is dealt with no more betting.
@@ -99,7 +105,9 @@ Keyboard: **F** fold, **C** check/call, **R** raise (with a slider).
 - Chips that an all-in seat could not match form a **side pot** it cannot
   win. Each pot is awarded separately to the best eligible hand.
 - Money in the pot that belongs to no seat's bet — power costs, drains,
-  antes, a jackpot — joins the **main pot**.
+  antes, a jackpot — joins the **main pot**, which every live seat can win.
+  A seat whose whole stake is dead money (a Bomb Pot ante all-in, or drained
+  to 0 before posting) is still eligible for it.
 - **Who shows:** every pot winner, and the last seat that bet or raised (it
   must show to claim — and may be caught bluffing). Everyone else mucks a
   losing hand unless the Location is **Open Table**.
@@ -110,24 +118,29 @@ Keyboard: **F** fold, **C** check/call, **R** raise (with a slider).
 
 ### 3.1 Modes
 
-| Mode     | Stack (units) | Blinds rise      | Clock cap | Deck: Leader + Location + powers | Max copies | Tier-5 cards | Power hand: start / draw per hand / cap | Reward × | Min. length |
+| Mode     | Stack (chips) | Blinds rise      | Clock cap | Deck: Leader + Location + powers | Max copies | Tier-5 cards | Power hand: start / draw per hand / cap | Reward × | Min. length |
 | -------- | ------------- | ---------------- | --------- | -------------------------------- | ---------- | ------------ | --------------------------------------- | -------- | ----------- |
-| Quick    | 30            | ×1.5 every 2 min | 12 min    | 1 + 1 + 16                       | 2          | 1            | 3 / 1 / 5                               | ×0.5     | 6 min       |
-| Standard | 50            | ×1.5 every 3 min | 25 min    | 1 + 1 + 24                       | 2          | 2            | 4 / 1 / 6                               | ×1       | 12 min      |
-| Deep     | 80            | ×1.5 every 4 min | 40 min    | 1 + 1 + 36                       | 3          | 3            | 5 / 2 / 7                               | ×1.5     | 20 min      |
+| Quick    | 480           | ×1.5 every 2 min | 12 min    | 1 + 1 + 16                       | 2          | 1            | 3 / 1 / 5                               | ×0.5     | 6 min       |
+| Standard | 800           | ×1.5 every 3 min | 25 min    | 1 + 1 + 24                       | 2          | 2            | 4 / 1 / 6                               | ×1       | 12 min      |
+| Deep     | 1,280         | ×1.5 every 4 min | 40 min    | 1 + 1 + 36                       | 3          | 3            | 5 / 2 / 7                               | ×1.5     | 20 min      |
 
-One **chip unit** is the opening big blind. Every seat starts at the same
-stack; chips in play never change (powers move chips, never create them).
+Every amount on the table is a **whole number of chips**, never a fraction.
+The opening big blind is 16 chips (small blind 8). The tables below give costs
+and keyword numbers in chips; the code keeps them as **chip units** of 16
+chips each (`UNIT` in `src/game/poker/constants.ts`). Every seat starts at the
+same stack; chips in play never change (powers move chips, never create them).
 
 ### 3.2 The clock
 
 - Every action advances the match clock by the time it took (human think time
   is charged up to 30 s per action). The blind **level** is
-  `floor(clock / level length)`, and the big blind is 1 unit × 1.5^level,
-  rounded to half-unit steps from 2 units up. Standard: 1 · 1½ · 2½ · 3½ · 5 ·
-  7½ · 11½ · 17 · 25½ …
+  `floor(clock / level length)`, and the big blind is 16 × 1.5^level chips,
+  rounded to an even number (steps of 2 under 60, 10 under 300, 50 under
+  1,000, then 100) so the small blind is whole too: 16 · 24 · 36 · 54 · 80 ·
+  120 · 180 · 270 · 400 · 600 · 900 · 1,400 … (every step ×1.48–1.56).
 - **At the cap** the hand in progress finishes, then every live seat is ranked
-  by stack.
+  by stack. A stack tie breaks on the stack at the start of the final hand,
+  then on a seeded draw (never on seat order).
 - **Busting:** a seat at 0 chips after a hand is out. Seats that bust in the
   same hand are ranked by their stack at the start of that hand. A busted
   player can watch at 4× speed or skip.
@@ -163,19 +176,20 @@ Every power has a **tier** from 1 to 5, printed as ★ stars (Units), ⚙ gears
 number **N** in its keywords (§6.6). A power is one **effect keyword** plus
 optional **modifier keywords** (§9).
 
-| Type  | Mark | Lasts                                                                                                        | Cap per hand (per seat)                     |
-| ----- | ---- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| Unit  | ★    | Resolves, then stays on the table as a visible **token** until the hand ends; then to your discard           | 2 Units, 5 stars between them               |
-| Item  | ⚙    | Resolves once. **Charm:** then to discard. **Weapon:** returns to your hand. **Tool:** also Marks the target | 2 Items, 5 gears between them               |
-| Event | ϟ    | Resolves once, then to your discard. **Quick** or **Slow** (§6.2)                                            | 5 bolts a hand, at most 2 Events per street |
+| Type  | Mark | Lasts                                                                                                                    | Cap per hand (per seat)                     |
+| ----- | ---- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| Unit  | ★    | Resolves, then stays on the table as a visible **token** until the hand ends; then to your discard                       | 2 Units, 5 stars between them               |
+| Item  | ⚙    | Resolves once. **Charm:** then to discard. **Weapon:** returns to your hand at hand end. **Tool:** also Marks the target | 2 Items, 5 gears between them               |
+| Event | ϟ    | Resolves once, then to your discard. **Quick** or **Slow** (§6.2)                                                        | 5 bolts a hand, at most 2 Events per street |
 
 - Legal Unit pairs: 5, 4+1, 3+2, 2+2 and lower. Two 3-star Units are illegal.
 - An **Item** bonds to one of your Units. With no Unit of yours out, it bonds
   to a hole card instead and costs **one step more**.
 - A **Tool** always needs an opponent target, and also **Marks** one of that
   seat's hole cards for you.
-- **Soulbound** cards (and Weapons) return to your hand after use instead of
-  the discard; a Soulbound Unit returns at the end of the hand.
+- **Soulbound** cards (and Weapons) return to your hand **at the end of the
+  hand** instead of going to the discard, so each can be used once a hand. A
+  Soulbound card costs one step more (§6.1).
 
 ---
 
@@ -183,13 +197,13 @@ optional **modifier keywords** (§9).
 
 ### 6.1 Chip costs (the cost ladder)
 
-Costs are fixed chip units for the whole match, so powers get relatively
+Costs are fixed chip amounts for the whole match, so powers get relatively
 cheaper as the blinds climb. A card's base **step** is its tier; modifiers move
 the step along the ladder.
 
 | Step         | 0   | 1   | 2   | 3   | 4   | 5   | 6   |
 | ------------ | --- | --- | --- | --- | --- | --- | --- |
-| Cost (units) | ¼   | ½   | 1   | 2   | 3½  | 6   | 8   |
+| Cost (chips) | 4   | 8   | 16  | 32  | 56  | 96  | 128 |
 | Printed tier | —   | 1   | 2   | 3   | 4   | 5   | —   |
 
 Step adjustments (they stack, clamped to steps 0–6):
@@ -199,11 +213,16 @@ Step adjustments (they stack, clamped to steps 0–6):
 | Item with no Unit of yours out                                          | +1   |
 | **Surge**, and you have already cast this hand                          | −1   |
 | **Happy Hour** Location                                                 | −1   |
+| **Soulbound** (the card comes back at the end of the hand)              | +1   |
+| **Resonant** (the effect resolves twice)                                | +1   |
 | You are **tilted** (0 nerve)                                            | +1   |
 | Shortest-stack buff on Straddle Night / Reverse Order (first cast only) | −1   |
 
 **Gambit** cards cost no chips now; instead, if the caster does not win the
-pot, it pays **double** the chip cost to the winner at the end of the hand.
+pot, it pays **1.5×** the chip cost to the winner at the end of the hand.
+
+**Last Stand** cards cost no chips while you hold 10 big blinds or less (the
+cost is waived, nothing is minted); any second cost still applies.
 
 Chips paid go **into the pot** (on Jackpot Pit, into the jackpot), never out
 of the game.
@@ -263,10 +282,14 @@ A **raise** also opens a response window for the other seats.
 - Every Leader has two abilities: one **spends** nerve (strong, a tier-4
   effect from its first colour; 3 nerve if it rebuilds your hand — Windfall,
   Wild, Bloom, Redraw, Exhume or Pass — otherwise 2) and one **builds** +1 nerve (weaker, a tier-2
-  effect from its second colour, and it pays ½ or 1 chip unit into the pot).
+  effect from its second colour). The build pays chips into the pot, set by
+  its effect: a chip effect pays its own amount up to 16 chips (never more than
+  it moves), anything else 8 chips.
 - A Leader ability is never one of the situational effects — Straddle, Rerun,
   Burn, Cut, Toll, Bounty or Lock. Those barely move chips or cards on their
-  own, or only pay when someone else acts, so they stay on power cards.
+  own, or only pay when someone else acts, so they stay on power cards. One
+  hand-set exception: **Legendary Diver** builds with "+1 nerve: Straddle"
+  (its generated Pass scrambled its own hand for chips).
 - **One Leader ability per hand**, on your own turn, outside any window. Not
   while Locked, and never while **tilted**.
 - A Leader ability is public like a cast and opens a response window (it can
@@ -275,27 +298,30 @@ A **raise** also opens a response window for the other seats.
 
 ### 6.6 Tier numbers (N)
 
-N for numbered keywords, by tier. Chip amounts are in chip units.
+N for numbered keywords, by tier. Chip amounts are in chips.
 
-| Keyword   | ★1  | ★2  | ★3  | ★4  | ★5  |
-| --------- | --- | --- | --- | --- | --- |
-| Kindle    | ½   | 1   | 2   | 3   | 5   |
-| Tax       | ½   | 1   | 1½  | 3   | 4   |
-| Bounty    | 2   | 3   | 5   | 8   | 12  |
-| Foresee   | 1   | 2   | 3   | 4   | 5   |
-| Bulwark   | 1   | 2   | 3   | 4   | 6   |
-| Fuse      | 1   | 1   | 1   | 2   | 2   |
-| Peek      | 1   | 1   | 1   | 2   | 2   |
-| Toll      | ½   | 1   | 1½  | 2   | 3   |
-| Insurance | 2   | 3   | 5   | 8   | 12  |
-| Siphon    | ½   | 1   | 2   | 3   | 5   |
-| Blessed   | ½   | 1   | 2   | 3   | 5   |
-| Needle    | 1   | 1   | 2   | 2   | 3   |
-| Venomous  | 1   | 1½  | 2½  | 4   | 6   |
-| Erode     | ½   | ½   | 1   | 1½  | 2   |
-| Burn      | 1   | 1   | 1   | 2   | 2   |
+| Keyword    | ★1   | ★2  | ★3   | ★4  | ★5  |
+| ---------- | ---- | --- | ---- | --- | --- |
+| Kindle     | 8    | 16  | 32   | 48  | 80  |
+| Tax        | 8    | 16  | 24   | 32  | 48  |
+| Bounty     | 32   | 48  | 80   | 128 | 192 |
+| Foresee    | 1    | 2   | 3    | 4   | 5   |
+| Bulwark    | 8    | 16  | 32   | 48  | 80  |
+| Fuse       | 1    | 1   | 1    | 2   | 2   |
+| Peek       | 1    | 1   | 1    | 2   | 2   |
+| Toll       | 8    | 16  | 32   | 48  | 80  |
+| Insurance  | 32   | 48  | 80   | 128 | 192 |
+| Siphon     | 12   | 24  | 48   | 72  | 120 |
+| Blessed    | 16   | 32  | 48   | 80  | 128 |
+| Needle     | 1    | 1   | 2    | 2   | 3   |
+| Venomous   | 16   | 24  | 40   | 64  | 96  |
+| Erode      | 8    | 16  | 24   | 40  | 64  |
+| Burn       | 1    | 1   | 1    | 2   | 2   |
+| Overbet    | 0.25 | 0.5 | 0.75 | 1   | 1.5 |
+| Boat Bonus | 8    | 16  | 24   | 32  | 48  |
 
-Fuse and Needle count streets and nerve; Foresee, Peek and Burn count cards.
+Fuse and Needle count streets and nerve; Foresee, Peek and Burn count cards;
+Overbet is a pot multiplier.
 
 ---
 
@@ -332,6 +358,14 @@ named hand category**.
   the whole table.
 - Other seats' power hands are hidden (only the count shows).
 - Each match logs its seed; the same seed and action list replays it exactly.
+  The seed would let anyone replay every shuffle, so it is shown only once the
+  match is over.
+- **Veil:** a Veiled cast's target is hidden from the rest of the table until
+  the street ends — the cast line, its effect lines ("a hidden seat") and the
+  marks it leaves (hit this street, Locked, poisoned, bountied). The caster and
+  the target see it in full. Stack and nerve changes stay visible. A seat that
+  picks the hidden target for its own hostile power is told only "No legal
+  target", and nothing is paid.
 
 ### 8.2 Bluff levers
 
@@ -367,7 +401,8 @@ Nerve is a **public** meter from 0 to 10; every seat starts at 5.
 
 **Tilt:** at 0 nerve your Leader is locked and every power costs one step more
 until your nerve recovers. Elimination is chips-only; nerve never knocks you
-out. **Tilt Zone** doubles every nerve change.
+out. **Tilt Zone** doubles every nerve change, a Leader ability's nerve cost
+included: you must hold the doubled cost to use it.
 
 ### 8.4 Bots
 
@@ -376,6 +411,15 @@ persona (bluff rate, tightness, how often it casts) comes from its Leader's two
 colours: Ember and Shadow bluff more, Void plays tight, Light bluffs least. A
 bot casts when the expected gain, in big blinds, clears the cost plus a margin;
 it picks targets by threat and personality and respects the hostile cap.
+
+Bots read only public play. Skilled bots also weigh **position** (acting last
+is worth a little equity), the **clock** (near the cap a chip leader tightens
+up and a short stack gambles), **draws** (they semi-bluff flush and
+open-ended straight draws, so a skilled bot's raise is not always value) and
+each seat's **betting tally** — a seat that bets or raises far more often than
+a sane player (shove-or-fold, betting every checked street) is read as
+weaker, and called down lighter. Value bets and bluffs share one sizing range,
+so a bet's size is not a tell.
 
 ---
 
@@ -397,14 +441,16 @@ game with a new poker meaning. _Modifiers_ change how or when the effect lands.
 
 ### Ember — pressure and chaos
 
-| Keyword  | Type     | Meaning                                                                                                        |
-| -------- | -------- | -------------------------------------------------------------------------------------------------------------- |
-| Straddle | effect   | Pre-flop, before any raise or your own action: raise your blind to double the big blind; you act last pre-flop |
-| Kindle ✔ | effect   | **Hostile.** Drain N from a target's stack into the pot                                                        |
-| Tax      | effect   | Every opponent still in the hand antes N more                                                                  |
-| Bounty   | effect   | **Hostile.** Mark a target; if it busts this hand, you collect N from the winner                               |
-| Roulette | modifier | The effect hits a random seat still in the hand — possibly you                                                 |
-| Gambit   | modifier | Cast for no chips; if you don't win the pot, pay double the chip cost to the winner                            |
+| Keyword    | Type     | Meaning                                                                                                           |
+| ---------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| Straddle   | effect   | Pre-flop, before any raise or your own action: raise your blind to double the big blind; you act last pre-flop    |
+| Kindle ✔   | effect   | **Hostile.** Drain N from a target's stack into the pot                                                           |
+| Tax        | effect   | Up to three opponents still in the hand (the most chips in first) ante N more                                     |
+| Bounty     | effect   | **Hostile.** Mark a target; if it busts this hand, you collect N from the winner                                  |
+| Roulette   | modifier | The effect hits a random seat still in the hand — possibly you; a hostile one skips seats already hit this street |
+| Gambit     | modifier | Cast for no chips; if you don't win the pot, pay 1.5× the chip cost to the winner                                 |
+| Overbet    | effect   | This street, your maximum raise is the pot × (1 + N) instead of the pot                                           |
+| Boat Bonus | modifier | If you win at showdown with a full house or better, every other seat still in the hand pays you N                 |
 
 ### Tide — receiving and flow
 
@@ -414,27 +460,28 @@ game with a new poker meaning. _Modifiers_ change how or when the effect lands.
 | Foresee    | effect   | Privately look at the top N cards of the deck                                   |
 | Mimic      | effect   | Copy the effect of the last power cast this hand (not Mimic, Snuff or Call Out) |
 | Wild       | effect   | A random one of your hole cards counts as any suit this hand                    |
-| Resonant ✔ | modifier | The effect resolves twice                                                       |
+| Resonant ✔ | modifier | The effect resolves twice; costs one step more                                  |
 
 ### Root — growth and endurance
 
-| Keyword     | Type     | Meaning                                                                                                                   |
-| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Bulwark ✔   | effect   | If you don't win this hand (folding included), take back up to N of your own chips from the pot                           |
+| Keyword     | Type     | Meaning                                                                                                                              |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Bulwark ✔   | effect   | If you don't win this hand (folding included), take back up to N of your own chips from the pot                                      |
 | Bloom       | effect   | **Gated.** When the next street is dealt, a random one of your hole cards (not an Ace) grows one rank higher; no effect on the river |
-| Rerun       | effect   | If the hand goes all-in before the river, the rest of the board is dealt twice and each pot splits between the two boards |
-| Thriving ✔  | modifier | On a Unit: the effect fires again at the start of every later street, N growing each time                                 |
-| Fuse        | modifier | The effect lands N streets later — everyone sees it coming; it fizzles if you have folded                                 |
-| Soulbound ✔ | modifier | Returns to your hand after use                                                                                            |
+| Rerun       | effect   | If the hand goes all-in before the river, the rest of the board is dealt twice and each pot splits between the two boards            |
+| Thriving ✔  | modifier | On a Unit: the effect fires again at the start of every later street, N growing each time (not while its target is folded)           |
+| Fuse        | modifier | The effect lands N streets later — everyone sees it coming; it fizzles if you or its target have folded                              |
+| Soulbound ✔ | modifier | Returns to your hand when the hand ends (not straight after use); costs one step more                                                |
+| Last Stand  | modifier | Costs no chips while you hold 10 big blinds or less                                                                                  |
 
 ### Gale — timing and movement
 
-| Keyword       | Type     | Meaning                                                                    |
-| ------------- | -------- | -------------------------------------------------------------------------- |
-| Cut           | effect   | Move the top card of the deck to the bottom                                |
-| Pass          | effect   | Every seat still in passes a random hole card to the next seat on its left |
-| Ambush ✔      | modifier | Castable in response windows during other seats' betting                   |
-| Quickstrike ✔ | modifier | Resolves at once, with no response window                                  |
+| Keyword       | Type     | Meaning                                                                                                |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| Cut           | effect   | Move the top card of the deck to the bottom                                                            |
+| Pass          | effect   | Every seat still in passes a random hole card to the next seat on its left (the passer still knows it) |
+| Ambush ✔      | modifier | Castable in response windows during other seats' betting                                               |
+| Quickstrike ✔ | modifier | Resolves at once, with no response window                                                              |
 
 ### Light — truth and protection
 
@@ -447,7 +494,8 @@ game with a new poker meaning. _Modifiers_ change how or when the effect lands.
 | Toll      | effect | This hand, whenever a hostile power targets you, its caster pays you N                            |
 | Insurance | effect | If you lose a showdown while all-in this hand, recover up to N from the pot                       |
 | Siphon ✔  | effect | Take N from the pot                                                                               |
-| Blessed ✔ | effect | Take back up to N of the chips you paid for powers this hand                                      |
+| Blessed ✔ | effect | Take back up to N of the chips you paid for your other powers this hand (never its own cost)      |
+| Tell      | effect | **Gated, hostile.** Privately learn a target's best hand category on the board so far             |
 
 ### Shadow — deception and recursion
 
@@ -470,7 +518,11 @@ game with a new poker meaning. _Modifiers_ change how or when the effect lands.
 | Snuff      | effect   | **Gated.** Response only: cancel the cast being made (not your own, not a Warded one); a snuffed card goes to the discard |
 | Entropic ✔ | effect   | **Gated, hostile.** The target discards a random power card now and at the start of every later street                    |
 | Erode      | effect   | **Gated, hostile.** Take N from a target's stack                                                                          |
-| Warded ✔   | modifier | Can't be Snuffed or Called Out; a Warded Unit also stops Peek, Mark and Reveal targeting you                              |
+| Warded ✔   | modifier | Can't be Snuffed or Called Out; a Warded Unit also stops Peek, Mark, Reveal and Tell targeting you                        |
+
+**New in the 2026-10-11 rebalance:** Overbet, Tell, Boat Bonus and Last Stand.
+The card generator never rolls them (that would reprint the pool); each
+prints on two hand-set cards (`REPRINTS` in `src/game/poker/cardpool.ts`).
 
 **Retired** with the old game: Aerial, Overrun, Swarmproof, Skywatch,
 Doublestrike, Alert, Immobile, Hardened, Regenerate, Bountiful, Sacred,

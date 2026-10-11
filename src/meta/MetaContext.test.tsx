@@ -48,6 +48,7 @@ vi.mock('../lib/supabase', () => ({
   fetchShopItems: () => Promise.resolve([]),
   fetchPackTypes: () => Promise.resolve([]),
   subscribeTable: () => () => undefined,
+  subscribeUserChannel: () => () => undefined,
 }));
 
 import { MetaProvider, MetaState, useMeta } from './MetaContext';

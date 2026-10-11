@@ -126,9 +126,10 @@ export function AuthScreen() {
           onSubmit={submit}
           className="bg-[var(--c-paper)] ink-border-md shadow-hard-black p-6 flex flex-col gap-3"
         >
-          <div className="flex gap-2 mb-1">
+          <div className="flex gap-2 mb-1" role="group" aria-label="Sign in or create an account">
             <PopButton
-              color={mode === 'signin' ? 'black' : 'yellow'}
+              color={mode === 'signin' ? 'yellow' : 'black'}
+              ariaPressed={mode === 'signin'}
               disabled={busy}
               onClick={() => {
                 setMode('signin');
@@ -140,7 +141,8 @@ export function AuthScreen() {
               SIGN IN
             </PopButton>
             <PopButton
-              color={mode === 'signup' ? 'black' : 'yellow'}
+              color={mode === 'signup' ? 'yellow' : 'black'}
+              ariaPressed={mode === 'signup'}
               disabled={busy}
               onClick={() => {
                 setMode('signup');
@@ -205,7 +207,8 @@ export function AuthScreen() {
           <button
             type="submit"
             disabled={busy}
-            className="btn-pop w-full py-3 bg-[var(--c-red)] text-[var(--c-paper)] heading-font ink-border-sm shadow-hard-black-xs disabled:opacity-50"
+            // U67: yellow = the primary action (and the selected tab); red means danger.
+            className="btn-pop w-full py-3 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font ink-border-sm shadow-hard-black-xs disabled:opacity-50"
           >
             {busy
               ? 'CONTACTING FRY CARDS…'
@@ -216,7 +219,7 @@ export function AuthScreen() {
 
           <div className="flex items-center gap-2 my-1">
             <div className="flex-1 h-0.5 bg-[var(--c-ink)]/20" />
-            <span className="text-[10px] font-black text-[var(--c-steel)]">OR</span>
+            <span className="fs-xs font-black text-[var(--c-steel)]">OR</span>
             <div className="flex-1 h-0.5 bg-[var(--c-ink)]/20" />
           </div>
 
@@ -232,7 +235,7 @@ export function AuthScreen() {
             SIGN IN WITH DISCORD
           </button>
 
-          <div className="text-center text-[10px] font-bold text-[var(--c-steel)] mt-1">
+          <div className="text-center fs-xs font-bold text-[var(--c-steel)] mt-1">
             New accounts start with a stash of credits and vouchers — open packs in the Store to get
             your first cards.
           </div>

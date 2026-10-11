@@ -9,7 +9,21 @@ export type ThemeName =
   | 'lilac'
   | 'desert'
   | 'aurora'
-  | 'garnet';
+  | 'garnet'
+  | 'graphite'
+  | 'amethyst'
+  | 'punch'
+  | 'scarlet'
+  | 'celadon'
+  | 'ink';
+
+/** A saved choice: a theme, or SYSTEM — follow the device's light/dark setting
+ * (S-13), resolving to SYSTEM_THEMES. */
+export type ThemeChoice = ThemeName | 'system';
+export const SYSTEM_THEMES: { light: ThemeName; dark: ThemeName } = {
+  light: 'classic',
+  dark: 'ink',
+};
 
 /**
  * The five color roles the whole UI is built from (see src/index.css):
@@ -31,6 +45,14 @@ export interface Theme {
   name: ThemeName;
   label: string;
   colors: ThemeColors;
+  /**
+   * A dark theme INVERTS the roles: paper is the dark page and ink the light
+   * text and outline. The two light-band roles that hold dark text — yellow
+   * surfaces — and the ink-as-surface chrome (top bars, ink buttons) are
+   * re-mapped in index.css under `html[data-scheme='dark']`, which
+   * `applyTheme` sets.
+   */
+  dark?: boolean;
 }
 
 export const THEMES: Record<ThemeName, Theme> = {
@@ -168,6 +190,95 @@ export const THEMES: Record<ThemeName, Theme> = {
       steel: '#6b0504',
     },
   },
+  // The five below came from player-supplied palettes. Where a source swatch
+  // sat in the wrong band for its role (a light accent asked to carry paper
+  // text, or no light colour to use as paper) it was darkened/lightened the
+  // same way as the themes above; every pair clears WCAG AA 4.5:1.
+  graphite: {
+    name: 'graphite',
+    label: 'GRAPHITE SPRING',
+    colors: {
+      ink: '#2d2d2a',
+      // no light swatch in the source: a pale wash of the spring green.
+      paper: '#ecfdf3',
+      yellow: '#20fc8f',
+      // spring green #20fc8f darkened to carry paper text (5.1:1).
+      red: '#0b7a47',
+      steel: '#3f5e5a',
+    },
+  },
+  amethyst: {
+    name: 'amethyst',
+    label: 'NEON AMETHYST',
+    colors: {
+      ink: '#4c1a57',
+      // a pale wash of the neon ice #00e5e8.
+      paper: '#e3fcfc',
+      yellow: '#f0f600',
+      // fuchsia pop #ff3cc7 darkened to carry paper text (5.6:1).
+      red: '#b8128a',
+      steel: '#007c77',
+    },
+  },
+  punch: {
+    name: 'punch',
+    label: 'PUNCH EMBER',
+    colors: {
+      ink: '#19180a',
+      paper: '#f9efe6',
+      // a light tint of rusty spice #af4319.
+      yellow: '#f6c9a8',
+      // punch red #e71d36 darkened a step (4.2 → 4.8:1 under paper text).
+      red: '#d01a30',
+      steel: '#3f220f',
+    },
+  },
+  scarlet: {
+    name: 'scarlet',
+    label: 'SCARLET STEEL',
+    colors: {
+      ink: '#0f1a20',
+      // khaki beige #ada296 lightened to a paper.
+      paper: '#f1eeea',
+      yellow: '#e2856e',
+      // scarlet fire #f42c04 darkened to carry paper text (5.1:1).
+      red: '#c42303',
+      // cool steel #88a2aa darkened to clear AA as secondary text (5.3:1).
+      steel: '#4b666e',
+    },
+  },
+  celadon: {
+    name: 'celadon',
+    label: 'CELADON BRONZE',
+    colors: {
+      ink: '#110b11',
+      paper: '#f2f4cb',
+      yellow: '#a5d0a8',
+      // golden bronze #b7990d darkened to carry paper text (4.8:1).
+      red: '#7d6808',
+      // muted teal #8cada7 darkened to clear AA as secondary text (5.3:1).
+      steel: '#4a6964',
+    },
+  },
+  ink: {
+    name: 'ink',
+    label: 'INK (DARK)',
+    dark: true,
+    colors: {
+      // Inverted: light ink on a near-black paper, so every ink border and
+      // offset shadow turns into a white comic outline.
+      ink: '#eeeae0',
+      paper: '#15161a',
+      yellow: '#ffd54f',
+      // Light enough to carry the dark paper as text (7:1) and to read as
+      // text on the paper (6.4:1).
+      red: '#ff7a6b',
+      // A dark slate SURFACE (like every theme's steel) that holds light text
+      // (7.9:1); as a text colour on the paper it is lifted to #a9bccd in
+      // index.css (8.6:1).
+      steel: '#3b4d5e',
+    },
+  },
 };
 
 export const DEFAULT_THEME: ThemeName = 'classic';
@@ -185,4 +296,12 @@ export function applyTheme(themeName: ThemeName) {
   root.style.setProperty('--c-yellow', theme.colors.yellow);
   root.style.setProperty('--c-red', theme.colors.red);
   root.style.setProperty('--c-steel', theme.colors.steel);
+  root.setAttribute('data-scheme', theme.dark ? 'dark' : 'light');
+  root.style.colorScheme = theme.dark ? 'dark' : 'light';
+}
+
+/** The theme a choice stands for right now (SYSTEM reads the OS setting). */
+export function resolveTheme(choice: ThemeChoice, prefersDark: boolean): ThemeName {
+  if (choice !== 'system') return choice;
+  return prefersDark ? SYSTEM_THEMES.dark : SYSTEM_THEMES.light;
 }
