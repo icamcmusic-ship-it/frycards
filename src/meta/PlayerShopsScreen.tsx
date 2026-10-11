@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { counterText, counterValid, counterValue } from './shopCounter';
+import { useRouter } from './useHashRouter';
 import { askConfirm } from './confirm';
 import {
   Store,
@@ -3211,6 +3212,7 @@ type ShopsTab = 'directory' | 'myshop';
 const isShopsTab = (v: unknown): v is ShopsTab => v === 'directory' || v === 'myshop';
 
 export function PlayerShopsScreen({ onBack }: { onBack: () => void }) {
+  const router = useRouter();
   const [tab, setTab] = usePersistedState<ShopsTab>('shops.tab', 'directory', isShopsTab);
   // Customers waiting on the Shop Floor — badged on the MY SHOP tab, since
   // arrivals otherwise only show once that tab is open. Non-owners get an
@@ -3231,6 +3233,22 @@ export function PlayerShopsScreen({ onBack }: { onBack: () => void }) {
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="PLAYER SHOPS" onBack={onBack} />
       <div className="p-5 max-w-6xl mx-auto">
+        {/* U44: the two buying surfaces explain each other. */}
+        <p className="fs-xs font-bold text-[var(--c-steel)] mb-3">
+          Storefronts players stock and price themselves. For auctions and one-off listings, see the{' '}
+          {router ? (
+            <button
+              type="button"
+              className="underline font-black text-[var(--c-ink)]"
+              onClick={() => router.navigate('market')}
+            >
+              MARKETPLACE ▸
+            </button>
+          ) : (
+            'Marketplace'
+          )}
+          .
+        </p>
         {viewingOwner ? (
           <StorefrontView owner={viewingOwner} onBack={() => setViewingOwner(null)} />
         ) : (

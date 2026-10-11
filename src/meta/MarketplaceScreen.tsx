@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clampWholeText, parseWhole } from './wholeField';
-import { useRouteTab } from './useHashRouter';
+import { useRouteTab, useRouter } from './useHashRouter';
+import { FilterSelect } from './FilterSelect';
 import { askConfirm } from './confirm';
 import { Store, Gavel, Tag, Coins, Clock } from 'lucide-react';
 import { useMeta } from './MetaContext';
@@ -106,6 +107,7 @@ function defFor(cardId: string): CardDef {
 const LOAD_ERROR = 'Could not load the marketplace. Check your connection and try again.';
 
 export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
+  const router = useRouter();
   const {
     session,
     profile,
@@ -550,6 +552,22 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="CARD MARKETPLACE" onBack={onBack} />
       <div className="p-5 max-w-6xl mx-auto">
+        {/* U44: the two buying surfaces explain each other. */}
+        <p className="fs-xs font-bold text-[var(--c-steel)] mb-3">
+          Auctions and fixed-price listings from every player.{' '}
+          {router ? (
+            <button
+              type="button"
+              className="underline font-black text-[var(--c-ink)]"
+              onClick={() => router.navigate('shops')}
+            >
+              PLAYER SHOPS ▸
+            </button>
+          ) : (
+            'Player Shops'
+          )}{' '}
+          are storefronts players stock and price themselves.
+        </p>
         <Tabs<Tab>
           ariaLabel="Marketplace"
           className="mb-4"
@@ -610,46 +628,46 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
           </div>
         ) : tab === 'browse' ? (
           <>
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div className="flex flex-wrap items-end gap-2 mb-4">
               <input
-                className={cn(select, 'w-44 max-w-full placeholder:text-[var(--c-steel)]/50')}
+                className={cn(
+                  select,
+                  'w-44 max-w-full min-h-[36px] placeholder:text-[var(--c-steel)]/50',
+                )}
                 placeholder="Search listings…"
                 aria-label="Search listings"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              <select
-                className={select}
-                aria-label="Filter by rarity"
+              {/* U45: labelled filters, as in the deck builder. */}
+              <FilterSelect
+                label="Rarity"
                 value={rarityFilter}
-                onChange={(e) => setRarityFilter(e.target.value)}
-              >
-                {['All', ...RARITY_ORDER].map((r) => (
-                  <option key={r}>{r}</option>
-                ))}
-              </select>
-              <select
-                className={select}
-                aria-label="Filter listings"
+                onChange={setRarityFilter}
+                options={['All', ...RARITY_ORDER].map((r) => ({ value: r, label: r }))}
+              />
+              <FilterSelect
+                label="Show"
                 value={showFilter}
-                onChange={(e) => setShowFilter(e.target.value as typeof showFilter)}
-              >
-                <option value="all">All listings</option>
-                <option value="auctions">Auctions</option>
-                <option value="fixed">Fixed price</option>
-                <option value="cpu">CPU collector leading</option>
-                <option value="soon">Ending in 15 min</option>
-              </select>
-              <select
-                className={select}
-                aria-label="Sort listings"
+                onChange={(v) => setShowFilter(v as typeof showFilter)}
+                options={[
+                  { value: 'all', label: 'All listings' },
+                  { value: 'auctions', label: 'Auctions' },
+                  { value: 'fixed', label: 'Fixed price' },
+                  { value: 'cpu', label: 'CPU collector leading' },
+                  { value: 'soon', label: 'Ending in 15 min' },
+                ]}
+              />
+              <FilterSelect
+                label="Sort"
                 value={sort}
-                onChange={(e) => setSort(e.target.value as MarketSort)}
-              >
-                <option value="ending">Ending soonest</option>
-                <option value="price-asc">Price: low to high</option>
-                <option value="price-desc">Price: high to low</option>
-              </select>
+                onChange={(v) => setSort(v as MarketSort)}
+                options={[
+                  { value: 'ending', label: 'Ending soonest' },
+                  { value: 'price-asc', label: 'Price: low to high' },
+                  { value: 'price-desc', label: 'Price: high to low' },
+                ]}
+              />
             </div>
             {listings.length >= MARKET_LIST_LIMIT && (
               <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
