@@ -20,6 +20,10 @@ import {
   isoWeek,
   collectorFavourite,
   GRADING_COLOURS,
+  bestForBandsInsured,
+  insuranceClaimChance,
+  insurancePremium,
+  canTradeIn,
   chanceOfAtLeast,
   gradingVoucherFee,
   VOUCHER_RATE,
@@ -180,5 +184,18 @@ describe('grading economy mirrors', () => {
     expect(isoWeek(new Date('2021-01-03T00:00:00Z'))).toEqual({ year: 2020, week: 53 });
     expect(collectorFavourite(new Date('2026-01-01T05:00:00Z'))).toBe('tca');
     expect(collectorFavourite(new Date('2026-01-02T05:00:00Z'))).toBe('amg');
+  });
+
+  it('part 2: insurance keeps three bands and trade-ins need five sub-7 slabs', () => {
+    const insured = bestForBandsInsured();
+    expect(insured.map((b) => b.service)).toEqual(['keeper', 'amg', 'tca']);
+    // TCA is strictest, so its insurance pays out most often.
+    expect(insuranceClaimChance('tca')).toBeGreaterThan(insuranceClaimChance('amg'));
+    expect(insuranceClaimChance('amg')).toBeGreaterThan(insuranceClaimChance('keeper'));
+    expect(insurancePremium(400)).toBe(40);
+    const base = { id: 'x', grade: 6.5, retired: false, listing_id: null } as any;
+    expect(canTradeIn(base)).toBe(true);
+    expect(canTradeIn({ ...base, grade: 7 })).toBe(false);
+    expect(canTradeIn({ ...base, listing_id: 'l' })).toBe(false);
   });
 });

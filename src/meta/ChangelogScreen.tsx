@@ -114,6 +114,19 @@ export const ENTRIES: ChangelogEntry[] = [
         route: { screen: 'grading', sub: ['vault'], label: 'OPEN THE VAULT' },
       },
       {
+        title: 'Slabs on the Marketplace',
+        body: 'List a slab at a fixed price or at auction. A listed slab is held in escrow, the buyer gets the slab itself, and each CPU collector favours one house and bids higher for its slabs.',
+        category: 'grading',
+        icon: Store,
+        route: { screen: 'grading', sub: ['vault'], label: 'LIST A SLAB' },
+      },
+      {
+        title: 'Insurance & trade-ins',
+        body: 'Insure a submission for +10% of the fee: a grade under 7 refunds the base fee (the premium is kept). Trade five slabs under 7 for a free grading at any house. New achievements and missions cover Pristine pulls, crossover upgrades, trade-ins, slab sales, insured saves and registries.',
+        category: 'grading',
+        icon: ShieldCheck,
+      },
+      {
         title: 'Loyalty, weekly special & the Collector',
         body: 'Every 10 cards to a house earns a perk, one house grades one colour at half price each week, and each day’s collector pays +15% on quicksell for one house’s slabs.',
         category: 'collection',

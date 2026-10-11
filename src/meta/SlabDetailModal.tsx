@@ -231,6 +231,15 @@ export function SlabDetailModal({
               <>
                 <dt className="text-[var(--c-steel)]">Revealed</dt>
                 <dd>{fmtDate(g.revealed_at)}</dd>
+                {g.insured && (
+                  <>
+                    <dt className="text-[var(--c-steel)]">Insurance</dt>
+                    <dd>
+                      Insured ({(g.insurance_paid ?? 0).toLocaleString('en-US')} premium)
+                      {g.grade! < 7 ? ' · base fee refunded' : ''}
+                    </dd>
+                  </>
+                )}
                 <dt className="text-[var(--c-steel)]">Condition</dt>
                 <dd>{CONDITION_TEXT[conditionOf(g.grade)]}</dd>
                 <dt className="text-[var(--c-steel)]">Slab value</dt>
@@ -252,7 +261,10 @@ export function SlabDetailModal({
 
           {error && <Notice text={error} />}
 
-          {graded && !readOnly && (
+          {graded && !readOnly && g.listing_id && (
+            <Notice text="This slab is listed on the Marketplace — it can't be sold to the house, cracked or crossed over until the listing ends or is cancelled." />
+          )}
+          {graded && !readOnly && !g.listing_id && (
             // CANCEL renders in the spot QUICKSELL / CRACK occupied and the
             // CONFIRM button appears after it, so a double-tap cancels.
             <div className="flex flex-wrap gap-2">

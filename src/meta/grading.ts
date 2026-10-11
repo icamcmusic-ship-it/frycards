@@ -56,6 +56,13 @@ export interface GradedCard {
   crossover_target?: GradingService | null;
   /** TCA loyalty perk: this card's roll gets a guaranteed +0.5. */
   loyalty_bonus?: boolean;
+  /** Escrow: the Marketplace listing holding this slab (locked while set). */
+  listing_id?: string | null;
+  /** Traded in (or sold to a CPU collector): gone from play. */
+  retired?: boolean;
+  /** Grade insurance bought at submission. */
+  insured?: boolean;
+  insurance_paid?: number;
 }
 
 export interface Subgrades {
@@ -456,6 +463,8 @@ export interface GradingOverview {
   registry: { colour: string; have: number; total: number; claimed: number[] }[];
   week_special: { service: GradingService; colour: string };
   collector_favourite: GradingService;
+  /** Free-grading tokens from slab trade-ins. */
+  tokens?: number;
 }
 
 export async function fetchGradingOverview(): Promise<GradingOverview | null> {
@@ -519,6 +528,7 @@ export async function fetchGradedCards(userId: string): Promise<GradedCard[]> {
     .from('graded_cards')
     .select('*')
     .eq('user_id', userId)
+    .eq('retired', false)
     .order('submitted_at', { ascending: false });
   // Thrown, not []: an empty list is a real answer (no slabs), and callers
   // that reload after a submit/sell/crack would otherwise wipe the vault on
@@ -540,6 +550,7 @@ export async function submitGrading(
   service: GradingService,
   speed: GradingSpeed,
   currency: GradingCurrency = 'credits',
+  opts: { insure?: boolean; useToken?: boolean } = {},
 ): Promise<{
   data: {
     credits: number;
@@ -552,11 +563,13 @@ export async function submitGrading(
   } | null;
   error: string | null;
 }> {
-  const { data, error } = await supabase.rpc('submit_grading', {
+  const { data, error } = await supabase.rpc('submit_grading_v2', {
     p_items: items,
     p_service: service,
     p_speed: speed,
     p_currency: currency,
+    p_insure: !!opts.insure,
+    p_use_token: !!opts.useToken,
   });
   if (error) return { data: null, error: error.message };
   return { data, error: null };
@@ -574,17 +587,24 @@ export async function revealGradedCards(): Promise<{
     previous_grade?: number;
   }[];
   registry: { colour: string; milestone: number; bonus: number }[];
+  /** Insurance refunds paid out by this reveal, in credits. */
+  refunded: number;
   error: string | null;
 }> {
   const { data, error } = await supabase.rpc('reveal_graded_cards');
-  if (error) return { revealed: [], registry: [], error: error.message };
+  if (error) return { revealed: [], registry: [], refunded: 0, error: error.message };
   // numeric comes back as a string from PostgREST inside jsonb — normalize.
   const revealed = ((data?.revealed as any[]) || []).map((r) => ({
     ...r,
     grade: Number(r.grade),
     previous_grade: r.previous_grade == null ? undefined : Number(r.previous_grade),
   }));
-  return { revealed, registry: (data?.registry as any[]) || [], error: null };
+  return {
+    revealed,
+    registry: (data?.registry as any[]) || [],
+    refunded: Number(data?.refunded ?? 0),
+    error: null,
+  };
 }
 
 export async function quicksellGradedCard(
@@ -639,4 +659,121 @@ export function gradingEVTable(): {
     }
   }
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Part 2 (20261012000007): insurance, trade-ins, slabs on the Marketplace.
+// ---------------------------------------------------------------------------
+
+/** Insurance premium on top of each card's fee (never refunded). */
+export const INSURANCE_RATE = 0.1;
+/** A direct grade below this refunds an insured card's base fee. */
+export const INSURANCE_FLOOR = 7;
+/** Slabs per trade-in, and the grade they must be under. */
+export const TRADE_IN_COUNT = 5;
+export const TRADE_IN_MAX_GRADE = 7;
+
+export function insurancePremium(fee: number): number {
+  return Math.ceil(fee * INSURANCE_RATE);
+}
+
+/** Chance a direct submission lands below the insurance floor. */
+export function insuranceClaimChance(service: GradingService): number {
+  return gradeOddsFor(service).reduce((s, [g, p]) => (g < INSURANCE_FLOOR ? s + p : s), 0);
+}
+
+/** Expected credits insurance returns per card, net of its premium. */
+export function insuranceNetEV(service: GradingService): number {
+  const fee = GRADING_SERVICE_BY_ID[service].baseFee;
+  return insuranceClaimChance(service) * fee - insurancePremium(fee);
+}
+
+export function canTradeIn(g: GradedCard): boolean {
+  return (
+    g.grade != null &&
+    g.grade < TRADE_IN_MAX_GRADE &&
+    !g.retired &&
+    !g.listing_id &&
+    !g.crossover_pending
+  );
+}
+
+/** Best-for bands with insurance bought on every card. */
+export function bestForBandsInsured(): {
+  service: GradingService;
+  from: number;
+  to: number | null;
+}[] {
+  const net = (s: GradingService, q: number) =>
+    q * expectedGradeMultiplier(s) * GRADING_SERVICE_BY_ID[s].premium -
+    GRADING_SERVICE_BY_ID[s].baseFee +
+    insuranceNetEV(s);
+  const bands: { service: GradingService; from: number; to: number | null }[] = [];
+  for (let q = 1; q <= 5000; q++) {
+    const best = SERVICE_ORDER.reduce((a, b) => (net(b, q) > net(a, q) ? b : a));
+    const last = bands[bands.length - 1];
+    if (!last || last.service !== best) {
+      if (last) last.to = q - 1;
+      bands.push({ service: best, from: q, to: null });
+    }
+  }
+  return bands;
+}
+
+export async function tradeInSlabs(
+  ids: string[],
+): Promise<{ data: { tokens: number } | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('trade_in_slabs', { p_ids: ids });
+  if (error) return { data: null, error: error.message };
+  return { data, error: null };
+}
+
+export async function createSlabListing(
+  id: string,
+  type: 'fixed' | 'auction',
+  price: number,
+  buyout: number | null = null,
+  hours = 24,
+): Promise<{
+  data: { listing_id: string; ends_at: string; cpu_favourite: GradingService } | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('create_slab_listing', {
+    p_graded_id: id,
+    p_type: type,
+    p_price: price,
+    p_buyout: buyout,
+    p_hours: hours,
+  });
+  if (error) return { data: null, error: error.message };
+  return { data, error: null };
+}
+
+/** Mirror of grading_slab_reference — the model value a CPU bidder starts from. */
+export function slabReferenceValue(
+  rarity: string | undefined,
+  foil: boolean,
+  grade: number,
+  service: GradingService,
+  pristine = false,
+): number {
+  return gradedQuicksellPrice(rarity, foil, grade, service, { pristine });
+}
+
+export async function fetchSlabMarketValue(
+  cardId: string,
+  grade: number,
+  service: GradingService,
+  foil = false,
+  pristine = false,
+): Promise<{ sales: number; avg_price: number | null; reference: number } | null> {
+  const { data, error } = await supabase.rpc('get_slab_market_value', {
+    p_card_id: cardId,
+    p_grade: grade,
+    p_service: service,
+    p_foil: foil,
+    p_pristine: pristine,
+  });
+  if (error || !data) return null;
+  return data;
 }

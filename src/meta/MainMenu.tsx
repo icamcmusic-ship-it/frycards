@@ -24,7 +24,6 @@ import {
   History,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { CardOfTheDay } from './CardOfTheDay';
 import { LevelBadge, PopButton, Notice } from './ui';
 import { CurrencyBar } from './CurrencyBar';
 import { RoleBadge } from './RoleBadge';
@@ -40,6 +39,20 @@ import {
 } from '../lib/supabase';
 import { fmtCredits } from './economy';
 import { SafeImage } from './SafeImage';
+
+// Card of the Day pulls in the full card renderer and the 3D inspector
+// (~20 kB gzip); it sits below the menu tiles, so it loads after first paint
+// behind a placeholder of the same footprint.
+const CardOfTheDay = React.lazy(() =>
+  import('./CardOfTheDay').then((m) => ({ default: m.CardOfTheDay })),
+);
+function CardOfTheDayPlaceholder() {
+  return (
+    <div className="relative z-10 max-w-5xl mx-auto px-6 pb-6 flex justify-center" aria-hidden>
+      <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 w-[22rem] max-w-full h-[178px] opacity-60" />
+    </div>
+  );
+}
 
 // The screen list lives with the router; re-exported so existing imports keep working.
 export type { MetaScreen } from './routes';
@@ -655,10 +668,12 @@ export function MainMenu({
         ))}
       </div>
 
-      <CardOfTheDay
-        onBuild={guest ? undefined : () => onNavigate('decks')}
-        onPlay={cpuLocked ? undefined : onPlaySetup}
-      />
+      <React.Suspense fallback={<CardOfTheDayPlaceholder />}>
+        <CardOfTheDay
+          onBuild={guest ? undefined : () => onNavigate('decks')}
+          onPlay={cpuLocked ? undefined : onPlaySetup}
+        />
+      </React.Suspense>
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { holdLabel, loadPending, submitResult, submitting } from './meta/pending
 import { describeSetup, loadLastSetup, saveLastSetup } from './meta/lastSetup';
 import { legalModes } from './game/poker/deck';
 import { type ModeId } from './game/poker/constants';
-import { applyCardPool } from './game/poker/cardpool';
+import { applyBundledPool, applyCardPool } from './game/poker/cardpool';
 import { newMatchSeed, withTimeout } from './lib/utils';
 import { readCache, writeCache, versionedFetch } from './lib/cache';
 import {
@@ -24,7 +24,6 @@ import {
   stashChallengeDeck,
   stashPendingDeck,
 } from './meta/deckcode';
-import { DeckLinkPreview } from './meta/DeckLinkPreview';
 import type { CardTemplate } from './types';
 import { MetaProvider, useMeta } from './meta/MetaContext';
 import { AuthScreen } from './meta/AuthScreen';
@@ -42,6 +41,11 @@ import { useMotionMode } from './meta/useMotionMode';
 import { SLAB_CSS } from './meta/slabCss';
 import { ConfirmHost } from './meta/confirm';
 const MotionRoot = React.lazy(() => import('./meta/MotionRoot'));
+// Only shown when the URL carries a shared deck code; renders nothing while
+// its chunk loads (it is a modal, so no placeholder is needed).
+const DeckLinkPreview = React.lazy(() =>
+  import('./meta/DeckLinkPreview').then((m) => ({ default: m.DeckLinkPreview })),
+);
 import { type MotionMode } from './meta/matchPrefs';
 
 const CATALOG_CACHE_KEY = 'catalog';
@@ -716,16 +720,18 @@ function AppInner({
       <CurrencyToasts />
       {content}
       {linkedDeck && !match && (
-        <DeckLinkPreview
-          code={linkedDeck}
-          canOpenBuilder={!!session}
-          onOpenBuilder={() => {
-            stashPendingDeck(linkedDeck);
-            closeLinkedDeck();
-            go('decks');
-          }}
-          onClose={closeLinkedDeck}
-        />
+        <React.Suspense fallback={null}>
+          <DeckLinkPreview
+            code={linkedDeck}
+            canOpenBuilder={!!session}
+            onOpenBuilder={() => {
+              stashPendingDeck(linkedDeck);
+              closeLinkedDeck();
+              go('decks');
+            }}
+            onClose={closeLinkedDeck}
+          />
+        </React.Suspense>
       )}
     </RouterProvider>
   );
@@ -822,6 +828,10 @@ export default function App() {
           setPoolOffline(true);
         } else {
           setPoolOffline(true);
+          // Last resort: the bundled catalog, a lazy chunk in production.
+          return applyBundledPool().then((ok) => {
+            if (!ok) throw new Error('bundled catalog rejected');
+          });
         }
         // Media loads on demand. Fetching the entire catalog here can transfer
         // over a gigabyte before a player sees a single card.

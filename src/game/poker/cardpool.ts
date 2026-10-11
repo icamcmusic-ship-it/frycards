@@ -495,7 +495,7 @@ export const POOL: CardDef[] = [];
 export const POOL_BY_ID: Record<string, CardDef> = {};
 export const POOL_LEADERS: CardDef[] = [];
 
-let lastTemplates: CardTemplate[] = GENERATED_CARDS;
+let lastTemplates: CardTemplate[] = [];
 let byTypeIndex: Map<string, CardDef[]> | null = null;
 
 /** (Re)build the pool from a catalog. Refuses a catalog with no Leaders (a
@@ -518,7 +518,22 @@ export function rebuildPool(): boolean {
   return applyCardPool(lastTemplates);
 }
 
-applyCardPool(GENERATED_CARDS);
+/** The production app build defines this as `false` (vite.config.ts): the
+ * bundled catalog (~28 kB gzip) then drops out of the entry bundle, and App
+ * imports it on demand only when neither the network nor the cache has a
+ * catalog (see `applyBundledPool`). Everywhere else — vitest, the dev server,
+ * tsx scripts, the preview pages — the pool is filled at import, as before. */
+declare const __BUNDLED_POOL_AT_IMPORT__: boolean | undefined;
+if (typeof __BUNDLED_POOL_AT_IMPORT__ === 'undefined' || __BUNDLED_POOL_AT_IMPORT__) {
+  applyCardPool(GENERATED_CARDS);
+}
+
+/** Apply the bundled fallback catalog, loading it first if it is not in this
+ * bundle. Used by App when the catalog fetch fails and there is no cache. */
+export async function applyBundledPool(): Promise<boolean> {
+  const { GENERATED_CARDS: bundled } = await import('../generated-cards');
+  return applyCardPool(bundled);
+}
 
 /** Cards of one type (read-only; rebuilt lazily after each applyCardPool). */
 export function poolByType(t: string): CardDef[] {

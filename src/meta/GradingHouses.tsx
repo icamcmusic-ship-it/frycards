@@ -17,6 +17,11 @@ import {
   LOYALTY_PERK,
   REGISTRY_MILESTONES,
   bestForBands,
+  bestForBandsInsured,
+  insuranceClaimChance,
+  insuranceNetEV,
+  INSURANCE_FLOOR,
+  INSURANCE_RATE,
   fetchPopReport,
   fmtGrade,
   gradingEVTable,
@@ -160,6 +165,35 @@ export function EVTable() {
   );
 }
 
+function InsuranceNote() {
+  const insured = bestForBandsInsured();
+  return (
+    <div className="mt-2 fs-xs font-bold text-[var(--c-steel)]">
+      <div>
+        GRADE INSURANCE (+{Math.round(INSURANCE_RATE * 100)}% of the fee; a grade under{' '}
+        {INSURANCE_FLOOR} refunds the base fee):{' '}
+        {GRADING_SERVICES.map((s) => (
+          <span key={s.id} className="mr-2">
+            {s.short} claims {Math.round(insuranceClaimChance(s.id) * 100)}% · worth{' '}
+            {insuranceNetEV(s.id) >= 0 ? '+' : '−'}
+            {fmtCredits(Math.abs(Math.round(insuranceNetEV(s.id))))}/card
+          </span>
+        ))}
+      </div>
+      <div>
+        Insured, the bands become:{' '}
+        {insured
+          .map(
+            (b) =>
+              `${GRADING_SERVICE_BY_ID[b.service].short} ${b.from}${b.to == null ? '+' : `–${b.to}`}`,
+          )
+          .join(' · ')}
+        . Trade-ins turn five sub-7 slabs into one free grading.
+      </div>
+    </div>
+  );
+}
+
 export function RegistryPanel({ overview }: { overview: GradingOverview | null }) {
   if (!overview) {
     return <p className="fs-xs font-bold text-[var(--c-steel)]">Loading the registry…</p>;
@@ -294,6 +328,7 @@ export function HousesPanel({
           <BarChart3 className="w-4 h-4" aria-hidden /> EXPECTED VALUE BY RARITY
         </h2>
         <EVTable />
+        <InsuranceNote />
       </section>
       <section>
         <h2 className="heading-font text-sm mb-1 flex items-center gap-1.5">
