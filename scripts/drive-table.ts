@@ -33,16 +33,27 @@
  *   npm run drive:table
  *
  * Env: AUDIT_BASE (default http://localhost:3000), PLAYWRIGHT_CHROMIUM to point
- * at a preinstalled browser binary, SCENARIO_SECS (default 150, per-scenario
- * budget), STUCK_SECS (default 20), ONLY=<substring> to run matching
+ * at a preinstalled browser binary, GAME_STEPS (default 300: a game still
+ * running after this many driver steps is ended through CONCEDE, and the
+ * conceded game-over screen is verified like any other), STEP_MS (default 500:
+ * the wall-clock budget per step, so each game gets GAME_STEPS × STEP_MS plus
+ * a fixed allowance before it fails as too slow), STUCK_SECS (default 20), ONLY=<substring> to run matching
  * scenarios, SHOTS=<dir> to save a screenshot of each failure and game over.
- * Total runtime is bounded by the scenario budgets (six scenarios; a typical
+ * Total runtime is bounded by the per-game budgets (six scenarios; a typical
  * run is 4–6 minutes on a shared-CPU box).
  */
 import { chromium, type Browser, type Page } from 'playwright';
 
 const BASE = `${process.env.AUDIT_BASE ?? 'http://localhost:3000'}/table-preview.html`;
-const SCENARIO_MS = Number(process.env.SCENARIO_SECS ?? 150) * 1000;
+/*
+ * Seeds fix the deal and the bots, but not the game's length: bots act on
+ * timers while the driver polls, so the same seed can run 75 or 600 steps.
+ * A long game therefore ends via CONCEDE after GAME_STEPS, and the time limit
+ * is per game and scaled to that cap, so it only trips when steps get slow.
+ */
+const GAME_STEPS = Number(process.env.GAME_STEPS ?? 300);
+const STEP_MS = Number(process.env.STEP_MS ?? 500);
+const GAME_MS = GAME_STEPS * STEP_MS + 30_000;
 const STUCK_MS = Number(process.env.STUCK_SECS ?? 20) * 1000;
 const ONLY = process.env.ONLY ?? '';
 const SHOTS = process.env.SHOTS ?? '';
@@ -87,6 +98,7 @@ type Coverage = Record<
   | 'pass'
   | 'choose'
   | 'skip'
+  | 'concede'
   | 'rematch',
   number
 >;
@@ -97,6 +109,7 @@ interface Outcome {
   coverage: Coverage;
   results: string[];
   ms: number;
+  steps: number;
 }
 
 /** Deterministic driver choices per scenario. */
@@ -273,6 +286,7 @@ async function runScenario(browser: Browser, sc: Scenario): Promise<Outcome> {
     pass: 0,
     choose: 0,
     skip: 0,
+    concede: 0,
     rematch: 0,
   };
   const ctx = await browser.newContext({ viewport: { width: sc.w, height: sc.h } });
@@ -307,9 +321,15 @@ async function runScenario(browser: Browser, sc: Scenario): Promise<Outcome> {
   let lastChange = Date.now();
   let owedSince = 0;
   let steps = 0;
+  let gameSteps = 0;
+  let gameT0 = Date.now();
+  let conceded = false;
   while (finished < sc.matches) {
-    if (Date.now() - t0 > SCENARIO_MS) {
-      note(`no game over within ${SCENARIO_MS / 1000}s (finished ${finished}/${sc.matches})`);
+    if (Date.now() - gameT0 > GAME_MS) {
+      note(
+        `game ${finished + 1} not over within ${GAME_MS / 1000}s (${gameSteps} steps, ` +
+          `${((Date.now() - gameT0) / Math.max(1, gameSteps)).toFixed(0)} ms/step)`,
+      );
       await shot(page, `${sc.name}-timeout`);
       break;
     }
@@ -348,8 +368,13 @@ async function runScenario(browser: Browser, sc: Scenario): Promise<Outcome> {
         const rows = await page.locator('ol li').allInnerTexts();
         const youRow = rows.findIndex((r) => /\bYou\b/.test(r)) + 1;
         const m = title.match(/FINISHED (\d+)/);
-        const place = /WIN THE TABLE/.test(title) ? 1 : m ? Number(m[1]) : NaN;
-        if (place !== youRow) note(`game over says place ${place} but "You" is row ${youRow}`);
+        if (/CONCEDED/.test(title)) {
+          if (!conceded) note('game over says CONCEDED but the driver never conceded');
+          if (youRow < 1) note('conceded game over has no "You" row');
+        } else {
+          const place = /WIN THE TABLE/.test(title) ? 1 : m ? Number(m[1]) : NaN;
+          if (place !== youRow) note(`game over says place ${place} but "You" is row ${youRow}`);
+        }
         results.push(`${title.trim()} after ${steps} steps`);
         await shot(page, `${sc.name}-game-over-${finished + 1}`);
         finished++;
@@ -358,11 +383,25 @@ async function runScenario(browser: Browser, sc: Scenario): Promise<Outcome> {
           cov.rematch++;
           await page.waitForTimeout(300);
         }
+        gameSteps = 0;
+        gameT0 = Date.now();
+        conceded = false;
+        continue;
+      }
+
+      if (gameSteps >= GAME_STEPS && !conceded) {
+        // Long game: leave through the real concede path, then verify its game over.
+        await page.keyboard.press('Escape').catch(() => {});
+        await page.getByRole('button', { name: 'CONCEDE', exact: true }).click();
+        await page.getByRole('alertdialog').getByRole('button', { name: 'CONFIRM' }).click();
+        conceded = true;
+        cov.concede++;
         continue;
       }
 
       const did = await step(page, rand, cov);
       steps++;
+      gameSteps++;
       if (did) owedSince = 0;
       else if (owed) {
         // The match waits on us but there is nothing to press.
@@ -382,7 +421,7 @@ async function runScenario(browser: Browser, sc: Scenario): Promise<Outcome> {
     }
   }
   await ctx.close();
-  return { scenario: sc, problems, coverage: cov, results, ms: Date.now() - t0 };
+  return { scenario: sc, problems, coverage: cov, results, ms: Date.now() - t0, steps };
 }
 
 const browser = await chromium.launch(
@@ -401,6 +440,9 @@ try {
       `${o.problems.length ? 'FAIL' : 'ok  '} ${sc.name.padEnd(20)} ${(o.ms / 1000).toFixed(0).padStart(4)}s  ${o.results.join(' | ')}`,
     );
     console.log(`       ${c}`);
+    console.log(
+      `       ${o.steps} steps · ${((o.steps * 1000) / o.ms).toFixed(2)} steps/s · ${(o.ms / Math.max(1, o.steps)).toFixed(0)} ms/step`,
+    );
     for (const p of o.problems) console.log(`       ✗ ${p}`);
   }
 } finally {
