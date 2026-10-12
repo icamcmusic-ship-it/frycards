@@ -30,7 +30,8 @@
     "media:add": "tsx scripts/migrate-art.ts add",
     "size:check": "tsx scripts/check-bundle-size.ts",
     "art:pages": "tsx scripts/build-pages-art.ts",
-    "art:showcase": "tsx scripts/publish-showcase-art.ts"
+    "art:showcase": "tsx scripts/publish-showcase-art.ts",
+    "art:ink": "tsx scripts/art-ink.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

@@ -54,7 +54,7 @@ import {
   isAltArt,
   RARITY_HEX,
 } from '../meta/rarity';
-import { cardColors, Color } from '../game/poker/colors';
+import { cardColors } from '../game/poker/colors';
 import {
   KEYWORD_SPECS,
   KEYWORD_TEXT,
@@ -67,6 +67,9 @@ import { useFocusTrap } from './useFocusTrap';
 import { COLOR_PIP, colorBg } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 import { CARD_SIZES, type CardSize } from './cardSizes';
+import { FA_ACCENT, decodeFaInk, inkColor, inkHalo } from './artInk';
+import { FA_INK, MC_INK } from './artInk.generated';
+import { corsReadable, useVideoInk } from './useVideoInk';
 import type { CardVariant } from '../meta/variants';
 
 // The variant overlay renderer (procedural SVG art, shard split) only loads
@@ -211,10 +214,15 @@ const PREMIUM_CSS = `
 .mc-col .mc-over { opacity: 0; max-height: 0; margin-bottom: 0 !important; }
 .mc-name {
   margin: 0; font-family: 'Butler', Georgia, serif; font-weight: 400; line-height: 1.05;
-  letter-spacing: 0.09em; text-transform: uppercase; color: #fff; overflow-wrap: anywhere;
-  text-shadow: 0.07em 0.07em 0 #e01d0e, 0.12em 0.12em 0 #000;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--mc-ink, #fff); overflow-wrap: anywhere;
+  text-shadow: 0.07em 0.07em 0 #e01d0e, 0.12em 0.12em 0 var(--mc-ink-halo, #000);
+  /* Adaptive ink (useVideoInk) eases between light and dark, never strobes. */
+  transition: color 0.6s ease;
 }
-.mc-col .mc-name { text-shadow: 0.07em 0.07em 0 #e01d0e, 0.12em 0.12em 0 #000, 0 0 0.5em #000; }
+.mc-col .mc-name {
+  text-shadow: 0.07em 0.07em 0 #e01d0e, 0.12em 0.12em 0 var(--mc-ink-halo, #000),
+    0 0 0.5em var(--mc-ink-halo, #000);
+}
 .mc-sm .mc-name { font-weight: 700; }
 .mc-cr {
   display: flex; align-items: center; justify-content: center; gap: 0.6em;
@@ -254,10 +262,11 @@ const PREMIUM_CSS = `
 .mc-col .mc-hdl svg { transform: rotate(180deg); }
 .mc-hdl:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
-  .mc-halo, .mc-over, .mc-body, .mc-hdl svg { transition: none !important; }
+  .mc-halo, .mc-over, .mc-body, .mc-hdl svg, .mc-name { transition: none !important; }
 }
 html[data-motion='reduced'] .mc-halo, html[data-motion='reduced'] .mc-over,
-html[data-motion='reduced'] .mc-body, html[data-motion='reduced'] .mc-hdl svg { transition: none; }
+html[data-motion='reduced'] .mc-body, html[data-motion='reduced'] .mc-hdl svg,
+html[data-motion='reduced'] .mc-name { transition: none; }
 /* Full-Art "Headliner" pull-tab: tucked (.mc-col), the bill, headline and
    ticket fold away and only the flavour pull-quote stays. */
 .fa-tab, .fa-tab-body {
@@ -423,7 +432,9 @@ html[data-motion='reduced'] .premium-boost .aa-corona { opacity: 0.25; }
    pull-quote with an accent quote mark, and the rules on a ticket whose
    dashed stub holds the cost. --fa-a / --fa-b are the colour-identity
    accents. Literal inks throughout so light and INK themes print alike.
-   Fully static. */
+   Fully static. The name, tag and quote inks are per-card CSS vars measured
+   from the art at build time (scripts/art-ink.ts); unset, they fall back to
+   the design inks, and the shadows stay either way. */
 .fa-sky {
   background:
     linear-gradient(rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.42) 16%, transparent 28%),
@@ -437,20 +448,21 @@ html[data-motion='reduced'] .premium-boost .aa-corona { opacity: 0.25; }
   line-height: 0.92;
   text-transform: uppercase;
   text-align: center;
-  color: var(--fa-a);
-  text-shadow: 0.06em 0.06em 0 #141414, 0.09em 0.09em 0 var(--fa-b);
+  color: var(--fa-name-ink, var(--fa-a));
+  text-shadow: 0.06em 0.06em 0 var(--fa-name-sh, #141414), 0.09em 0.09em 0 var(--fa-b);
   overflow-wrap: anywhere;
 }
 .fa-tag {
   display: flex; align-items: center; justify-content: center; gap: 0.6em;
   font-family: 'FA Quote', 'Montserrat', sans-serif;
-  letter-spacing: 0.3em; line-height: 1; color: #fff; white-space: nowrap;
+  letter-spacing: 0.3em; line-height: 1; color: var(--fa-tag-ink, #fff); white-space: nowrap;
 }
 .fa-tag::before, .fa-tag::after { content: ''; width: 2.2em; height: 0.12em; background: var(--fa-a); flex: none; }
 .fa-quote {
   font-family: 'FA Quote', 'Montserrat', sans-serif;
-  font-style: italic; text-align: center; color: #fff;
-  text-shadow: 0 0 0.4em #000, 0 1px 2px #000; letter-spacing: 0.02em;
+  font-style: italic; text-align: center; color: var(--fa-quote-ink, #fff);
+  text-shadow: 0 0 0.4em var(--fa-quote-halo, #000), 0 1px 2px var(--fa-quote-halo, #000);
+  letter-spacing: 0.02em;
 }
 .fa-quote::before {
   content: '“'; display: block; height: 0.42em;
@@ -566,20 +578,6 @@ function smashFit(text: string, avail: number, max: number, min: number): number
   );
   return Math.round(Math.max(min, px) * 10) / 10;
 }
-
-/** Full-Art "Headliner" accents, one per colour identity, in the neon key
- * sampled from the Ember/Light art (neon-orange outline, acid-yellow drip).
- * The name prints in the first, its offset shadow and the ticket accents in
- * the second (the first again on a mono-colour card). */
-const FA_ACCENT: Record<Color, string> = {
-  Ember: '#FF6A2B',
-  Light: '#E6FF2E',
-  Tide: '#38D6FF',
-  Root: '#7CFF4F',
-  Gale: '#2DF5D0',
-  Shadow: '#B98CFF',
-  Void: '#D9DCE3',
-};
 
 /** clip-path for an n-point starburst (outer radius 50%, inner `inner`%). */
 function starburstClip(n: number, inner: number): string {
@@ -1469,6 +1467,7 @@ function CardArtBase({
   onLoaded,
   cover,
   boxWidth,
+  corsVideo,
 }: {
   def: CardDef;
   onLoaded?: () => void;
@@ -1480,6 +1479,9 @@ function CardArtBase({
    * paints into a box at most 240px wide, so this is the difference between
    * tens of kilobytes and tens of megabytes per card. */
   boxWidth?: number;
+  /** Request a video with CORS where its host allows it, so the Mythic face
+   * can read frames for its adaptive ink (see useVideoInk). */
+  corsVideo?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
   // A resized derivative that fails falls back to the full-size original once
@@ -1515,6 +1517,7 @@ function CardArtBase({
         muted
         playsInline
         disablePictureInPicture
+        crossOrigin={corsVideo && corsReadable(def.image) ? 'anonymous' : undefined}
         controls={false}
         onError={() => setBroken(true)}
         onLoadedData={onLoaded}
@@ -2443,6 +2446,14 @@ function CardFacePlain({
   // swallowed.
   const infoMode = useContext(CardInfoMode);
   const [tuckState, setTuckState] = useState<boolean | null>(null);
+  // Mythic: the title ink follows the video frame under it (useVideoInk),
+  // falling back to the build-time choice.
+  const faceRef = useRef<HTMLDivElement>(null);
+  useVideoInk(
+    faceRef,
+    size !== 'micro' && isMythic(def.rarity) && !serial && !!def.image && isVideoSrc(def.image),
+    MC_INK[def.id] ?? 'light',
+  );
   const mcHold = useRef<{ t?: ReturnType<typeof setTimeout>; held: boolean }>({ held: false });
   useEffect(() => () => clearTimeout(mcHold.current.t), []);
   const fit = fitSteps[Math.min(fitStep, fitSteps.length - 1)];
@@ -2547,6 +2558,8 @@ function CardFacePlain({
   const headliner = def.rarity === 'Full-Art' && !serial;
   const faA = FA_ACCENT[cardColorsForFace[0]] ?? FA_ACCENT.Void;
   const faB = FA_ACCENT[cardColorsForFace[1] ?? cardColorsForFace[0]] ?? faA;
+  // Per-card inks over the art, measured at build time (scripts/art-ink.ts).
+  const faInk = decodeFaInk(headliner ? FA_INK[def.id] : undefined);
   const faNamePx = headliner
     ? smashFit(
         def.name,
@@ -2566,6 +2579,7 @@ function CardFacePlain({
     ? (tuckState ?? tuckDefault)
     : credits && size === 'compact' && infoMode !== 'open';
   const setTuck = (v: boolean) => setTuckState(v);
+
   // The "FULL ART · VOL 1" tag is the first thing to go for space.
   const faTag = headliner && size !== 'compact' && fitGrow < 1;
 
@@ -2907,7 +2921,21 @@ function CardFacePlain({
 
   /** Full-Art "Headliner" top: the bill line (type left, colour dots and
    * tier mark right), the Smash headline and the "FULL ART · VOL 1" tag. */
-  const faVars = headliner ? ({ '--fa-a': faA, '--fa-b': faB } as React.CSSProperties) : undefined;
+  const faVars = headliner
+    ? ({
+        '--fa-a': faA,
+        '--fa-b': faB,
+        ...(faInk.name !== 'accent' && {
+          '--fa-name-ink': inkColor(faInk.name, faA),
+          '--fa-name-sh': faInk.name === 'dark' ? 'rgba(255,255,255,0.85)' : undefined,
+        }),
+        ...(faInk.tag !== 'light' && { '--fa-tag-ink': inkColor(faInk.tag, faA) }),
+        ...(faInk.quote !== 'light' && {
+          '--fa-quote-ink': inkColor(faInk.quote, faA),
+          '--fa-quote-halo': inkHalo(faInk.quote),
+        }),
+      } as React.CSSProperties)
+    : undefined;
   const faMasthead = headliner && (
     <div
       data-fc="masthead"
@@ -3127,6 +3155,7 @@ function CardFacePlain({
     // carry its own interactive control, and nested <button> elements are
     // invalid HTML / break screen-reader and keyboard navigation.
     <div
+      ref={faceRef}
       role="button"
       data-card-id={def.id}
       tabIndex={onClick ? 0 : -1}
@@ -3231,7 +3260,7 @@ function CardFacePlain({
               hasn't painted yet (or failed to load). */}
           {mythicArt && !dimmed && <div aria-hidden className="fc-my-scan absolute inset-0" />}
           <div className="absolute inset-0">
-            <CardArt def={def} cover boxWidth={SIZES[size].w} />
+            <CardArt def={def} cover boxWidth={SIZES[size].w} corsVideo={credits} />
           </div>
           {credits ? (
             <div aria-hidden className="mc-halo absolute inset-0" />

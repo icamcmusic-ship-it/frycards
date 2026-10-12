@@ -20,8 +20,13 @@
  *    card, a masthead or type line that overflows, a "+N" chip standing in
  *    for keyword chips, flavor text that is missing, or a Leader ability that
  *    is missing.
+ *  - ink: a Full-Art face whose headline or pull-quote does not print in the
+ *    ink scripts/art-ink.ts chose for that card's art.
  * A text box that had to fall back to scrolling (fade cue, every word still
- * reachable) is reported but is not a failure.
+ * reachable) is reported but is not a failure. So is text over art that
+ * misses WCAG 4.5:1 even in its best ink (from scripts/art-ink.report.json:
+ * the art is measured at build time, since this harness never loads it);
+ * there the text-shadow and outline carry it.
  *
  *   npm run dev &
  *   npx tsx scripts/audit-cardface.ts
@@ -29,7 +34,10 @@
 import { chromium } from 'playwright';
 import sharp from 'sharp';
 import { blockSupabase } from './lib/block-remote-media';
+import { readFileSync } from 'node:fs';
 import { POOL } from '../src/game/poker/cardpool';
+import { FA_INK } from '../src/components/artInk.generated';
+import { MIN_CONTRAST, decodeFaInk } from '../src/components/artInk';
 
 const BASE = process.env.AUDIT_BASE ?? 'http://localhost:3000';
 const RARITIES = [
@@ -109,82 +117,105 @@ for (const { rarity, reprint, tucked, reveal } of runs) {
     // The fit pass steps in layout effects until the text fits; measure only
     // once the page has stopped resizing itself.
     await page.waitForTimeout(600);
-    const found = await page.evaluate((exp) => {
-      const out: { id: string; kind: string; scroll?: boolean }[] = [];
-      const hit = (a: DOMRect, b: DOMRect) =>
-        Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5 &&
-        Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5;
-      const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-card-id]'));
-      for (const card of cards) {
-        const id = card.dataset.cardId!;
-        const add = (kind: string) => out.push({ id, kind });
-        const cr = card.getBoundingClientRect();
-        // Overlaps with the corner plate.
-        // A plate folded away inside a tucked pull-tab (inert) is not drawn.
-        const stats = card.querySelector('[data-fc="stats"]');
-        if (stats && !stats.closest('[inert]')) {
-          const s = stats.getBoundingClientRect();
-          for (const k of ['flavor', 'rules', 'ability']) {
-            for (const el of Array.from(card.querySelectorAll(`[data-fc="${k}"]`))) {
-              if (hit(el.getBoundingClientRect(), s)) add(`overlap: ${k} under the stat plate`);
+    const inks = rarity === 'Full-Art' ? FA_INK : {};
+    const found = await page.evaluate(
+      ([exp, inks, decoded]) => {
+        const out: { id: string; kind: string; scroll?: boolean }[] = [];
+        const hit = (a: DOMRect, b: DOMRect) =>
+          Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5 &&
+          Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5;
+        const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-card-id]'));
+        for (const card of cards) {
+          const id = card.dataset.cardId!;
+          const add = (kind: string) => out.push({ id, kind });
+          const cr = card.getBoundingClientRect();
+          // Overlaps with the corner plate.
+          // A plate folded away inside a tucked pull-tab (inert) is not drawn.
+          const stats = card.querySelector('[data-fc="stats"]');
+          if (stats && !stats.closest('[inert]')) {
+            const s = stats.getBoundingClientRect();
+            for (const k of ['flavor', 'rules', 'ability']) {
+              for (const el of Array.from(card.querySelectorAll(`[data-fc="${k}"]`))) {
+                if (hit(el.getBoundingClientRect(), s)) add(`overlap: ${k} under the stat plate`);
+              }
             }
           }
-        }
-        // Ellipses and line clamps that hide text.
-        for (const el of Array.from(card.querySelectorAll<HTMLElement>('*'))) {
-          const cs = getComputedStyle(el);
-          if (cs.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1)
-            add(`truncated: ellipsis "${(el.textContent ?? '').slice(0, 30)}"`);
-          const clamp = cs.getPropertyValue('-webkit-line-clamp');
-          if (clamp && clamp !== 'none' && el.scrollHeight > el.clientHeight + 1)
-            add(`truncated: line clamp "${(el.textContent ?? '').slice(0, 30)}"`);
-        }
-        // The text box: never overflowing unless it scrolls, never off the card.
-        const box = card.querySelector<HTMLElement>('[data-fc="textbox"]');
-        if (box) {
-          const b = box.getBoundingClientRect();
-          if (box.dataset.fcScroll === '1') out.push({ id, kind: 'scrolls', scroll: true });
-          else if (box.scrollHeight > box.clientHeight + 1)
-            add(`truncated: text box overflows by ${box.scrollHeight - box.clientHeight}px`);
-          if (b.bottom > cr.bottom + 1 || b.top < cr.top - 1)
-            add('truncated: text box off the card');
-        }
-        for (const k of ['masthead', 'typeline']) {
-          const el = card.querySelector<HTMLElement>(`[data-fc="${k}"]`);
-          if (el && el.scrollWidth > el.clientWidth + 1) add(`truncated: ${k} overflows`);
-        }
-        if (card.querySelector('[data-fc="chips-more"]')) add('truncated: keyword chips folded');
-        // A squeezed text column (a notch or flex sibling eating the row):
-        // every rules/flavour/ability block keeps >= 40% of the text box.
-        if (box && box.clientWidth > 0) {
-          for (const el of Array.from(
-            card.querySelectorAll<HTMLElement>(
-              '[data-fc="rules"], [data-fc="flavor"] p, [data-fc="ability"]',
-            ),
-          )) {
-            if (el.offsetParent === null || el.closest('[inert]')) continue;
-            if (el.offsetWidth < box.clientWidth * 0.4)
-              add(`squeezed: text column ${el.offsetWidth}px of ${box.clientWidth}px`);
+          // Ellipses and line clamps that hide text.
+          for (const el of Array.from(card.querySelectorAll<HTMLElement>('*'))) {
+            const cs = getComputedStyle(el);
+            if (cs.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1)
+              add(`truncated: ellipsis "${(el.textContent ?? '').slice(0, 30)}"`);
+            const clamp = cs.getPropertyValue('-webkit-line-clamp');
+            if (clamp && clamp !== 'none' && el.scrollHeight > el.clientHeight + 1)
+              add(`truncated: line clamp "${(el.textContent ?? '').slice(0, 30)}"`);
+          }
+          // The text box: never overflowing unless it scrolls, never off the card.
+          const box = card.querySelector<HTMLElement>('[data-fc="textbox"]');
+          if (box) {
+            const b = box.getBoundingClientRect();
+            if (box.dataset.fcScroll === '1') out.push({ id, kind: 'scrolls', scroll: true });
+            else if (box.scrollHeight > box.clientHeight + 1)
+              add(`truncated: text box overflows by ${box.scrollHeight - box.clientHeight}px`);
+            if (b.bottom > cr.bottom + 1 || b.top < cr.top - 1)
+              add('truncated: text box off the card');
+          }
+          for (const k of ['masthead', 'typeline']) {
+            const el = card.querySelector<HTMLElement>(`[data-fc="${k}"]`);
+            if (el && el.scrollWidth > el.clientWidth + 1) add(`truncated: ${k} overflows`);
+          }
+          if (card.querySelector('[data-fc="chips-more"]')) add('truncated: keyword chips folded');
+          // A squeezed text column (a notch or flex sibling eating the row):
+          // every rules/flavour/ability block keeps >= 40% of the text box.
+          if (box && box.clientWidth > 0) {
+            for (const el of Array.from(
+              card.querySelectorAll<HTMLElement>(
+                '[data-fc="rules"], [data-fc="flavor"] p, [data-fc="ability"]',
+              ),
+            )) {
+              if (el.offsetParent === null || el.closest('[inert]')) continue;
+              if (el.offsetWidth < box.clientWidth * 0.4)
+                add(`squeezed: text column ${el.offsetWidth}px of ${box.clientWidth}px`);
+            }
+          }
+          // The art fills its window (no letterboxed tile).
+          for (const m of Array.from(card.querySelectorAll<HTMLElement>('img, video'))) {
+            const win = m.parentElement;
+            if (!win || m.offsetParent === null) continue;
+            if (getComputedStyle(m).objectFit !== 'cover') add('art: not filling its window');
+            else if (m.offsetWidth < win.clientWidth - 1 || m.offsetHeight < win.clientHeight - 1)
+              add('art: smaller than its window');
+          }
+          // Adaptive ink: the face prints in the ink chosen for its art.
+          if (inks[id]) {
+            const want = decoded[id];
+            const rgb = { light: 'rgb(255, 255, 255)', dark: 'rgb(20, 20, 20)' } as const;
+            for (const [sel, k] of [
+              ['.fa-name', 'name'],
+              ['.fa-quote', 'quote'],
+            ] as const) {
+              const el = card.querySelector<HTMLElement>(sel);
+              const ink = want[k];
+              if (el && ink !== 'accent' && getComputedStyle(el).color !== rgb[ink])
+                add(`ink: ${k} is ${getComputedStyle(el).color}, chose ${ink}`);
+            }
+          }
+          const e = exp[id as keyof typeof exp] as
+            { flavor: boolean; abilities: number } | undefined;
+          if (e) {
+            if (e.flavor && !card.querySelector('[data-fc="flavor"]'))
+              add('truncated: flavor hidden');
+            const n = card.querySelectorAll('[data-fc="ability"]').length;
+            if (n < e.abilities) add(`truncated: ${e.abilities - n} ability rows missing`);
           }
         }
-        // The art fills its window (no letterboxed tile).
-        for (const m of Array.from(card.querySelectorAll<HTMLElement>('img, video'))) {
-          const win = m.parentElement;
-          if (!win || m.offsetParent === null) continue;
-          if (getComputedStyle(m).objectFit !== 'cover') add('art: not filling its window');
-          else if (m.offsetWidth < win.clientWidth - 1 || m.offsetHeight < win.clientHeight - 1)
-            add('art: smaller than its window');
-        }
-        const e = exp[id as keyof typeof exp] as { flavor: boolean; abilities: number } | undefined;
-        if (e) {
-          if (e.flavor && !card.querySelector('[data-fc="flavor"]'))
-            add('truncated: flavor hidden');
-          const n = card.querySelectorAll('[data-fc="ability"]').length;
-          if (n < e.abilities) add(`truncated: ${e.abilities - n} ability rows missing`);
-        }
-      }
-      return { out, cards: cards.length };
-    }, Object.fromEntries(expect));
+        return { out, cards: cards.length };
+      },
+      [
+        Object.fromEntries(expect),
+        inks as Record<string, string>,
+        Object.fromEntries(Object.keys(inks).map((id) => [id, decodeFaInk(inks[id])])),
+      ] as const,
+    );
     renders += found.cards;
     for (const f of found.out)
       // In the pack reveal a scroll fallback means the fit pass measured the
@@ -216,6 +247,28 @@ for (const [k, v] of scrollBuckets)
   console.log(
     `  scrolls: ${k}: ${v.length} (${v.slice(0, 4).join(', ')}${v.length > 4 ? ', ...' : ''})`,
   );
+// Text over art vs. its chosen ink, across the pool (measured at build time).
+interface InkRow {
+  ink: string;
+  ratio: number;
+}
+let inkReport: Record<string, Record<string, InkRow>> = {};
+try {
+  inkReport = JSON.parse(readFileSync('scripts/art-ink.report.json', 'utf8')).cards ?? {};
+} catch {
+  // no report yet
+}
+const measured = POOL.filter((c) => inkReport[c.id]);
+const short: string[] = [];
+for (const c of measured)
+  for (const [region, row] of Object.entries(inkReport[c.id]))
+    if (row.ratio < MIN_CONTRAST) short.push(`${c.id} ${region} ${row.ink} ${row.ratio}:1`);
+console.log(
+  `Text over art: ${measured.length} of ${POOL.length} cards' art measured (npm run art:ink); ` +
+    `${short.length} regions under ${MIN_CONTRAST}:1 in their best ink (text-shadow carries them).`,
+);
+for (const s of short.slice(0, 12)) console.log(`  contrast: ${s}`);
+if (short.length > 12) console.log(`  ...and ${short.length - 12} more`);
 if (problems.length === 0) process.exit(0);
 const byBucket = new Map<string, Problem[]>();
 for (const o of problems)
