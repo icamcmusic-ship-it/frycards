@@ -78,18 +78,24 @@ function AllOfRarity({
   size,
   foil,
   fixtureType,
+  reprint,
 }: {
   rarity: string;
   size: CardSize;
   foil?: boolean;
   fixtureType?: string | null;
+  reprint?: boolean;
 }) {
   // `&fixture=<type>`: a preview fixture — the first card of that type,
   // reprinted at this rarity (for a rarity the pool has no card of that type at).
   const fixture = fixtureType ? POOL.find((c) => c.type === fixtureType) : undefined;
+  // `&reprint=1`: every card in the pool reprinted at this rarity (the
+  // layout audit checks each template against the whole pool's text).
   const cards = fixture
     ? [{ ...fixture, rarity } as CardDef]
-    : POOL.filter((c) => c.rarity === rarity);
+    : reprint
+      ? POOL.map((c) => ({ ...c, rarity }) as CardDef)
+      : POOL.filter((c) => c.rarity === rarity);
   return (
     <div style={{ background: '#20242c', padding: 16 }}>
       <Band title={`${rarity} — all ${cards.length}`} cards={cards} size={size} foil={foil} />
@@ -191,6 +197,7 @@ createRoot(document.getElementById('root')!).render(
       size={allSize}
       foil={params.get('foil') === '1'}
       fixtureType={params.get('fixture')}
+      reprint={params.get('reprint') === '1'}
     />
   ) : (
     <Gallery />

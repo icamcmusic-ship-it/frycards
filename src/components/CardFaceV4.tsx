@@ -95,7 +95,7 @@ const PREMIUM_CSS = `
    A thick holographic frame with an ink outline and a soft STATIC sheen, the
    name in Anak Manja on a tilted yellow banner with a hard offset shadow, the
    art as a slightly rotated print over a halftone burst in the card's colour,
-   a stamped UR starburst seal, a gold-foil starburst cost badge and a
+   a gold-foil starburst cost badge and a
    black-and-yellow ULTRA RARE sash across the art's top-right corner. Nothing
    here animates. */
 .ur-prism {
@@ -138,7 +138,7 @@ const PREMIUM_CSS = `
   pointer-events: none;
 }
 .ur-print {
-  transform: rotate(-2.5deg);
+  transform: rotate(-1.2deg);
   border: 2px solid #1a1a1a;
   box-shadow: 0 0 8px 1px var(--ur-k), 2px 2px 0 #1a1a1a;
   overflow: hidden;
@@ -171,29 +171,18 @@ const PREMIUM_CSS = `
 }
 
 /* ---- Mythic "Black & Gold Monolith" (v8) ----
-   Black lacquer over the full-bleed looping video, a gold double keyline, a
-   huge hollow-stencil word behind the art's centre, the name in gold layered
-   stencil, an embossed gold seal with stencil ring text, and a black rules
-   panel / cost plate keylined in gold. The only motion is the hover-gated
+   The full-bleed looping video kept as clear as possible: a thin gold
+   keyline, a light lacquer gradient at the top (under the slim gold stencil
+   name) and the bottom, and a compact translucent rules panel pinned to the
+   bottom, plus the black cost plate keylined in gold. The only motion is the hover-gated
    gold glint (and the video itself). */
 .my-lacquer {
-  background: linear-gradient(180deg, rgba(0,0,0,0.65), transparent 26%, transparent 45%,
-    rgba(0,0,0,0.9) 66%, #000 100%);
+  background: linear-gradient(180deg, rgba(0,0,0,0.5), transparent 8%, transparent 70%,
+    rgba(0,0,0,0.35) 100%);
   pointer-events: none;
 }
 .my-keyline {
-  border: 2px solid #d4af37;
-  outline: 1px solid rgba(212, 175, 55, 0.6);
-  outline-offset: 2px;
-  pointer-events: none;
-}
-.my-bgword {
-  font-family: 'Stencil Extruded Hollow', 'Montserrat', sans-serif;
-  font-weight: 400;
-  color: rgba(212, 175, 55, 0.35);
-  line-height: 1;
-  white-space: nowrap;
-  letter-spacing: -0.02em;
+  border: 1px solid #d4af37;
   pointer-events: none;
 }
 /* Layered stencil: the Hollow face (its outline, inked) under the solid face
@@ -209,8 +198,8 @@ const PREMIUM_CSS = `
   color: transparent;
 }
 .my-panel {
-  background: rgba(0, 0, 0, 0.82);
-  border-top: 1px solid rgba(212, 175, 55, 0.55);
+  background: linear-gradient(0deg, rgba(0,0,0,0.82), rgba(0,0,0,0.6) 75%, rgba(0,0,0,0.3));
+  border-top: 1px solid rgba(212, 175, 55, 0.45);
 }
 .my-plate {
   background: #000;
@@ -378,6 +367,15 @@ html[data-motion='reduced'] .premium-card:hover .my-glint,
 html[data-motion='reduced'] .premium-boost .my-glint,
 html[data-motion='reduced'] .premium-card:hover .aa-corona,
 html[data-motion='reduced'] .premium-boost .aa-corona { opacity: 0.25; }
+
+/* Text-fit last resort: the rules box scrolls inside the card, with a fade
+   at the bottom edge as the cue that there is more. */
+.fc-scroll-fade {
+  overflow-y: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 10px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 10px), transparent);
+}
 `;
 
 function ensurePremiumStyles(): void {
@@ -409,15 +407,14 @@ const OUTER_BORDER_PX: Record<CardSize, number> = { micro: 1, compact: 2, standa
 
 /** Ultra-Rare "Prism Pop" geometry per tier (micro renders through MicroCard
  * and only gets the holographic ring). `frame` is the holo frame's width
- * inside the outer ink border; `badge` the gold starburst cost badge; `seal`
- * the stamped UR seal; `dot` the halftone pitch of the art window's burst. */
+ * inside the outer ink border; `badge` the gold starburst cost badge; `dot` the halftone pitch of the art window's burst. */
 const UR_GEOM: Record<
   Exclude<CardSize, 'micro'>,
-  { frame: number; badge: number; seal: number; dot: number; sashFont: number }
+  { frame: number; badge: number; dot: number; sashFont: number }
 > = {
-  full: { frame: 9, badge: 44, seal: 34, dot: 5, sashFont: 11 },
-  standard: { frame: 6, badge: 29, seal: 25, dot: 4, sashFont: 6.5 },
-  compact: { frame: 4, badge: 25, seal: 19, dot: 3, sashFont: 5 },
+  full: { frame: 5, badge: 27, dot: 5, sashFont: 9.5 },
+  standard: { frame: 4, badge: 19, dot: 4, sashFont: 5.5 },
+  compact: { frame: 3, badge: 16, dot: 3, sashFont: 4.5 },
 };
 
 /** Anak Manja's mean advance width (em) over A–Z — used to fit a name on the
@@ -441,83 +438,6 @@ function stencilFit(text: string, avail: number, max: number, min: number): numb
   return px >= min ? Math.round(px * 10) / 10 : null;
 }
 
-const MONOLITH_STOP = new Set(['THE', 'AND', 'FOR', 'FROM', 'WITH', 'INTO', 'OVER']);
-
-/**
- * The huge hollow-stencil word a Mythic prints behind its art: the most
- * distinctive word of the name (its longest letters-only word of 3–8
- * letters, first on a tie, skipping filler), else the card's type word.
- * Deterministic — the same card always prints the same word.
- */
-export function monolithWord(def: Pick<CardDef, 'name' | 'type'>): string {
-  let best = '';
-  for (const raw of def.name.toUpperCase().split(/\s+/)) {
-    const word = raw.replace(/[^A-Z]/g, '');
-    if (/\d/.test(raw)) continue;
-    if (word.length < 3 || word.length > 8 || MONOLITH_STOP.has(word)) continue;
-    if (word.length > best.length) best = word;
-  }
-  return best || def.type.toUpperCase();
-}
-
-/** Mythic's embossed gold seal: a ticked gold disc, MYTHIC ring text in the
- * stencil face on a black band, and a stencil M at the centre. */
-function MythicSealBase({
-  size,
-  className,
-  style,
-}: {
-  size: number;
-  className?: string;
-  style?: React.CSSProperties;
-}) {
-  const id = React.useId();
-  const gold = `my-seal-g${id}`;
-  const arc = `my-seal-a${id}`;
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 100 100"
-      width={size}
-      height={size}
-      className={className}
-      style={{ ...style, filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.7))' }}
-    >
-      <defs>
-        <linearGradient id={gold} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#fff3c4" />
-          <stop offset="0.35" stopColor="#d4af37" />
-          <stop offset="0.6" stopColor="#8a6d1f" />
-          <stop offset="1" stopColor="#ffe9a3" />
-        </linearGradient>
-        <path id={arc} d="M 50 50 m -33 0 a 33 33 0 1 1 66 0 a 33 33 0 1 1 -66 0" />
-      </defs>
-      <circle cx="50" cy="50" r="48" fill={`url(#${gold})`} stroke="#000" strokeWidth="2.5" />
-      <circle cx="50" cy="50" r="40" fill="#000" />
-      <text
-        fontFamily="'Stencil Extruded', Montserrat, sans-serif"
-        fontSize="11"
-        fill="#d4af37"
-        letterSpacing="1.5"
-      >
-        <textPath href={`#${arc}`}>MYTHIC MYTHIC MYTHIC</textPath>
-      </text>
-      <circle cx="50" cy="50" r="24" fill={`url(#${gold})`} stroke="#000" strokeWidth="2" />
-      <text
-        x="50"
-        y="61"
-        textAnchor="middle"
-        fontFamily="'Stencil Extruded', Montserrat, sans-serif"
-        fontSize="30"
-        fill="#1a1205"
-      >
-        M
-      </text>
-    </svg>
-  );
-}
-const MythicSeal = React.memo(MythicSealBase);
-
 /** clip-path for an n-point starburst (outer radius 50%, inner `inner`%). */
 function starburstClip(n: number, inner: number): string {
   const pts: string[] = [];
@@ -529,15 +449,12 @@ function starburstClip(n: number, inner: number): string {
   return `polygon(${pts.join(', ')})`;
 }
 const UR_BADGE_CLIP = starburstClip(12, 39);
-const UR_SEAL_CLIP = starburstClip(18, 43);
 
 /** A stamped starburst: an ink burst with a coloured burst inset inside it
- * (`inset` px) — `fill` is a CSS background or `fillClassName` a class that
- * paints one — and `children` centered on top. */
+ * (`inset` px, painted by `fillClassName`) and `children` centered on top. */
 function Starburst({
   clip,
   inset,
-  fill,
   fillClassName,
   className,
   style,
@@ -546,7 +463,6 @@ function Starburst({
 }: {
   clip: string;
   inset: number;
-  fill?: string;
   fillClassName?: string;
   className?: string;
   style?: React.CSSProperties;
@@ -558,7 +474,7 @@ function Starburst({
       <div
         aria-hidden
         className={cn('absolute', fillClassName)}
-        style={{ inset, clipPath: clip, background: fill }}
+        style={{ inset, clipPath: clip }}
       />
       <div className="absolute inset-0 flex items-center justify-center">{children}</div>
     </div>
@@ -1162,7 +1078,9 @@ export function KeywordChip({
   };
 
   return (
-    <span className="relative inline-block max-w-full">
+    // inline-flex, not inline-block: an inline-block wrapper takes the
+    // parent's line-height, which nearly doubled a small chip row's height.
+    <span className="relative inline-flex max-w-full">
       {inert ? (
         // A span, not a disabled button: an inert chip is not a control that
         // happens to be off, it is lettering on the card. No tab stop, no
@@ -1756,11 +1674,13 @@ function FittedChips({
   size,
   chips,
   introduceKeywords,
+  small,
 }: {
   def: CardDef;
   size: CardSize;
   chips: FaceChip[];
   introduceKeywords?: boolean;
+  small?: boolean;
 }) {
   const cfg = TIER[size];
   const total = chips.length;
@@ -1777,18 +1697,21 @@ function FittedChips({
   const chipsKey = chips.map((k) => k.kw).join('|');
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el && el.scrollHeight > el.clientHeight + 1) {
+    if (size === 'compact' && el && el.scrollHeight > el.clientHeight + 1) {
       setCap((c) => (c > 1 ? c - 1 : c));
     }
   }, [cap, resetKey, chipsKey, size, fonts]);
   if (total === 0 || cfg.keywordMax === 0) return null;
-  const shown = Math.min(cap, total);
+  // Standard and full show every chip (the face's fit pass makes room);
+  // only compact folds the overflow into a "+N" chip.
+  const shown = size === 'compact' ? Math.min(cap, total) : total;
   const hidden = total - shown;
   return (
     <div
       ref={ref}
       className={cn(
-        'shrink-0 flex flex-row flex-wrap content-start gap-1 min-h-[9px] overflow-hidden',
+        'shrink-0 flex flex-row flex-wrap content-start gap-1 min-h-[9px]',
+        size === 'compact' && 'overflow-hidden',
         // v28: `overflow-hidden` clips hit-testing as well as painting, so on
         // `full` — the one tier whose chips ARE tap targets — it was also
         // clipping the `.tap-target` expansion, leaving a chip that declares
@@ -1803,9 +1726,9 @@ function FittedChips({
         // pulled back out of the flow by a matching -5px margin, so the
         // layout is exactly what the old 7px gave.
         size === 'full'
-          ? 'max-h-[78px] py-[12px] -my-[5px]'
+          ? 'py-[12px] -my-[5px]'
           : size === 'standard'
-            ? 'max-h-[30px]'
+            ? null
             : size === 'compact'
               ? 'max-h-[20px]'
               : 'max-h-[11px]',
@@ -1817,7 +1740,7 @@ function FittedChips({
           kw={k.kw}
           label={k.label}
           text={k.text}
-          small={cfg.keywordSmall}
+          small={cfg.keywordSmall || small}
           autoIntroduce={introduceKeywords}
           accent={k.accent}
           inert={!cfg.chipsInteractive}
@@ -1833,6 +1756,7 @@ function FittedChips({
                 ? 'fs-xs px-1.5'
                 : 'text-[8.5px] px-1.5',
           )}
+          data-fc="chips-more"
           title="More abilities — expand the card to see everything"
         >
           +{hidden}
@@ -1853,10 +1777,16 @@ function FittedRules({
   className,
   small,
   inert,
+  clamp,
+  tight,
 }: {
   text: string;
   fontPx: number;
   maxLines: number;
+  /** Only the compact tier clamps (the inspector shows the full text);
+   * standard and full always print every word, sized by the face's fit. */
+  clamp: boolean;
+  tight?: boolean;
   onArt: boolean;
   className?: string;
   small: boolean;
@@ -1876,22 +1806,30 @@ function FittedRules({
     const box = el?.parentElement;
     // Where flavor text is shown (standard/full), the rules paragraph gives
     // up lines first when the box overflows (down to one).
-    if (el && box && box.scrollHeight > box.clientHeight + 1) {
+    if (clamp && el && box && box.scrollHeight > box.clientHeight + 1) {
       setLines((l) => (l > 1 ? l - 1 : l));
     }
-  }, [lines, resetKey, className, small, onArt, fonts]);
+  }, [lines, resetKey, className, small, onArt, fonts, clamp]);
   return (
     <p
       ref={ref}
       data-fc="rules"
       title={text}
-      className={cn('shrink-0 leading-snug break-words font-semibold', className)}
+      className={cn(
+        'shrink-0 break-words font-semibold',
+        tight ? 'leading-tight' : 'leading-snug',
+        className,
+      )}
       style={{
         fontSize: fontPx,
-        display: '-webkit-box',
-        WebkitBoxOrient: 'vertical',
-        WebkitLineClamp: lines,
-        overflow: 'hidden',
+        ...(clamp
+          ? {
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: lines,
+              overflow: 'hidden',
+            }
+          : null),
         textShadow: onArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
       }}
     >
@@ -1901,69 +1839,40 @@ function FittedRules({
 }
 
 /** Flavor text on the standard and full faces (U69: hidden on compact and
- * micro): renders at up to `MAX_LINES`
- * clamped lines and MEASURES its wrapper — while the clamped paragraph doesn't
- * fit the leftover space it sheds one line at a time; when not even one line
- * fits, it drops out entirely rather than run under the corner plate. The
- * rules paragraph above it gives up space first. */
+ * micro). Always printed in full — never clamped or dropped: the face's fit
+ * pass (see FIT_STEPS) shrinks the type and grows the text box until it
+ * fits, and scrolls the box as a last resort. */
 function FittedFlavor({
   text,
   fontPx,
   onArt,
   setClassName,
+  tight,
 }: {
   text: string;
   fontPx: number;
   /** Rendered over artwork (full-bleed template) — lighter divider + shadow. */
   onArt: boolean;
   setClassName: string;
+  tight?: boolean;
 }) {
-  const MAX_LINES = 4;
-  const [lines, setLines] = useState(MAX_LINES);
-  const ref = useRef<HTMLDivElement>(null);
-  const resetKey = `${text}|${fontPx}`;
-  const [prevResetKey, setPrevResetKey] = useState(resetKey);
-  if (prevResetKey !== resetKey) {
-    setPrevResetKey(resetKey);
-    setLines(MAX_LINES);
-  }
-  const fonts = useFontEpoch();
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (
-      el &&
-      (el.scrollHeight > el.clientHeight + 1 ||
-        (el.parentElement && el.parentElement.scrollHeight > el.parentElement.clientHeight + 1))
-    ) {
-      setLines((l) => (l > 0 ? l - 1 : l));
-    }
-  }, [lines, resetKey, setClassName, onArt, fonts]);
-  // Even one line did not fit: the chips and rules above already filled the
-  // box, and a clamped line would spill into the padding reserved for the
-  // corner plate (overflow-hidden clips at the border box, not the padding).
-  // Drop the flavor rather than print it under the plate.
-  if (lines === 0) return null;
   return (
     <div
-      ref={ref}
       // Layout-audit hook (scripts/audit-cardface.ts) — the flavor block and
       // the corner plate are the two boxes that must never intersect.
       data-fc="flavor"
       className={cn(
         // Pinned to the bottom of the text box under a dashed rule, per the
         // template's flavor divider.
-        'mt-auto pt-1 border-t border-dashed shrink-0 overflow-hidden',
+        'mt-auto border-t border-dashed shrink-0',
+        tight ? 'pt-0.5' : 'pt-1',
         onArt ? 'border-white/30' : 'border-[var(--c-ink)]/40',
       )}
     >
       <p
-        className={cn('leading-snug break-words', setClassName)}
+        className={cn('break-words', tight ? 'leading-tight' : 'leading-snug', setClassName)}
         style={{
           fontSize: fontPx,
-          display: '-webkit-box',
-          WebkitBoxOrient: 'vertical',
-          WebkitLineClamp: lines,
-          overflow: 'hidden',
           textShadow: onArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
         }}
       >
@@ -2252,6 +2161,47 @@ function CardFaceBase(
   );
 }
 
+/** Whether a text box's content runs past its content box — into the bottom
+ * padding that keeps it clear of the corner plate, or out of the box. Uses
+ * offsets (not client rects) so a scaled or 3D-transformed card measures the
+ * same as a flat one. */
+function textOverflows(el: HTMLElement): boolean {
+  if (el.scrollHeight > el.clientHeight + 1) return true;
+  const limit = el.clientHeight - parseFloat(getComputedStyle(el).paddingBottom || '0');
+  for (const c of Array.from(el.children) as HTMLElement[]) {
+    if (c.offsetHeight > 0 && c.offsetTop + c.offsetHeight > limit + 1) return true;
+  }
+  return false;
+}
+
+/** The text-fit ladder per tier: `z` scales the rules/ability/flavor type
+ * (type shrinks to its floor before the art gives up any room),
+ * `grow` gives the text box more of the card (0 = the template's own art
+ * size). Both bottom out at 0.8x (6px rules type at standard, 7.2px at full). */
+const FIT_STEPS: Record<'full' | 'standard', { z: number; grow: 0 | 1 | 2 | 3 | 4 | 5 }[]> = {
+  full: [
+    { z: 1, grow: 0 },
+    { z: 0.92, grow: 0 },
+    { z: 0.85, grow: 0 },
+    { z: 0.8, grow: 0 },
+    { z: 0.8, grow: 1 },
+    { z: 0.8, grow: 2 },
+    { z: 0.8, grow: 3 },
+    { z: 0.8, grow: 4 },
+  ],
+  standard: [
+    { z: 1, grow: 0 },
+    { z: 0.92, grow: 0 },
+    { z: 0.86, grow: 0 },
+    { z: 0.8, grow: 0 },
+    { z: 0.8, grow: 1 },
+    { z: 0.8, grow: 2 },
+    { z: 0.8, grow: 3 },
+    { z: 0.8, grow: 4 },
+    { z: 0.8, grow: 5 },
+  ],
+};
+
 function CardFacePlain({
   def,
   size = 'standard',
@@ -2293,9 +2243,54 @@ function CardFacePlain({
    * plate instead of the normal rarity treatment. */
   serial?: { number: number; cap: number };
 }) {
+  // Text fit (standard/full): every word of the rules, abilities and flavor is
+  // always printed. Step through FIT_STEPS — smaller type, tighter leading,
+  // then a taller text box at the art's expense — until the text box stops
+  // overflowing; past the last step the box scrolls (with a fade cue).
+  const fitSteps = FIT_STEPS[size === 'full' ? 'full' : 'standard'];
+  const [fitStep, setFitStep] = useState(0);
+  const fitKey = `${def.id}|${def.rarity}|${size}|${serial ? 1 : 0}`;
+  const [prevFitKey, setPrevFitKey] = useState(fitKey);
+  if (prevFitKey !== fitKey) {
+    setPrevFitKey(fitKey);
+    setFitStep(0);
+  }
+  const textBoxRef = useRef<HTMLDivElement>(null);
+  const fitFonts = useFontEpoch();
+  useLayoutEffect(() => {
+    if (size !== 'full' && size !== 'standard') return;
+    const el = textBoxRef.current;
+    if (el && fitStep < fitSteps.length && textOverflows(el)) {
+      setFitStep((n) => n + 1);
+    }
+  }, [fitStep, fitKey, fitFonts, size, fitSteps.length]);
+  // The corner plate's footprint inside the text box (see `notched`): an
+  // estimate first, then measured from the rendered plate.
+  const [plateNotch, setPlateNotch] = useState({ w: 44, h: PLATE_CLEARANCE[size] });
+  useLayoutEffect(() => {
+    if (size !== 'full' && size !== 'standard') return;
+    const box = textBoxRef.current;
+    const plate = box?.closest('[data-card-id]')?.querySelector('[data-fc="stats"]');
+    if (!box || !plate) return;
+    const b = box.getBoundingClientRect();
+    const k = box.offsetWidth ? b.width / box.offsetWidth : 1;
+    if (!k) return;
+    const cs = getComputedStyle(box);
+    const p = plate.getBoundingClientRect();
+    const right = b.right - parseFloat(cs.paddingRight) * k - parseFloat(cs.borderRightWidth) * k;
+    const bottom =
+      b.bottom - parseFloat(cs.paddingBottom) * k - parseFloat(cs.borderBottomWidth) * k;
+    const w = Math.max(0, Math.ceil((right - p.left) / k + 3));
+    const h = Math.max(0, Math.ceil((bottom - p.top) / k + 2));
+    setPlateNotch((n) => (Math.abs(n.w - w) > 0.5 || Math.abs(n.h - h) > 0.5 ? { w, h } : n));
+  }, [fitStep, fitKey, fitFonts, size]);
+  const fitScroll = fitStep >= fitSteps.length;
+  const fit = fitSteps[Math.min(fitStep, fitSteps.length - 1)];
+  const fitZ = size === 'full' || size === 'standard' ? fit.z : 1;
+  const fitGrow = size === 'full' || size === 'standard' ? fit.grow : 0;
+
   // The board/list `micro` tier renders through its own purpose-built
   // art-forward template (see MicroCard) instead of a shrunken full card.
-  // Safe to branch here: CardFace itself calls no hooks.
   if (size === 'micro') {
     return (
       <MicroCard
@@ -2349,7 +2344,7 @@ function CardFacePlain({
   const mythicArt = isMythic(def.rarity);
   // Ultra-Rare "Prism Pop" (framed, never serialized — a serial print has
   // its own frame): holo frame, yellow name banner, burst-backed art print,
-  // UR seal, ULTRA RARE sash and a gold starburst cost badge. Fully static.
+  // ULTRA RARE sash and a gold starburst cost badge. Fully static.
   const prism = def.rarity === 'Ultra-Rare' && !serial && !bleed;
   const ur = prism ? UR_GEOM[size] : null;
   // The identity colour the UR art burst is printed in.
@@ -2369,12 +2364,11 @@ function CardFacePlain({
     monolith && (size === 'full' || size === 'standard')
       ? stencilFit(
           def.name,
-          w - 2 * OUTER_BORDER_PX[size] - 20,
-          size === 'full' ? 20 : 13,
-          size === 'full' ? 14 : 10,
+          w - 2 * OUTER_BORDER_PX[size] - (size === 'full' ? 70 : 46),
+          size === 'full' ? 15 : 11,
+          size === 'full' ? 11 : 9,
         )
       : null;
-  const bgWord = monolith && (size === 'full' || size === 'standard') ? monolithWord(def) : null;
   // Banner name size in Anak Manja (full/standard only; null = Montserrat).
   // The banner spans the card minus its border and most of the holo frame;
   // the type icon and padding take the rest.
@@ -2432,14 +2426,24 @@ function CardFacePlain({
    * set-symbol slot). */
   const typeLine = (
     <div
+      data-fc="typeline"
       className={cn(
         'relative z-10 flex items-center justify-between gap-1 shrink-0 px-1.5',
+        // Ultra-Rare standard/full: the cost mark (moved here from the banner)
+        // wraps under a long type line rather than crushing it.
+        prism && size !== 'compact' && 'flex-wrap',
         cfg.typeLine,
       )}
     >
       <span
         className={cn(
-          'font-bold uppercase tracking-wide truncate',
+          'font-bold uppercase tracking-wide',
+          // Standard/full print the whole type line (wrapping if it must).
+          size === 'compact'
+            ? 'truncate'
+            : prism
+              ? 'grow break-words'
+              : 'min-w-0 flex-1 break-words',
           monolith
             ? 'text-[#d4af37] tracking-[0.12em]'
             : bleed
@@ -2451,7 +2455,7 @@ function CardFacePlain({
         {typeLineText(def)}
         {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
       </span>
-      {prism && <span className="flex-1" />}
+      {prism && size === 'compact' && <span className="flex-1" />}
       {prism && costMark}
       {def.rarity && (
         <span
@@ -2467,34 +2471,55 @@ function CardFacePlain({
 
   /** Rules + Leader abilities + flavor — identical content in both templates,
    * inked on paper in the framed one and white-on-scrim in the bleed one. */
-  const textContent = (
+  const chipsBlock = (
     <>
       {chips.length > 0 && (
-        <FittedChips def={def} size={size} chips={chips} introduceKeywords={introduceKeywords} />
+        <FittedChips
+          def={def}
+          size={size}
+          chips={chips}
+          introduceKeywords={introduceKeywords}
+          // A crowded standard face prints its chips at the compact scale.
+          small={size === 'standard' && fitStep >= 2}
+        />
       )}
+    </>
+  );
+  const rulesBlock = (
+    <>
       {cfg.showRules && rules && (
         <FittedRules
           text={rules}
-          fontPx={fitFontSize(rules, cfg.rulesFont, cfg.rulesFont - 2, 90)}
+          fontPx={fitFontSize(rules, cfg.rulesFont, cfg.rulesFont - 2, 90) * fitZ}
           maxLines={cfg.rulesLines}
+          clamp={size === 'compact'}
+          tight={fitStep > 0}
           onArt={bleed}
           className={chips.length > 0 ? 'mt-1' : undefined}
           small={size !== 'full'}
           inert={!cfg.chipsInteractive}
         />
       )}
+    </>
+  );
+  const abilitiesBlock = (
+    <>
       {cfg.showRules && def.type === 'Leader' && (def.abilities?.length ?? 0) > 0 && (
         <div className="flex flex-col gap-0.5 mt-1">
           {def.abilities!.map((ab, i) => (
             <div
               key={i}
-              className="flex items-start gap-1 leading-snug break-words"
-              style={{ fontSize: cfg.rulesFont, ...overArt }}
+              data-fc="ability"
+              className={cn(
+                'flex items-start gap-1 break-words',
+                fitStep > 0 ? 'leading-tight' : 'leading-snug',
+              )}
+              style={{ fontSize: cfg.rulesFont * fitZ, ...overArt }}
             >
               <span
                 className="shrink-0 font-mono font-black rounded-full px-1 border"
                 style={{
-                  fontSize: Math.max(6, cfg.rulesFont - 1),
+                  fontSize: Math.max(5.5, (cfg.rulesFont - 1) * fitZ),
                   color: bleed ? '#FDBA74' : '#C2410C',
                   borderColor: 'color-mix(in srgb, #EA580C 45%, transparent)',
                   backgroundColor: 'color-mix(in srgb, #EA580C 12%, transparent)',
@@ -2514,14 +2539,55 @@ function CardFacePlain({
           ))}
         </div>
       )}
+    </>
+  );
+  const flavorBlock = (
+    <>
       {cfg.showFlavor && def.flavor && (
         <FittedFlavor
           text={def.flavor}
-          fontPx={flavorFontPx}
+          fontPx={Math.max(5.5, flavorFontPx * fitZ)}
+          tight={fitStep > 0}
           onArt={bleed}
           setClassName={set.className}
         />
       )}
+    </>
+  );
+  // Standard/full: the last block shares its row with a notch the size of
+  // the corner plate, so text wraps beside the plate instead of the whole
+  // box reserving a strip under it (measured — see plateNotch).
+  const notched = size !== 'compact' && !!plateValue;
+  const blocks = [chipsBlock, rulesBlock, abilitiesBlock, flavorBlock].filter(
+    (_, i) =>
+      [
+        chips.length > 0,
+        cfg.showRules && !!rules,
+        cfg.showRules && def.type === 'Leader' && (def.abilities?.length ?? 0) > 0,
+        cfg.showFlavor && !!def.flavor,
+      ][i],
+  );
+  const lastIsFlavor = cfg.showFlavor && !!def.flavor;
+  const textContent = notched ? (
+    <>
+      {blocks.slice(0, -1).map((b, i) => (
+        <React.Fragment key={i}>{b}</React.Fragment>
+      ))}
+      <div className={cn('flex items-end shrink-0', lastIsFlavor && 'mt-auto')}>
+        <div className="flex flex-col min-w-0 flex-1">{blocks[blocks.length - 1]}</div>
+        <div
+          aria-hidden
+          data-fc="notch"
+          className="shrink-0"
+          style={{ width: plateNotch.w, height: plateNotch.h }}
+        />
+      </div>
+    </>
+  ) : (
+    <>
+      {blocks.map((b, i) => (
+        <React.Fragment key={i}>{b}</React.Fragment>
+      ))}
     </>
   );
 
@@ -2534,7 +2600,7 @@ function CardFacePlain({
         <Starburst
           data-fc="stats"
           clip={UR_BADGE_CLIP}
-          inset={size === 'compact' ? 1.5 : 2.5}
+          inset={size === 'full' ? 2 : 1.5}
           fillClassName="ur-foil"
           className="z-30"
           style={{ right: ur.frame - 4, bottom: ur.frame - 4, width: ur.badge, height: ur.badge }}
@@ -2548,17 +2614,16 @@ function CardFacePlain({
           <span
             className={cn(
               'leading-none text-[#1a1a1a]',
-              size === 'compact' ? 'font-black' : 'ur-anak',
+              // Below full the badge is small: a solid face reads better
+              // than the hollow display face.
+              size === 'full' ? 'ur-anak' : 'font-black tracking-tighter',
             )}
             style={{
               fontSize:
-                size === 'compact'
-                  ? Math.min(9, 15 / plateValue.length)
-                  : Math.min(
-                      size === 'full' ? 17 : 12.5,
-                      (ur.badge * 0.62) / (plateValue.length * 0.66),
-                    ),
-              paddingTop: size === 'compact' ? 0 : 2,
+                size === 'full'
+                  ? Math.min(13, (ur.badge * 0.72) / (plateValue.length * 0.66))
+                  : Math.min(9, (ur.badge * 0.8) / (plateValue.length * 0.6)),
+              paddingTop: size === 'full' ? 2 : 0,
             }}
           >
             {plateValue}
@@ -2726,20 +2791,7 @@ function CardFacePlain({
             <CardArt def={def} cover boxWidth={SIZES[size].w} />
           </div>
           {monolith ? (
-            <>
-              <div aria-hidden className="my-lacquer absolute inset-0" />
-              {bgWord && (
-                <div
-                  aria-hidden
-                  className="my-bgword absolute left-1/2 top-[39%] -translate-x-1/2 -translate-y-1/2"
-                  style={{
-                    fontSize: Math.min(h * 0.24, (w * 0.86) / (bgWord.length * 0.82)),
-                  }}
-                >
-                  {bgWord}
-                </div>
-              )}
-            </>
+            <div aria-hidden className="my-lacquer absolute inset-0" />
           ) : (
             <div
               aria-hidden
@@ -2766,10 +2818,11 @@ function CardFacePlain({
           opacity over the art on the bleed one, and a static prismatic band
           (black title, no motion) on a foil print. */}
       <div
+        data-fc="masthead"
         className={cn(
           'relative z-20 flex items-center gap-1 pl-1.5 pr-1 shrink-0',
           // Mythic: a centred title block straight on the lacquer.
-          monolith ? 'flex-col justify-center' : 'justify-between',
+          'justify-between',
           cfg.headerPy,
           prism
             ? 'ur-banner'
@@ -2787,7 +2840,7 @@ function CardFacePlain({
             ? { marginLeft: 2 - ur.frame, marginRight: 2 - ur.frame, marginTop: 1 }
             : monolith
               ? // Mythic: clear of the gold double keyline.
-                { paddingTop: size === 'compact' ? 6 : size === 'full' ? 12 : 9 }
+                { paddingTop: size === 'compact' ? 4 : size === 'full' ? 6 : 5 }
               : undefined
         }
       >
@@ -2795,7 +2848,6 @@ function CardFacePlain({
           className={cn(
             'flex items-center gap-1 min-w-0 uppercase leading-tight',
             anakPx ? 'ur-anak' : 'heading-font tracking-[0.03em]',
-            monolith && 'justify-center text-center max-w-full',
             monolith
               ? 'text-[#d4af37]'
               : isFoil || prism
@@ -2816,7 +2868,11 @@ function CardFacePlain({
             </span>
           ) : (
             <span
-              className={cn('break-words line-clamp-2', monolith && 'my-gold-text')}
+              className={cn(
+                'break-words',
+                size === 'compact' && 'line-clamp-2',
+                monolith && 'my-gold-text',
+              )}
               style={{
                 fontSize: anakPx ?? nameFontPx,
                 // Anak Manja's caps sit high in its em box.
@@ -2836,17 +2892,52 @@ function CardFacePlain({
         <>
           <div
             className={cn(
-              'relative overflow-hidden shrink-0 mx-1.5 mt-1 border',
-              // Ultra-Rare: a slightly shorter window, so the thicker frame and
-              // the banner don't eat into the rules text.
+              'relative shrink-0 border',
+              // Ultra-Rare: the window runs edge to edge inside the slim holo
+              // frame and tucks up under the name banner, so the print is
+              // as large as the old 4:3 window; the sash overlaps
+              // its edges rather than taking space from it.
               ur
-                ? 'aspect-[16/11] ur-burst border-[#1a1a1a]'
-                : 'aspect-[4/3] border-[var(--c-ink)]',
+                ? cn(
+                    size === 'full'
+                      ? [
+                          'aspect-[8/7]',
+                          'aspect-[4/3]',
+                          'aspect-[3/2]',
+                          'aspect-[2/1]',
+                          'aspect-[5/2]',
+                          'aspect-[5/2]',
+                        ][fitGrow]
+                      : [
+                          'aspect-[4/3]',
+                          'aspect-[3/2]',
+                          'aspect-[16/9]',
+                          'aspect-[5/2]',
+                          'aspect-[3/1]',
+                          'aspect-[4/1]',
+                        ][fitGrow],
+                    'ur-burst border-[#1a1a1a] mx-0.5',
+                  )
+                : cn(
+                    'overflow-hidden border-[var(--c-ink)] mx-1.5 mt-1',
+                    [
+                      'aspect-[4/3]',
+                      'aspect-[16/10]',
+                      'aspect-[2/1]',
+                      'aspect-[5/2]',
+                      'aspect-[3/1]',
+                      'aspect-[4/1]',
+                    ][fitGrow],
+                  ),
               ur && size === 'full' && 'border-2',
             )}
             style={
               ur
-                ? ({ '--ur-k': urInk, '--ur-dot': `${ur.dot}px` } as React.CSSProperties)
+                ? ({
+                    '--ur-k': urInk,
+                    '--ur-dot': `${ur.dot}px`,
+                    marginTop: size === 'full' ? -7 : -5,
+                  } as React.CSSProperties)
                 : undefined
             }
           >
@@ -2854,7 +2945,7 @@ function CardFacePlain({
               // Ultra-Rare: the art as a slightly rotated print over the burst.
               <div
                 className="ur-print absolute z-[1]"
-                style={{ top: '7%', left: '9%', right: '9%', bottom: '13%' }}
+                style={{ top: '5%', left: '3%', right: '3%', bottom: '3%' }}
               >
                 <CardArt def={def} cover boxWidth={SIZES[size].w} />
                 {isFoil && <div aria-hidden className="fc-foil-wash absolute inset-0" />}
@@ -2884,55 +2975,27 @@ function CardFacePlain({
             {isFoil && !ur && <div aria-hidden className="fc-foil-wash absolute inset-0" />}
             {ur && (
               <>
-                {/* Stamped UR seal, bottom-left. */}
-                <Starburst
-                  clip={UR_SEAL_CLIP}
-                  inset={size === 'compact' ? 1 : 2}
-                  fill="#ffd54f"
-                  className="z-[2] pointer-events-none"
-                  style={{
-                    left: 2,
-                    bottom: 2,
-                    width: ur.seal,
-                    height: ur.seal,
-                    transform: 'rotate(-14deg)',
-                  }}
-                >
-                  <span
-                    className="flex items-center justify-center rounded-full bg-white border-[#1a1a1a] text-[#1a1a1a] leading-none"
-                    style={{
-                      width: '58%',
-                      height: '58%',
-                      borderWidth: size === 'compact' ? 1 : 1.5,
-                    }}
-                  >
-                    <span
-                      className={size === 'full' ? 'ur-anak' : 'font-black'}
-                      style={{
-                        fontSize: size === 'full' ? 13 : size === 'standard' ? 7.5 : 6,
-                        paddingTop: size === 'full' ? 2 : 0,
-                      }}
-                    >
-                      UR
-                    </span>
-                  </span>
-                </Starburst>
                 {/* Black-and-yellow ULTRA RARE sash across the top-right corner. */}
                 <span
                   aria-hidden
-                  className={cn(
-                    'ur-sash absolute z-[2]',
-                    size === 'full' ? 'ur-anak' : 'font-black uppercase tracking-wide',
-                  )}
-                  style={{
-                    width: '62%',
-                    right: '-19%',
-                    top: '12%',
-                    fontSize: ur.sashFont,
-                    padding: size === 'full' ? '3px 0 1px' : '1.5px 0 1px',
-                  }}
+                  className="absolute inset-0 z-[2] overflow-hidden pointer-events-none"
                 >
-                  ULTRA RARE
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'ur-sash absolute',
+                      size === 'full' ? 'ur-anak' : 'font-black uppercase tracking-wide',
+                    )}
+                    style={{
+                      width: '46%',
+                      right: '-14%',
+                      top: '8%',
+                      fontSize: ur.sashFont,
+                      padding: size === 'full' ? '3px 0 1px' : '1.5px 0 1px',
+                    }}
+                  >
+                    ULTRA RARE
+                  </span>
                 </span>
               </>
             )}
@@ -2969,16 +3032,28 @@ function CardFacePlain({
           {typeLine}
 
           <div
+            ref={textBoxRef}
+            data-fc="textbox"
+            data-fc-scroll={fitScroll ? '1' : undefined}
             className={cn(
-              'relative z-10 flex flex-col flex-1 min-h-0 overflow-hidden mx-1.5 mt-0.5 mb-0.5 border-t border-[var(--c-ink)]',
+              'relative z-10 flex flex-col flex-1 min-h-0 mx-1.5 mt-0.5 mb-0.5 border-t border-[var(--c-ink)]',
+              fitScroll ? 'fc-scroll-fade' : 'overflow-hidden',
               cfg.textBoxPad,
             )}
             // Reserve the bottom-right corner for the chip-cost / nerve plate
             // (Ultra-Rare's starburst badge is taller than the ink plate).
-            style={{ paddingBottom: ur ? ur.badge - 5 : PLATE_CLEARANCE[size] }}
+            style={{
+              // No plate (a Location): nothing to clear on standard/full.
+              paddingBottom:
+                notched || (size !== 'compact' && !plateValue)
+                  ? 2
+                  : ur
+                    ? ur.badge - 5
+                    : PLATE_CLEARANCE[size],
+            }}
           >
             {textContent}
-            <div className="flex-1 shrink-[2]" />
+            {!notched && <div className="flex-1 shrink-[2]" />}
           </div>
         </>
       )}
@@ -2998,11 +3073,18 @@ function CardFacePlain({
               'relative z-20 flex flex-col min-h-0 pb-1',
               // Mythic: a black rules panel under a gold keyline, inside the
               // card's gold double keyline.
-              monolith ? 'my-panel pt-1 mx-[6px] mb-[5px]' : 'pt-4',
+              monolith ? 'my-panel pt-0.5 mx-px mb-px' : 'pt-4',
             )}
             style={
               monolith
-                ? undefined
+                ? {
+                    // A Leader's abilities need a little more room than a
+                    // power's rules line; everything else stays ≤27%.
+                    maxHeight:
+                      size === 'compact'
+                        ? '40%'
+                        : `${(def.type === 'Leader' ? 35 : size === 'full' ? 27 : 25) + fitGrow * 9}%`,
+                  }
                 : {
                     background:
                       'linear-gradient(0deg, rgba(20,15,10,0.94), rgba(20,15,10,0.5) 70%, transparent)',
@@ -3011,11 +3093,21 @@ function CardFacePlain({
           >
             {typeLine}
             <div
+              ref={textBoxRef}
+              data-fc="textbox"
+              data-fc-scroll={fitScroll ? '1' : undefined}
               className={cn(
-                'relative z-10 flex flex-col min-h-0 overflow-hidden text-white mx-1.5',
+                'relative z-10 flex flex-col min-h-0 text-white mx-1.5',
+                fitScroll ? 'fc-scroll-fade' : 'overflow-hidden',
                 cfg.textBoxPad,
+                monolith && 'pt-0',
               )}
-              style={{ paddingBottom: PLATE_CLEARANCE[size] }}
+              // Standard/full: the plate sits in a notch beside the last block
+              // (see `notched`), not in a strip of its own.
+              style={{
+                paddingBottom:
+                  notched || (size !== 'compact' && !plateValue) ? 2 : PLATE_CLEARANCE[size],
+              }}
             >
               {textContent}
             </div>
@@ -3031,25 +3123,13 @@ function CardFacePlain({
       {statPlate}
       {footer}
 
-      {/* Mythic's glowing gold inner frame sits above every art layer. */}
-      {/* Mythic "Black & Gold Monolith": the gold double keyline, the
-          embossed seal and the hover-gated glint. */}
+      {/* Mythic "Black & Gold Monolith": the thin gold keyline (above every
+          art layer) and the hover-gated glint. */}
       {monolith && (
         <div
           aria-hidden
           className="my-keyline absolute z-20"
-          style={
-            size === 'compact'
-              ? { inset: 3, borderWidth: 1, outlineOffset: 1 }
-              : { inset: size === 'full' ? 5 : 4 }
-          }
-        />
-      )}
-      {monolith && size === 'full' && (
-        <MythicSeal
-          size={54}
-          className="absolute z-20 pointer-events-none"
-          style={{ right: 12, top: '27%' }}
+          style={size === 'compact' ? { inset: 2 } : { inset: size === 'full' ? 3 : 2 }}
         />
       )}
       {/* A foil print is a STATIC prismatic stamp: a shining border ring, no
