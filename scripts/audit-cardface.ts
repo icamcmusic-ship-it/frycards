@@ -4,7 +4,7 @@
  * Every card in the pool is rendered in a real browser at `full` and
  * `standard` — the two sizes that must print ALL of a card's text (compact
  * and micro abbreviate; the inspector shows the full card) — at its own
- * rarity, and additionally reprinted at the Ultra-Rare and Mythic templates
+ * rarity, and additionally reprinted at the Ultra-Rare, Full-Art and Mythic templates
  * (their art-forward layouts leave the least room for text).
  *
  * It FAILS on:
@@ -38,7 +38,7 @@ const RARITIES = [
   'Mythic',
 ];
 /** Templates every pool card is also reprinted at. */
-const REPRINT = ['Ultra-Rare', 'Mythic'];
+const REPRINT = ['Ultra-Rare', 'Full-Art', 'Mythic'];
 const SIZES = ['full', 'standard'];
 
 const expect = new Map(
