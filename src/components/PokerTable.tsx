@@ -126,7 +126,7 @@ import { askConfirm } from '../meta/confirm';
 import { useReducedMotion } from '../meta/useMotionMode';
 import { ChipFlights } from './ChipFlights';
 import { SfxBurst, type Sfx } from './SfxBurst';
-import { CardFace } from './CardFaceV4';
+import { CardFace, CardInfoMode } from './CardFaceV4';
 import { Card3DInspector } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
 import { PlayingCard } from './PlayingCard';
@@ -508,7 +508,17 @@ function useThinkClock(decisionKey: string, paused: boolean, cap: number) {
 // ===========================================================================
 // The table
 // ===========================================================================
-export function PokerTable({
+/** The table prints every card face open: a pull-tab face (Mythic, Full-Art)
+ * never hides a cost or rules line the player needs to play. */
+export function PokerTable(props: React.ComponentProps<typeof PokerTableInner>) {
+  return (
+    <CardInfoMode.Provider value="open">
+      <PokerTableInner {...props} />
+    </CardInfoMode.Provider>
+  );
+}
+
+function PokerTableInner({
   setup,
   tutorial = false,
   onExit,

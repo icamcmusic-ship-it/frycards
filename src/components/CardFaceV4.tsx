@@ -25,7 +25,14 @@
  * game's v6.0 layout pass; card dimensions and the rarity / foil / serialized
  * systems carried over unchanged.
  */
-import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { VisibleVideo } from './VisibleVideo';
 import { createPortal } from 'react-dom';
 import { Swords, Crown, MapPin, Wand2, Zap, Coins, Flame } from 'lucide-react';
@@ -66,6 +73,14 @@ import type { CardVariant } from '../meta/variants';
 // once a variant card is actually on screen.
 const VariantLayer = React.lazy(() => import('./variants/VariantLayer'));
 
+/**
+ * How the info pull-tab faces (Mythic, Full-Art) open. 'auto' = each
+ * template's default (Mythic expanded, Full-Art tucked); 'open' = every face
+ * expanded with all its text (the table, where cost and rules are play
+ * information, and the layout audit); 'tucked' = every tab face tucked.
+ */
+export const CardInfoMode = React.createContext<'auto' | 'open' | 'tucked'>('auto');
+
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
 }
@@ -89,7 +104,7 @@ export function kwList(def: CardDef): string[] {
  *   setting: animations stop and the hover-gated layers settle to a faint
  *   static state.
  */
-const PREMIUM_STYLE_ID = 'frycards-premium-templates-v81';
+const PREMIUM_STYLE_ID = 'frycards-premium-templates-v82';
 const PREMIUM_CSS = `
 /* ---- Ultra-Rare "Prism Pop" (v8) ----
    A thick holographic frame with an ink outline and a soft STATIC sheen, the
@@ -170,57 +185,96 @@ const PREMIUM_CSS = `
   pointer-events: none;
 }
 
-/* ---- Mythic "Black & Gold Monolith" (v8) ----
-   The full-bleed looping video kept as clear as possible: a thin gold
-   keyline, a light lacquer gradient at the top (under the slim gold stencil
-   name) and the bottom, and a compact translucent rules panel pinned to the
-   bottom, plus the black cost plate keylined in gold. The only motion is the hover-gated
-   gold glint (and the video itself). */
-.my-lacquer {
-  background: linear-gradient(180deg, rgba(0,0,0,0.5), transparent 8%, transparent 70%,
-    rgba(0,0,0,0.35) 100%);
+/* ---- Mythic "Opening Credits" (v10) ----
+   No panels: a centred title-sequence lockup in a soft pool of shadow over
+   the full-bleed looping video — a spaced yellow overline, the name in
+   Butler caps with a red-and-black offset print shadow, a credit rule
+   carrying the cost, then the rules set centred like credits. Collapsed
+   (.mc-col: a tap, a 420 ms press-and-hold, or the yellow chevron) the
+   shadow lifts and only the title and the cost line stay, as a
+   lower-third. */
+.mc-halo {
+  background: radial-gradient(110% 52% at 50% 78%, rgba(0,0,0,0.88) 0, rgba(0,0,0,0.78) 50%,
+    rgba(0,0,0,0) 80%);
   pointer-events: none;
+  transition: opacity 0.42s cubic-bezier(.22,.9,.24,1), transform 0.42s cubic-bezier(.22,.9,.24,1);
 }
+.mc-col .mc-halo { opacity: 0.75; transform: translateY(40%) scaleY(0.45); }
+.mc-lock { text-align: center; color: #fff; }
+.mc-over {
+  font-family: 'Montserrat', sans-serif; font-weight: 800; line-height: 1;
+  letter-spacing: 0.32em; text-transform: uppercase; color: #fad028;
+  max-height: 2em; overflow: hidden;
+  transition: opacity 0.42s cubic-bezier(.22,.9,.24,1), max-height 0.42s cubic-bezier(.22,.9,.24,1),
+    margin 0.42s cubic-bezier(.22,.9,.24,1);
+}
+.mc-col .mc-over { opacity: 0; max-height: 0; margin-bottom: 0 !important; }
+.mc-name {
+  margin: 0; font-family: 'Butler', Georgia, serif; font-weight: 400; line-height: 1.05;
+  letter-spacing: 0.09em; text-transform: uppercase; color: #fff; overflow-wrap: anywhere;
+  text-shadow: 0.07em 0.07em 0 #e01d0e, 0.12em 0.12em 0 #000;
+}
+.mc-col .mc-name { text-shadow: 0.07em 0.07em 0 #e01d0e, 0.12em 0.12em 0 #000, 0 0 0.5em #000; }
+.mc-sm .mc-name { font-weight: 700; }
+.mc-cr {
+  display: flex; align-items: center; justify-content: center; gap: 0.6em;
+  font-family: 'Montserrat', sans-serif; font-weight: 800; line-height: 1;
+  letter-spacing: 0.24em; color: #fad028; white-space: nowrap;
+}
+.mc-cr .mc-ln { flex: 1; height: 2px; background: linear-gradient(90deg, transparent, #fad028); }
+.mc-cr .mc-ln:last-child { transform: scaleX(-1); }
+.mc-body {
+  display: grid; grid-template-rows: 1fr;
+  transition: grid-template-rows 0.42s cubic-bezier(.22,.9,.24,1), opacity 0.3s;
+}
+.mc-bi { overflow: hidden; min-height: 0; }
+.mc-col .mc-body { grid-template-rows: 0fr; opacity: 0; }
+.mc-body [data-fc='rules'], .mc-body [data-fc='ability'] {
+  font-family: 'Butler', Georgia, serif; font-weight: 400; text-align: center;
+  text-shadow: 0 1px 2px #000;
+}
+.mc-body [data-fc='ability'], .mc-body .flex-wrap { justify-content: center; }
+.mc-body [data-fc='ability'] > span:last-child { font-weight: 400; }
+.mc-body [data-fc='flavor'] { border: 0; margin-top: 0.45em; padding-top: 0; text-align: center; }
+.mc-body [data-fc='flavor'] p { font-family: 'Butler', Georgia, serif; font-style: italic; color: #e8dcc0; }
+.mc-body [data-fc='flavor'] p::before { content: '“'; }
+.mc-body [data-fc='flavor'] p::after { content: '”'; }
+.mc-hdl {
+  position: absolute; z-index: 40; left: 50%; transform: translateX(-50%);
+  display: grid; place-items: center; padding: 0; cursor: pointer;
+  border: 2px solid #161616; border-radius: 999px; background: #fad028;
+  box-shadow: 2px 2px 0 #161616;
+}
+.mc-hdl.tap-target::after { min-width: 44px; min-height: 44px; }
+.mc-hdl svg {
+  width: 55%; height: 60%; fill: none; stroke: #161616; stroke-width: 3;
+  stroke-linecap: round; stroke-linejoin: round;
+  transition: transform 0.42s cubic-bezier(.22,.9,.24,1);
+}
+.mc-col .mc-hdl svg { transform: rotate(180deg); }
+.mc-hdl:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .mc-halo, .mc-over, .mc-body, .mc-hdl svg { transition: none !important; }
+}
+html[data-motion='reduced'] .mc-halo, html[data-motion='reduced'] .mc-over,
+html[data-motion='reduced'] .mc-body, html[data-motion='reduced'] .mc-hdl svg { transition: none; }
+/* Full-Art "Headliner" pull-tab: tucked (.mc-col), the bill, headline and
+   ticket fold away and only the flavour pull-quote stays. */
+.fa-tab, .fa-tab-body {
+  transition: opacity 0.42s cubic-bezier(.22,.9,.24,1), transform 0.42s cubic-bezier(.22,.9,.24,1),
+    grid-template-rows 0.42s cubic-bezier(.22,.9,.24,1);
+}
+.mc-col .fa-tab { opacity: 0; transform: translateY(-12px); pointer-events: none; }
+.fa-tab-body { display: grid; grid-template-rows: 1fr; }
+.mc-col .fa-tab-body { grid-template-rows: 0fr; opacity: 0; overflow: hidden; }
+.mc-col .fa-tab-body > * { min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .fa-tab, .fa-tab-body { transition: none !important; } }
+html[data-motion='reduced'] .fa-tab, html[data-motion='reduced'] .fa-tab-body { transition: none; }
+/* The board token (micro) keeps a thin gold keyline. */
 .my-keyline {
   border: 1px solid #d4af37;
   pointer-events: none;
 }
-/* Layered stencil: the Hollow face (its outline, inked) under the solid face
-   (gold), stacked in one grid cell so the outline reads round each letter. */
-.my-st { display: inline-grid; line-height: 1.2; white-space: nowrap; }
-.my-st > span { grid-area: 1 / 1; font-weight: 400; }
-.my-st .my-st-o { font-family: 'Stencil Extruded Hollow', 'Montserrat', sans-serif; color: #000; -webkit-text-stroke: 0.02em #000; }
-.my-st .my-st-f { font-family: 'Stencil Extruded', 'Montserrat', sans-serif; color: #d4af37; }
-.my-gold-text {
-  background: linear-gradient(180deg, #fff3c4 0%, #f3cf6b 35%, #a67c1a 60%, #ffe9a3 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.my-panel {
-  background: linear-gradient(0deg, rgba(0,0,0,0.82), rgba(0,0,0,0.6) 75%, rgba(0,0,0,0.3));
-  border-top: 1px solid rgba(212, 175, 55, 0.45);
-}
-.my-plate {
-  background: #000;
-  border: 1px solid #d4af37;
-  box-shadow: inset 0 0 0 1px #000, inset 0 0 0 2px rgba(212, 175, 55, 0.45);
-  color: #f3cf6b;
-}
-@keyframes my-glint-kf {
-  0% { background-position: 160% 0; }
-  100% { background-position: -60% 0; }
-}
-.my-glint {
-  opacity: 0;
-  transition: opacity 400ms ease;
-  background: linear-gradient(115deg, transparent 40%, rgba(255, 233, 163, 0.35) 50%, transparent 60%);
-  background-size: 250% 100%;
-  mix-blend-mode: screen;
-  pointer-events: none;
-}
-.premium-card:hover .my-glint,
-.premium-boost .my-glint { opacity: 1; animation: my-glint-kf 3.2s ease-in-out infinite; }
 
 /* ---- Alt-Art "Prism Ink" (v7.0) ----
    A hand-picked alternate printing's premium template: the always-on
@@ -349,10 +403,7 @@ const PREMIUM_CSS = `
   html:not([data-motion='full']) .fc-art-sweep,
   html:not([data-motion='full']) .fc-my-scan,
   html:not([data-motion='full']) .fc-my-spark { animation: none; }
-  html:not([data-motion='full']) .my-glint,
   html:not([data-motion='full']) .aa-corona { animation: none; }
-  html:not([data-motion='full']) .premium-card:hover .my-glint,
-  html:not([data-motion='full']) .premium-boost .my-glint,
   html:not([data-motion='full']) .premium-card:hover .aa-corona,
   html:not([data-motion='full']) .premium-boost .aa-corona { opacity: 0.25; }
 }
@@ -361,10 +412,7 @@ html[data-motion='reduced'] .fc-art-ghost,
 html[data-motion='reduced'] .fc-art-sweep,
 html[data-motion='reduced'] .fc-my-scan,
 html[data-motion='reduced'] .fc-my-spark { animation: none; }
-html[data-motion='reduced'] .my-glint,
 html[data-motion='reduced'] .aa-corona { animation: none; }
-html[data-motion='reduced'] .premium-card:hover .my-glint,
-html[data-motion='reduced'] .premium-boost .my-glint,
 html[data-motion='reduced'] .premium-card:hover .aa-corona,
 html[data-motion='reduced'] .premium-boost .aa-corona { opacity: 0.25; }
 
@@ -473,14 +521,34 @@ function anakFit(text: string, avail: number, max: number, min: number): number 
   return px >= min ? Math.round(px * 10) / 10 : null;
 }
 
-/** Stencil Extruded's mean advance width (em) over A–Z. */
-const STENCIL_EM = 0.66;
+/** `el`'s layout offset inside `root` (summed offsetLeft/Top), immune to
+ * CSS transforms on either; null when `el` is not laid out under `root`. */
+function offsetIn(el: HTMLElement, root: HTMLElement | null): { x: number; y: number } | null {
+  let x = 0;
+  let y = 0;
+  let e: HTMLElement | null = el;
+  while (e && e !== root) {
+    x += e.offsetLeft;
+    y += e.offsetTop;
+    e = e.offsetParent as HTMLElement | null;
+  }
+  return e === root && root ? { x, y } : null;
+}
 
-/** Stencil name size for `text` in `avail` px, or null below `min` (the
- * caller falls back to a Montserrat name). */
-function stencilFit(text: string, avail: number, max: number, min: number): number | null {
-  const px = Math.min(max, avail / (Math.max(1, text.length) * STENCIL_EM));
-  return px >= min ? Math.round(px * 10) / 10 : null;
+/** Butler Roman's mean advance width (em) over A–Z, plus the title's
+ * 0.09em tracking (Bold is ~13% wider — the compact name). */
+const BUTLER_EM = 0.72;
+
+/** Mythic "Opening Credits" title size: as large as `max` while the longest
+ * word fits one line of `avail` px and the whole name about two lines. */
+function butlerFit(text: string, avail: number, max: number, min: number): number {
+  const longest = Math.max(1, ...text.split(/\s+/).map((t) => t.length));
+  const px = Math.min(
+    max,
+    avail / (longest * BUTLER_EM),
+    (2 * avail * 0.86) / (Math.max(1, text.length) * BUTLER_EM),
+  );
+  return Math.round(Math.max(min, px) * 10) / 10;
 }
 
 /** Smash Stadium's mean advance width (em) over A–Z (its fallback, Cracked
@@ -1434,7 +1502,9 @@ function CardArtBase({
       </div>
     );
   }
-  const artClass = cn('w-full h-full bg-[var(--c-ink)]', cover ? 'object-cover' : 'object-contain');
+  // Always cover: a contained square print letterboxed inside a wider
+  // window (the fit ladder widens it) read as a small tile in a frame.
+  const artClass = cn('w-full h-full bg-[var(--c-ink)] object-cover', cover && 'object-center');
   if (isVideoSrc(def.image)) {
     return (
       <VisibleVideo
@@ -2347,19 +2417,34 @@ function CardFacePlain({
     const box = textBoxRef.current;
     const plate = box?.closest('[data-card-id]')?.querySelector('[data-fc="stats"]');
     if (!box || !plate) return;
-    const b = box.getBoundingClientRect();
-    const k = box.offsetWidth ? b.width / box.offsetWidth : 1;
-    if (!k) return;
+    // Layout (offset) geometry, not getBoundingClientRect: the face is often
+    // measured mid-transform (the pack reveal's flip/scale-in), where a
+    // client-rect ratio collapses towards 0 and the notch came out wider
+    // than the text box — wrapping the flavor one letter per line.
+    const root = box.closest<HTMLElement>('[data-card-id]');
+    const pos = offsetIn(box, root);
+    const pp = offsetIn(plate as HTMLElement, root);
+    if (!pos || !pp) return;
     const cs = getComputedStyle(box);
-    const p = plate.getBoundingClientRect();
-    const right = b.right - parseFloat(cs.paddingRight) * k - parseFloat(cs.borderRightWidth) * k;
+    const right =
+      pos.x + box.offsetWidth - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth);
     const bottom =
-      b.bottom - parseFloat(cs.paddingBottom) * k - parseFloat(cs.borderBottomWidth) * k;
-    const w = Math.max(0, Math.ceil((right - p.left) / k + 3));
-    const h = Math.max(0, Math.ceil((bottom - p.top) / k + 2));
+      pos.y + box.offsetHeight - parseFloat(cs.paddingBottom) - parseFloat(cs.borderBottomWidth);
+    // Never more than half the box: the text beside it keeps a real column.
+    const w = Math.min(Math.round(box.clientWidth / 2), Math.max(0, Math.ceil(right - pp.x + 3)));
+    const h = Math.max(0, Math.ceil(bottom - pp.y + 2));
     setPlateNotch((n) => (Math.abs(n.w - w) > 0.5 || Math.abs(n.h - h) > 0.5 ? { w, h } : n));
   }, [fitStep, fitKey, fitFonts, size]);
   const fitScroll = fitStep >= fitSteps.length;
+  // Info pull-tab (Mythic "Opening Credits", Full-Art "Headliner"): the
+  // face's text can be tucked away to show the art. null = the template's
+  // default (see `tucked`). A 420 ms press-and-hold tucks it; the timer and
+  // whether it fired live in a ref so the click that ends the hold can be
+  // swallowed.
+  const infoMode = useContext(CardInfoMode);
+  const [tuckState, setTuckState] = useState<boolean | null>(null);
+  const mcHold = useRef<{ t?: ReturnType<typeof setTimeout>; held: boolean }>({ held: false });
+  useEffect(() => () => clearTimeout(mcHold.current.t), []);
   const fit = fitSteps[Math.min(fitStep, fitSteps.length - 1)];
   const fitZ = size === 'full' || size === 'standard' ? fit.z : 1;
   const fitGrow = size === 'full' || size === 'standard' ? fit.grow : 0;
@@ -2431,19 +2516,17 @@ function CardFacePlain({
   // treatment instead.
   const artFx = raritySuperPlus(def.rarity) && !bleed && !isFoil && !serial && !dimmed && !prism;
   const ribbon = rarityUltraPlus(def.rarity) && !bleed && !prism;
-  // Mythic "Black & Gold Monolith" (full/standard print the stencil faces;
-  // compact keeps a Montserrat name in gold). The stencil fonts are caps-only
-  // A–Z: anything else in a name falls back to Montserrat via unicode-range.
-  const monolith = mythic;
-  const stencilPx =
-    monolith && (size === 'full' || size === 'standard')
-      ? stencilFit(
-          def.name,
-          w - 2 * OUTER_BORDER_PX[size] - (size === 'full' ? 70 : 46),
-          size === 'full' ? 15 : 11,
-          size === 'full' ? 11 : 9,
-        )
-      : null;
+  // Mythic "Opening Credits" (never serialized — a serial print has its own
+  // frame): a centred title lockup over the video; see `mcBottom`.
+  const credits = mythic;
+  const mcNamePx = credits
+    ? butlerFit(
+        def.name,
+        w - 2 * OUTER_BORDER_PX[size] - (size === 'full' ? 24 : size === 'standard' ? 14 : 10),
+        size === 'full' ? 20 : size === 'standard' ? 12.5 : 10,
+        size === 'full' ? 12 : size === 'standard' ? 8 : 7,
+      ) * (size === 'compact' ? 0.88 : 1)
+    : 0;
   // Banner name size in Anak Manja (full/standard only; null = Montserrat).
   // The banner spans the card minus its border and most of the holo frame;
   // the type icon and padding take the rest.
@@ -2472,6 +2555,17 @@ function CardFacePlain({
         size === 'full' ? 13 : size === 'standard' ? 9 : 8,
       )
     : 0;
+  // Info pull-tab. Mythic opens expanded; Full-Art opens tucked to its
+  // pull-quote. Compact never tabs: a compact Mythic prints the collapsed
+  // lower-third and a compact Full-Art its whole (small) face — except where
+  // the game needs the text (CardInfoMode 'open', the table), which opens
+  // every face. 'tucked' forces the tucked state (previews).
+  const tabbable = (credits || headliner) && (size === 'full' || size === 'standard');
+  const tuckDefault = infoMode === 'tucked' || (infoMode === 'auto' && headliner);
+  const tucked = tabbable
+    ? (tuckState ?? tuckDefault)
+    : credits && size === 'compact' && infoMode !== 'open';
+  const setTuck = (v: boolean) => setTuckState(v);
   // The "FULL ART · VOL 1" tag is the first thing to go for space.
   const faTag = headliner && size !== 'compact' && fitGrow < 1;
 
@@ -2537,11 +2631,7 @@ function CardFacePlain({
             : prism
               ? 'grow break-words'
               : 'min-w-0 flex-1 break-words',
-          monolith
-            ? 'text-[#d4af37] tracking-[0.12em]'
-            : bleed
-              ? 'text-white/85'
-              : 'text-[var(--c-ink)]',
+          bleed ? 'text-white/85' : 'text-[var(--c-ink)]',
         )}
         style={overArt}
       >
@@ -2687,62 +2777,67 @@ function CardFacePlain({
   /** Chip-cost plate (a Leader's starting nerve) — anchored to the card's
    * bottom-right corner in both templates, on an ink plate the design carries
    * at every rarity. */
-  const statPlate = headliner
-    ? null
-    : ur
-      ? plateValue && (
-          // Ultra-Rare: a gold-foil starburst badge over the frame's corner.
-          <Starburst
-            data-fc="stats"
-            clip={UR_BADGE_CLIP}
-            inset={size === 'full' ? 2 : 1.5}
-            fillClassName="ur-foil"
-            className="z-30"
-            style={{ right: ur.frame - 4, bottom: ur.frame - 4, width: ur.badge, height: ur.badge }}
-            title={
-              def.type === 'Leader'
-                ? `Starts the match with ${NERVE.start} nerve`
-                : (costSummary(def) ?? undefined)
-            }
-            aria-label={`${def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'} ${plateValue}`}
-          >
-            <span
-              className={cn(
-                'leading-none text-[#1a1a1a]',
-                // Below full the badge is small: a solid face reads better
-                // than the hollow display face.
-                size === 'full' ? 'ur-anak' : 'font-black tracking-tighter',
-              )}
+  const statPlate =
+    headliner || credits
+      ? null
+      : ur
+        ? plateValue && (
+            // Ultra-Rare: a gold-foil starburst badge over the frame's corner.
+            <Starburst
+              data-fc="stats"
+              clip={UR_BADGE_CLIP}
+              inset={size === 'full' ? 2 : 1.5}
+              fillClassName="ur-foil"
+              className="z-30"
               style={{
-                fontSize:
-                  size === 'full'
-                    ? Math.min(13, (ur.badge * 0.72) / (plateValue.length * 0.66))
-                    : Math.min(9, (ur.badge * 0.8) / (plateValue.length * 0.6)),
-                paddingTop: size === 'full' ? 2 : 0,
+                right: ur.frame - 4,
+                bottom: ur.frame - 4,
+                width: ur.badge,
+                height: ur.badge,
               }}
+              title={
+                def.type === 'Leader'
+                  ? `Starts the match with ${NERVE.start} nerve`
+                  : (costSummary(def) ?? undefined)
+              }
+              aria-label={`${def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'} ${plateValue}`}
             >
-              {plateValue}
-            </span>
-          </Starburst>
-        )
-      : statChips && (
-          <div
-            data-fc="stats"
-            className={cn(
-              'absolute z-30 flex items-center gap-0.5 rounded-[2px] px-0.5 py-[1px]',
-              // Mythic: the black plate keylined in gold.
-              mythic ? 'my-plate' : 'bg-[var(--c-ink)]',
-              'bottom-1 right-1',
-            )}
-            title={
-              def.type === 'Leader'
-                ? `Starts the match with ${NERVE.start} nerve`
-                : (costSummary(def) ?? undefined)
-            }
-          >
-            {statChips}
-          </div>
-        );
+              <span
+                className={cn(
+                  'leading-none text-[#1a1a1a]',
+                  // Below full the badge is small: a solid face reads better
+                  // than the hollow display face.
+                  size === 'full' ? 'ur-anak' : 'font-black tracking-tighter',
+                )}
+                style={{
+                  fontSize:
+                    size === 'full'
+                      ? Math.min(13, (ur.badge * 0.72) / (plateValue.length * 0.66))
+                      : Math.min(9, (ur.badge * 0.8) / (plateValue.length * 0.6)),
+                  paddingTop: size === 'full' ? 2 : 0,
+                }}
+              >
+                {plateValue}
+              </span>
+            </Starburst>
+          )
+        : statChips && (
+            <div
+              data-fc="stats"
+              className={cn(
+                'absolute z-30 flex items-center gap-0.5 rounded-[2px] px-0.5 py-[1px]',
+                'bg-[var(--c-ink)]',
+                'bottom-1 right-1',
+              )}
+              title={
+                def.type === 'Leader'
+                  ? `Starts the match with ${NERVE.start} nerve`
+                  : (costSummary(def) ?? undefined)
+              }
+            >
+              {statChips}
+            </div>
+          );
 
   /** Owned-count / foil / serial / caller badges, stacked in one column so
    * they can never overlap each other or the corner decorations. */
@@ -2755,7 +2850,7 @@ function CardFacePlain({
       // Framed: inside the art window's top-left corner. Full-bleed: clear of
       // the masthead, which spans the card's own top-left corner.
       className="absolute z-30 left-1 flex flex-col items-start gap-0.5"
-      style={{ top: bleed && !headliner ? MASTHEAD_H[size] + 4 : 4 }}
+      style={{ top: bleed && !headliner && !credits ? MASTHEAD_H[size] + 4 : 4 }}
     >
       {badge && (
         <span
@@ -2816,7 +2911,9 @@ function CardFacePlain({
   const faMasthead = headliner && (
     <div
       data-fc="masthead"
-      className="relative z-20 flex flex-col shrink-0 min-w-0"
+      className={cn('relative z-20 flex flex-col shrink-0 min-w-0', tabbable && 'fa-tab')}
+      aria-hidden={tucked || undefined}
+      inert={tucked}
       style={{
         ...faVars,
         padding: size === 'full' ? '5px 7px 0' : size === 'standard' ? '3px 4px 0' : '2px 3px 0',
@@ -2877,6 +2974,8 @@ function CardFacePlain({
         style={{
           ...faVars,
           padding: size === 'full' ? '0 6px 6px' : size === 'standard' ? '0 4px 4px' : '0 3px 3px',
+          // Clear of the pull-tab chevron.
+          paddingBottom: tabbable ? (size === 'full' ? 24 : 18) : undefined,
         }}
       >
         {cfg.showFlavor && def.flavor && (
@@ -2896,55 +2995,129 @@ function CardFacePlain({
         )}
         {(faHasInfo || plateValue) && (
           <div
-            className="fa-ticket flex items-stretch shrink-0 min-w-0"
-            style={{
-              borderWidth: size === 'full' ? 2 : 1,
-              borderRadius: size === 'full' ? 4 : 3,
-              padding: size === 'full' ? '5px 6px' : size === 'standard' ? '3px 4px' : '2px 3px',
-              gap: size === 'full' ? 6 : 3,
-            }}
+            className={cn('shrink-0 min-w-0', tabbable && 'fa-tab-body')}
+            aria-hidden={tucked || undefined}
+            inert={tucked}
           >
-            <div className="flex flex-col justify-center min-w-0 flex-1">
-              {chipsBlock}
-              {faInfo && rulesBlock}
-              {faInfo && abilitiesBlock}
-            </div>
-            {plateValue && (
-              <div
-                className="fa-stub flex flex-col items-center justify-center shrink-0"
-                style={{
-                  borderLeftWidth: size === 'full' ? 2 : 1,
-                  paddingLeft: size === 'full' ? 6 : 3,
-                  minWidth: size === 'full' ? 34 : size === 'standard' ? 22 : 17,
-                  gap: size === 'full' ? 2 : 1,
-                }}
-              >
-                <span
-                  data-fc="stats"
-                  className="fa-cost"
-                  style={{
-                    fontSize:
-                      (size === 'full' ? 21 : size === 'standard' ? 13 : 10) *
-                      Math.min(1, 2.5 / plateValue.length),
-                  }}
-                  title={
-                    def.type === 'Leader'
-                      ? `Starts the match with ${NERVE.start} nerve`
-                      : (costSummary(def) ?? undefined)
-                  }
-                  aria-label={`${def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'} ${plateValue}`}
-                >
-                  {plateValue}
-                </span>
-                {size !== 'compact' && (
-                  <small aria-hidden style={{ fontSize: size === 'full' ? 5.5 : 4 }}>
-                    {def.type === 'Leader' ? 'NERVE' : 'COST'}
-                  </small>
-                )}
+            <div
+              className="fa-ticket flex items-stretch shrink-0 min-w-0"
+              style={{
+                borderWidth: size === 'full' ? 2 : 1,
+                borderRadius: size === 'full' ? 4 : 3,
+                padding: size === 'full' ? '5px 6px' : size === 'standard' ? '3px 4px' : '2px 3px',
+                gap: size === 'full' ? 6 : 3,
+              }}
+            >
+              <div className="flex flex-col justify-center min-w-0 flex-1">
+                {chipsBlock}
+                {faInfo && rulesBlock}
+                {faInfo && abilitiesBlock}
               </div>
-            )}
+              {plateValue && (
+                <div
+                  className="fa-stub flex flex-col items-center justify-center shrink-0"
+                  style={{
+                    borderLeftWidth: size === 'full' ? 2 : 1,
+                    paddingLeft: size === 'full' ? 6 : 3,
+                    minWidth: size === 'full' ? 34 : size === 'standard' ? 22 : 17,
+                    gap: size === 'full' ? 2 : 1,
+                  }}
+                >
+                  <span
+                    data-fc="stats"
+                    className="fa-cost"
+                    style={{
+                      fontSize:
+                        (size === 'full' ? 21 : size === 'standard' ? 13 : 10) *
+                        Math.min(1, 2.5 / plateValue.length),
+                    }}
+                    title={
+                      def.type === 'Leader'
+                        ? `Starts the match with ${NERVE.start} nerve`
+                        : (costSummary(def) ?? undefined)
+                    }
+                    aria-label={`${def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'} ${plateValue}`}
+                  >
+                    {plateValue}
+                  </span>
+                  {size !== 'compact' && (
+                    <small aria-hidden style={{ fontSize: size === 'full' ? 5.5 : 4 }}>
+                      {def.type === 'Leader' ? 'NERVE' : 'COST'}
+                    </small>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
+      </div>
+    </>
+  );
+  /** Mythic "Opening Credits": the centred lockup — overline, Butler title,
+   * credit rule with the cost, then the rules set like credits. The whole
+   * lockup is the measured text box the fit ladder works on; tucked, the
+   * body folds away and the title + credit line stay as a lower-third. */
+  const mcFs = size === 'full' ? 7 : size === 'standard' ? 4.8 : 4.2;
+  const mcBottom = credits && (
+    <>
+      {badgeStack}
+      <div className="flex-1 min-h-0" />
+      <div
+        ref={textBoxRef}
+        data-fc="textbox"
+        data-fc-scroll={fitScroll ? '1' : undefined}
+        className={cn(
+          'mc-lock relative z-20 flex flex-col min-h-0 shrink',
+          fitScroll ? 'fc-scroll-fade' : 'overflow-hidden',
+        )}
+        style={{
+          padding:
+            size === 'full' ? '0 10px 26px' : size === 'standard' ? '0 6px 19px' : '0 4px 6px',
+        }}
+      >
+        <div
+          data-fc="typeline"
+          className="mc-over shrink-0"
+          style={{ fontSize: mcFs * 0.95, marginBottom: '0.55em' }}
+        >
+          {def.type === 'Leader' ? 'Starring' : `A Mythic ${def.type}`}
+          {isPower(def) && def.tier
+            ? ` · ${TIER_MARK[def.type as PowerType].glyph.repeat(def.tier)}`
+            : ''}
+        </div>
+        <h3 className="mc-name shrink-0" title={def.name} style={{ fontSize: mcNamePx }}>
+          {def.name}
+        </h3>
+        <div
+          className="mc-cr shrink-0"
+          style={{ fontSize: mcFs, margin: size === 'compact' ? '0.35em 0 0' : '0.55em 0 0.35em' }}
+        >
+          <span aria-hidden className="mc-ln" />
+          {plateValue ? (
+            <span
+              data-fc="stats"
+              title={
+                def.type === 'Leader'
+                  ? `Starts the match with ${NERVE.start} nerve`
+                  : (costSummary(def) ?? undefined)
+              }
+              aria-label={`${def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'} ${plateValue}`}
+            >
+              {plateValue} {def.type === 'Leader' ? 'NERVE' : 'CHIPS'}
+            </span>
+          ) : (
+            <span>{def.type === 'Location' ? 'TABLE RULE' : 'MYTHIC'}</span>
+          )}
+          <span aria-hidden className="mc-ln" />
+        </div>
+        <div className="mc-body shrink-0" aria-hidden={tucked || undefined} inert={tucked}>
+          <div className="mc-bi flex flex-col">
+            {chipsBlock}
+            {rulesBlock}
+            {abilitiesBlock}
+            {flavorBlock}
+          </div>
+        </div>
       </div>
     </>
   );
@@ -2957,9 +3130,42 @@ function CardFacePlain({
       role="button"
       data-card-id={def.id}
       tabIndex={onClick ? 0 : -1}
-      aria-disabled={!onClick}
+      // Not disabled while it carries a pull-tab: its chevron is a live control.
+      aria-disabled={!onClick && !tabbable}
       aria-label={label}
-      onClick={onClick}
+      onClick={(e) => {
+        if (onClick) return onClick();
+        // A tap on a pull-tab face (with no action of its own) toggles it;
+        // taps on the face's own controls (keyword chips, cost button) don't.
+        if (!tabbable) return;
+        const hit = (e.target as Element).closest('button, a, [role="button"]');
+        if (hit && hit !== e.currentTarget) return;
+        setTuck(!tucked);
+      }}
+      onClickCapture={(e) => {
+        // The click that ends a press-and-hold has already tucked the face.
+        if (mcHold.current.held) {
+          mcHold.current.held = false;
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }}
+      onPointerDown={
+        tabbable
+          ? (e) => {
+              if (e.button !== 0) return;
+              mcHold.current.held = false;
+              clearTimeout(mcHold.current.t);
+              mcHold.current.t = setTimeout(() => {
+                mcHold.current.held = true;
+                setTuck(true);
+              }, 420);
+            }
+          : undefined
+      }
+      onPointerUp={tabbable ? () => clearTimeout(mcHold.current.t) : undefined}
+      onPointerCancel={tabbable ? () => clearTimeout(mcHold.current.t) : undefined}
+      onPointerLeave={tabbable ? () => clearTimeout(mcHold.current.t) : undefined}
       onKeyDown={(e) => {
         if (!onClick) return;
         // Guard against nested interactive chips (KeywordChip/CostInfoButton
@@ -2988,6 +3194,9 @@ function CardFacePlain({
         isFoil && !bleed && !prism && 'fc-foil-body',
         prism && 'ur-prism',
         onClick && 'btn-pop cursor-pointer',
+        tabbable && !onClick && 'cursor-pointer select-none',
+        tucked && 'mc-col',
+        credits && size === 'compact' && 'mc-sm',
         dimmed && 'opacity-45 saturate-50',
         highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
         cfg.shadow,
@@ -3024,8 +3233,8 @@ function CardFacePlain({
           <div className="absolute inset-0">
             <CardArt def={def} cover boxWidth={SIZES[size].w} />
           </div>
-          {monolith ? (
-            <div aria-hidden className="my-lacquer absolute inset-0" />
+          {credits ? (
+            <div aria-hidden className="mc-halo absolute inset-0" />
           ) : headliner ? (
             <div aria-hidden className="fa-sky absolute inset-0" />
           ) : (
@@ -3055,73 +3264,47 @@ function CardFacePlain({
           (black title, no motion) on a foil print. */}
       {headliner ? (
         faMasthead
-      ) : (
+      ) : credits ? null : (
         <div
           data-fc="masthead"
           className={cn(
             'relative z-20 flex items-center gap-1 pl-1.5 pr-1 shrink-0',
-            // Mythic: a centred title block straight on the lacquer.
             'justify-between',
             cfg.headerPy,
             prism
               ? 'ur-banner'
-              : monolith
-                ? null
-                : isFoil
-                  ? 'fc-foil-band'
-                  : bleed
-                    ? 'bg-[var(--c-ink)]/90'
-                    : 'bg-[var(--c-ink)]',
+              : isFoil
+                ? 'fc-foil-band'
+                : bleed
+                  ? 'bg-[var(--c-ink)]/90'
+                  : 'bg-[var(--c-ink)]',
           )}
           // Ultra-Rare: the tilted banner reaches out over the holo frame.
           style={
-            ur
-              ? { marginLeft: 2 - ur.frame, marginRight: 2 - ur.frame, marginTop: 1 }
-              : monolith
-                ? // Mythic: clear of the gold double keyline.
-                  { paddingTop: size === 'compact' ? 4 : size === 'full' ? 6 : 5 }
-                : undefined
+            ur ? { marginLeft: 2 - ur.frame, marginRight: 2 - ur.frame, marginTop: 1 } : undefined
           }
         >
           <span
             className={cn(
               'flex items-center gap-1 min-w-0 uppercase leading-tight',
               anakPx ? 'ur-anak' : 'heading-font tracking-[0.03em]',
-              monolith
-                ? 'text-[#d4af37]'
-                : isFoil || prism
-                  ? 'text-[#1A1A1A]'
-                  : 'text-[var(--c-paper)]',
+              isFoil || prism ? 'text-[#1A1A1A]' : 'text-[var(--c-paper)]',
             )}
             title={def.name}
           >
-            {!monolith && <TypeIcon className={cn('shrink-0 opacity-80', cfg.typeIconSize)} />}
+            <TypeIcon className={cn('shrink-0 opacity-80', cfg.typeIconSize)} />
             {/* Hard two-line clamp on top of the auto-shrink. */}
-            {stencilPx ? (
-              // Mythic: gold layered stencil (outline face under the solid one).
-              <span className="my-st uppercase" style={{ fontSize: stencilPx }}>
-                <span aria-hidden className="my-st-o">
-                  {def.name}
-                </span>
-                <span className="my-st-f">{def.name}</span>
-              </span>
-            ) : (
-              <span
-                className={cn(
-                  'break-words',
-                  size === 'compact' && 'line-clamp-2',
-                  monolith && 'my-gold-text',
-                )}
-                style={{
-                  fontSize: anakPx ?? nameFontPx,
-                  // Anak Manja's caps sit high in its em box.
-                  paddingTop: anakPx ? anakPx * 0.12 : undefined,
-                  lineHeight: anakPx ? 1.05 : undefined,
-                }}
-              >
-                {def.name}
-              </span>
-            )}
+            <span
+              className={cn('break-words', size === 'compact' && 'line-clamp-2')}
+              style={{
+                fontSize: anakPx ?? nameFontPx,
+                // Anak Manja's caps sit high in its em box.
+                paddingTop: anakPx ? anakPx * 0.12 : undefined,
+                lineHeight: anakPx ? 1.05 : undefined,
+              }}
+            >
+              {def.name}
+            </span>
           </span>
           {!prism && costMark}
         </div>
@@ -3302,7 +3485,9 @@ function CardFacePlain({
       {headliner && faBottom}
 
       {/* ---- Full-bleed template: everything rides the bottom scrim ---- */}
-      {bleed && !headliner && (
+      {credits && mcBottom}
+
+      {bleed && !headliner && !credits && (
         <>
           {badgeStack}
           <div className="flex-1 min-h-0" />
@@ -3314,25 +3499,12 @@ function CardFacePlain({
               // panel sliding off the card's clipped bottom edge and taking
               // the reserved plate clearance with it.
               'relative z-20 flex flex-col min-h-0 pb-1',
-              // Mythic: a black rules panel under a gold keyline, inside the
-              // card's gold double keyline.
-              monolith ? 'my-panel pt-0.5 mx-px mb-px' : 'pt-4',
+              'pt-4',
             )}
-            style={
-              monolith
-                ? {
-                    // A Leader's abilities need a little more room than a
-                    // power's rules line; everything else stays ≤27%.
-                    maxHeight:
-                      size === 'compact'
-                        ? '40%'
-                        : `${(def.type === 'Leader' ? 35 : size === 'full' ? 27 : 25) + fitGrow * 9}%`,
-                  }
-                : {
-                    background:
-                      'linear-gradient(0deg, rgba(20,15,10,0.94), rgba(20,15,10,0.5) 70%, transparent)',
-                  }
-            }
+            style={{
+              background:
+                'linear-gradient(0deg, rgba(20,15,10,0.94), rgba(20,15,10,0.5) 70%, transparent)',
+            }}
           >
             {typeLine}
             <div
@@ -3343,7 +3515,6 @@ function CardFacePlain({
                 'relative z-10 flex flex-col min-h-0 text-white mx-1.5',
                 fitScroll ? 'fc-scroll-fade' : 'overflow-hidden',
                 cfg.textBoxPad,
-                monolith && 'pt-0',
               )}
               // Standard/full: the plate sits in a notch beside the last block
               // (see `notched`), not in a strip of its own.
@@ -3366,14 +3537,29 @@ function CardFacePlain({
       {statPlate}
       {footer}
 
-      {/* Mythic "Black & Gold Monolith": the thin gold keyline (above every
-          art layer) and the hover-gated glint. */}
-      {monolith && (
-        <div
-          aria-hidden
-          className="my-keyline absolute z-20"
-          style={size === 'compact' ? { inset: 2 } : { inset: size === 'full' ? 3 : 2 }}
-        />
+      {/* Info pull-tab chevron (Mythic "Opening Credits", Full-Art
+          "Headliner"): toggles the face's text; keyboard-operable. */}
+      {tabbable && (
+        <button
+          type="button"
+          className="mc-hdl tap-target"
+          aria-expanded={!tucked}
+          aria-label={tucked ? 'Show card text' : 'Hide card text'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            setTuck(!tucked);
+          }}
+          style={{
+            bottom: size === 'full' ? 6 : 4,
+            width: size === 'full' ? 26 : 20,
+            height: size === 'full' ? 16 : 13,
+          }}
+        >
+          <svg viewBox="0 0 20 12" aria-hidden>
+            <path d="M3 3 L10 9 L17 3" />
+          </svg>
+        </button>
       )}
       {/* A foil print is a STATIC prismatic stamp: a shining border ring, no
           motion of any kind (that is what separates it from the animated
@@ -3393,9 +3579,6 @@ function CardFacePlain({
       )}
       {/* Ultra-Rare "Prism Pop": a soft STATIC sheen over the whole face. */}
       {prism && !dimmed && <div aria-hidden className="ur-sheen absolute inset-0 z-40" />}
-      {monolith && !dimmed && size === 'full' && (
-        <div aria-hidden className="my-glint absolute inset-0 z-10" />
-      )}
       {/* Alt-Art "Prism Ink" hover-gated bloom (the base .aa-holo wash is
           rendered inside the full-bleed art layer above, always on). */}
       {altArt && !dimmed && size === 'full' && (

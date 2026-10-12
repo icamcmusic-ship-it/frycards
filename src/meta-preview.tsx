@@ -215,6 +215,11 @@ if (pullVariant === 'box') {
       ),
     );
 }
+// `&last=<card id>`: that card is the haul's last (5th) reveal — e.g. the
+// Uncommon Unit whose flavour once wrapped one letter per line there.
+const lastId = params0().get('last');
+const lastCard = lastId ? POOL.find((c) => c.id === lastId) : undefined;
+if (lastCard) pulls.splice(4, pulls.length - 4, pullOf(lastCard, { slot: 'slot-5' }));
 
 // Store shelf stand-ins. The real rows come from `pack_types` / `shop_items`,
 // which need the network; these mirror the live shapes closely enough for the
