@@ -89,7 +89,7 @@ export function kwList(def: CardDef): string[] {
  *   setting: animations stop and the hover-gated layers settle to a faint
  *   static state.
  */
-const PREMIUM_STYLE_ID = 'frycards-premium-templates-v80';
+const PREMIUM_STYLE_ID = 'frycards-premium-templates-v81';
 const PREMIUM_CSS = `
 /* ---- Ultra-Rare "Prism Pop" (v8) ----
    A thick holographic frame with an ink outline and a soft STATIC sheen, the
@@ -368,6 +368,51 @@ html[data-motion='reduced'] .premium-boost .my-glint,
 html[data-motion='reduced'] .premium-card:hover .aa-corona,
 html[data-motion='reduced'] .premium-boost .aa-corona { opacity: 0.25; }
 
+/* ---- Full-Art "Headliner" (v9) ----
+   A gig flyer: the name is the headline act in Smash Stadium (digits and
+   punctuation fall through to Cracked Bold via unicode-range) in the art's
+   dark sky, a "FULL ART · VOL 1" tag, the flavour as a white Marchive
+   pull-quote with an accent quote mark, and the rules on a ticket whose
+   dashed stub holds the cost. --fa-a / --fa-b are the colour-identity
+   accents. Literal inks throughout so light and INK themes print alike.
+   Fully static. */
+.fa-sky {
+  background:
+    linear-gradient(rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.42) 16%, transparent 28%),
+    linear-gradient(0deg, rgba(0,0,0,0.94) 0%, rgba(0,0,0,0.8) 22%, transparent 48%);
+  pointer-events: none;
+}
+.fa-bill { color: var(--fa-b); font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; text-shadow: 0 1px 2px #000; }
+.fa-name {
+  font-family: 'FA Smash', 'FA Cracked', 'Montserrat', sans-serif;
+  font-weight: 400;
+  line-height: 0.92;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--fa-a);
+  text-shadow: 0.06em 0.06em 0 #141414, 0.09em 0.09em 0 var(--fa-b);
+  overflow-wrap: anywhere;
+}
+.fa-tag {
+  display: flex; align-items: center; justify-content: center; gap: 0.6em;
+  font-family: 'FA Quote', 'Montserrat', sans-serif;
+  letter-spacing: 0.3em; line-height: 1; color: #fff; white-space: nowrap;
+}
+.fa-tag::before, .fa-tag::after { content: ''; width: 2.2em; height: 0.12em; background: var(--fa-a); flex: none; }
+.fa-quote {
+  font-family: 'FA Quote', 'Montserrat', sans-serif;
+  font-style: italic; text-align: center; color: #fff;
+  text-shadow: 0 0 0.4em #000, 0 1px 2px #000; letter-spacing: 0.02em;
+}
+.fa-quote::before {
+  content: '“'; display: block; height: 0.42em;
+  font: 400 2.4em/0.5 'FA Smash', 'FA Cracked', 'Montserrat', sans-serif; color: var(--fa-a);
+}
+.fa-ticket { background: rgba(10,10,10,0.84); border: solid var(--fa-a); color: #fff; }
+.fa-stub { border-left: dashed var(--fa-a); }
+.fa-cost { font-family: 'FA Smash', 'FA Cracked', 'Montserrat', sans-serif; font-weight: 400; line-height: 1; color: var(--fa-a); }
+.fa-stub small { font-weight: 800; letter-spacing: 0.18em; color: #bbb; line-height: 1; }
+
 /* Text-fit last resort: the rules box scrolls inside the card, with a fade
    at the bottom edge as the cue that there is more. */
 .fc-scroll-fade {
@@ -437,6 +482,36 @@ function stencilFit(text: string, avail: number, max: number, min: number): numb
   const px = Math.min(max, avail / (Math.max(1, text.length) * STENCIL_EM));
   return px >= min ? Math.round(px * 10) / 10 : null;
 }
+
+/** Smash Stadium's mean advance width (em) over A–Z (its fallback, Cracked
+ * Bold, is narrower, so this is the safe side for digits and punctuation). */
+const SMASH_EM = 0.66;
+
+/** Full-Art "Headliner" name size: as large as `max` while the longest word
+ * fits one line of `avail` px and the whole name fits about two lines. */
+function smashFit(text: string, avail: number, max: number, min: number): number {
+  const longest = Math.max(1, ...text.split(/\s+/).map((t) => t.length));
+  const px = Math.min(
+    max,
+    avail / (longest * SMASH_EM),
+    (2 * avail * 0.86) / (Math.max(1, text.length) * SMASH_EM),
+  );
+  return Math.round(Math.max(min, px) * 10) / 10;
+}
+
+/** Full-Art "Headliner" accents, one per colour identity, in the neon key
+ * sampled from the Ember/Light art (neon-orange outline, acid-yellow drip).
+ * The name prints in the first, its offset shadow and the ticket accents in
+ * the second (the first again on a mono-colour card). */
+const FA_ACCENT: Record<Color, string> = {
+  Ember: '#FF6A2B',
+  Light: '#E6FF2E',
+  Tide: '#38D6FF',
+  Root: '#7CFF4F',
+  Gale: '#2DF5D0',
+  Shadow: '#B98CFF',
+  Void: '#D9DCE3',
+};
 
 /** clip-path for an n-point starburst (outer radius 50%, inner `inner`%). */
 function starburstClip(n: number, inner: number): string {
@@ -2382,6 +2457,24 @@ function CardFacePlain({
         )
       : null;
 
+  // Full-Art "Headliner" (never serialized — a serial print has its own
+  // frame): Smash name in the sky, Marchive pull-quote, rules on a ticket
+  // whose dashed stub holds the cost. Below full the name grows in Smash
+  // only as far as the fit ladder allows (see `fitGrow`).
+  const headliner = def.rarity === 'Full-Art' && !serial;
+  const faA = FA_ACCENT[cardColorsForFace[0]] ?? FA_ACCENT.Void;
+  const faB = FA_ACCENT[cardColorsForFace[1] ?? cardColorsForFace[0]] ?? faA;
+  const faNamePx = headliner
+    ? smashFit(
+        def.name,
+        w - 2 * OUTER_BORDER_PX[size] - (size === 'full' ? 14 : 8),
+        (size === 'full' ? 25 : size === 'standard' ? 15 : 12) * (fitGrow >= 3 ? 0.85 : 1),
+        size === 'full' ? 13 : size === 'standard' ? 9 : 8,
+      )
+    : 0;
+  // The "FULL ART · VOL 1" tag is the first thing to go for space.
+  const faTag = headliner && size !== 'compact' && fitGrow < 1;
+
   // Bottom-right plate: a power's chip cost, a Leader's starting nerve.
   const plateValue = statValue(def);
   const statChips = plateValue ? (
@@ -2557,7 +2650,7 @@ function CardFacePlain({
   // Standard/full: the last block shares its row with a notch the size of
   // the corner plate, so text wraps beside the plate instead of the whole
   // box reserving a strip under it (measured — see plateNotch).
-  const notched = size !== 'compact' && !!plateValue;
+  const notched = size !== 'compact' && !!plateValue && !headliner;
   const blocks = [chipsBlock, rulesBlock, abilitiesBlock, flavorBlock].filter(
     (_, i) =>
       [
@@ -2594,60 +2687,62 @@ function CardFacePlain({
   /** Chip-cost plate (a Leader's starting nerve) — anchored to the card's
    * bottom-right corner in both templates, on an ink plate the design carries
    * at every rarity. */
-  const statPlate = ur
-    ? plateValue && (
-        // Ultra-Rare: a gold-foil starburst badge over the frame's corner.
-        <Starburst
-          data-fc="stats"
-          clip={UR_BADGE_CLIP}
-          inset={size === 'full' ? 2 : 1.5}
-          fillClassName="ur-foil"
-          className="z-30"
-          style={{ right: ur.frame - 4, bottom: ur.frame - 4, width: ur.badge, height: ur.badge }}
-          title={
-            def.type === 'Leader'
-              ? `Starts the match with ${NERVE.start} nerve`
-              : (costSummary(def) ?? undefined)
-          }
-          aria-label={`${def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'} ${plateValue}`}
-        >
-          <span
-            className={cn(
-              'leading-none text-[#1a1a1a]',
-              // Below full the badge is small: a solid face reads better
-              // than the hollow display face.
-              size === 'full' ? 'ur-anak' : 'font-black tracking-tighter',
-            )}
-            style={{
-              fontSize:
-                size === 'full'
-                  ? Math.min(13, (ur.badge * 0.72) / (plateValue.length * 0.66))
-                  : Math.min(9, (ur.badge * 0.8) / (plateValue.length * 0.6)),
-              paddingTop: size === 'full' ? 2 : 0,
-            }}
+  const statPlate = headliner
+    ? null
+    : ur
+      ? plateValue && (
+          // Ultra-Rare: a gold-foil starburst badge over the frame's corner.
+          <Starburst
+            data-fc="stats"
+            clip={UR_BADGE_CLIP}
+            inset={size === 'full' ? 2 : 1.5}
+            fillClassName="ur-foil"
+            className="z-30"
+            style={{ right: ur.frame - 4, bottom: ur.frame - 4, width: ur.badge, height: ur.badge }}
+            title={
+              def.type === 'Leader'
+                ? `Starts the match with ${NERVE.start} nerve`
+                : (costSummary(def) ?? undefined)
+            }
+            aria-label={`${def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'} ${plateValue}`}
           >
-            {plateValue}
-          </span>
-        </Starburst>
-      )
-    : statChips && (
-        <div
-          data-fc="stats"
-          className={cn(
-            'absolute z-30 flex items-center gap-0.5 rounded-[2px] px-0.5 py-[1px]',
-            // Mythic: the black plate keylined in gold.
-            mythic ? 'my-plate' : 'bg-[var(--c-ink)]',
-            'bottom-1 right-1',
-          )}
-          title={
-            def.type === 'Leader'
-              ? `Starts the match with ${NERVE.start} nerve`
-              : (costSummary(def) ?? undefined)
-          }
-        >
-          {statChips}
-        </div>
-      );
+            <span
+              className={cn(
+                'leading-none text-[#1a1a1a]',
+                // Below full the badge is small: a solid face reads better
+                // than the hollow display face.
+                size === 'full' ? 'ur-anak' : 'font-black tracking-tighter',
+              )}
+              style={{
+                fontSize:
+                  size === 'full'
+                    ? Math.min(13, (ur.badge * 0.72) / (plateValue.length * 0.66))
+                    : Math.min(9, (ur.badge * 0.8) / (plateValue.length * 0.6)),
+                paddingTop: size === 'full' ? 2 : 0,
+              }}
+            >
+              {plateValue}
+            </span>
+          </Starburst>
+        )
+      : statChips && (
+          <div
+            data-fc="stats"
+            className={cn(
+              'absolute z-30 flex items-center gap-0.5 rounded-[2px] px-0.5 py-[1px]',
+              // Mythic: the black plate keylined in gold.
+              mythic ? 'my-plate' : 'bg-[var(--c-ink)]',
+              'bottom-1 right-1',
+            )}
+            title={
+              def.type === 'Leader'
+                ? `Starts the match with ${NERVE.start} nerve`
+                : (costSummary(def) ?? undefined)
+            }
+          >
+            {statChips}
+          </div>
+        );
 
   /** Owned-count / foil / serial / caller badges, stacked in one column so
    * they can never overlap each other or the corner decorations. */
@@ -2660,7 +2755,7 @@ function CardFacePlain({
       // Framed: inside the art window's top-left corner. Full-bleed: clear of
       // the masthead, which spans the card's own top-left corner.
       className="absolute z-30 left-1 flex flex-col items-start gap-0.5"
-      style={{ top: bleed ? MASTHEAD_H[size] + 4 : 4 }}
+      style={{ top: bleed && !headliner ? MASTHEAD_H[size] + 4 : 4 }}
     >
       {badge && (
         <span
@@ -2713,6 +2808,145 @@ function CardFacePlain({
         </span>
       )}
     </div>
+  );
+
+  /** Full-Art "Headliner" top: the bill line (type left, colour dots and
+   * tier mark right), the Smash headline and the "FULL ART · VOL 1" tag. */
+  const faVars = headliner ? ({ '--fa-a': faA, '--fa-b': faB } as React.CSSProperties) : undefined;
+  const faMasthead = headliner && (
+    <div
+      data-fc="masthead"
+      className="relative z-20 flex flex-col shrink-0 min-w-0"
+      style={{
+        ...faVars,
+        padding: size === 'full' ? '5px 7px 0' : size === 'standard' ? '3px 4px 0' : '2px 3px 0',
+      }}
+    >
+      <div
+        data-fc="typeline"
+        className="flex items-center justify-between gap-1 min-w-0 pr-1"
+        style={{ fontSize: size === 'full' ? 7.5 : size === 'standard' ? 5.5 : 5 }}
+      >
+        <span className="fa-bill min-w-0 flex-1 break-words leading-tight">
+          {typeLineText(def)}
+          {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
+        </span>
+        {costMark}
+      </div>
+      <h3
+        className="fa-name m-0"
+        title={def.name}
+        style={{ fontSize: faNamePx, marginTop: size === 'full' ? 4 : 2 }}
+      >
+        {def.name}
+      </h3>
+      {faTag && (
+        <div
+          aria-hidden
+          className="fa-tag"
+          style={{
+            fontSize: size === 'full' ? 7.5 : 5,
+            marginTop: size === 'full' ? 5 : 3,
+          }}
+        >
+          FULL ART · VOL 1
+        </div>
+      )}
+    </div>
+  );
+  /** Full-Art "Headliner" bottom: the flavour pull-quote over the ticket
+   * (keyword chips, rules, Leader abilities) and its dashed cost stub. The
+   * whole block is the measured text box the fit ladder works on. */
+  const faInfo = size !== 'compact';
+  const faHasInfo =
+    chips.length > 0 ||
+    (faInfo && cfg.showRules && (!!rules || (def.type === 'Leader' && !!def.abilities?.length)));
+  const faBottom = headliner && (
+    <>
+      {/* Badges hang just under the headline block, clear of the bill. */}
+      <div className="relative z-30 h-0 shrink-0">{badgeStack}</div>
+      <div className="flex-1 min-h-0" />
+      <div
+        ref={textBoxRef}
+        data-fc="textbox"
+        data-fc-scroll={fitScroll ? '1' : undefined}
+        className={cn(
+          'relative z-20 flex flex-col min-h-0 shrink text-white',
+          fitScroll ? 'fc-scroll-fade' : 'overflow-hidden',
+        )}
+        style={{
+          ...faVars,
+          padding: size === 'full' ? '0 6px 6px' : size === 'standard' ? '0 4px 4px' : '0 3px 3px',
+        }}
+      >
+        {cfg.showFlavor && def.flavor && (
+          <div
+            data-fc="flavor"
+            className={cn(
+              'fa-quote shrink-0 break-words',
+              fitStep > 0 ? 'leading-[1.1]' : 'leading-[1.2]',
+            )}
+            style={{
+              fontSize: Math.max(5.5, flavorFontPx * 1.12 * fitZ),
+              margin: size === 'full' ? '0 4px 6px' : '0 2px 3px',
+            }}
+          >
+            {def.flavor}
+          </div>
+        )}
+        {(faHasInfo || plateValue) && (
+          <div
+            className="fa-ticket flex items-stretch shrink-0 min-w-0"
+            style={{
+              borderWidth: size === 'full' ? 2 : 1,
+              borderRadius: size === 'full' ? 4 : 3,
+              padding: size === 'full' ? '5px 6px' : size === 'standard' ? '3px 4px' : '2px 3px',
+              gap: size === 'full' ? 6 : 3,
+            }}
+          >
+            <div className="flex flex-col justify-center min-w-0 flex-1">
+              {chipsBlock}
+              {faInfo && rulesBlock}
+              {faInfo && abilitiesBlock}
+            </div>
+            {plateValue && (
+              <div
+                className="fa-stub flex flex-col items-center justify-center shrink-0"
+                style={{
+                  borderLeftWidth: size === 'full' ? 2 : 1,
+                  paddingLeft: size === 'full' ? 6 : 3,
+                  minWidth: size === 'full' ? 34 : size === 'standard' ? 22 : 17,
+                  gap: size === 'full' ? 2 : 1,
+                }}
+              >
+                <span
+                  data-fc="stats"
+                  className="fa-cost"
+                  style={{
+                    fontSize:
+                      (size === 'full' ? 21 : size === 'standard' ? 13 : 10) *
+                      Math.min(1, 2.5 / plateValue.length),
+                  }}
+                  title={
+                    def.type === 'Leader'
+                      ? `Starts the match with ${NERVE.start} nerve`
+                      : (costSummary(def) ?? undefined)
+                  }
+                  aria-label={`${def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'} ${plateValue}`}
+                >
+                  {plateValue}
+                </span>
+                {size !== 'compact' && (
+                  <small aria-hidden style={{ fontSize: size === 'full' ? 5.5 : 4 }}>
+                    {def.type === 'Leader' ? 'NERVE' : 'COST'}
+                  </small>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   );
 
   return (
@@ -2792,6 +3026,8 @@ function CardFacePlain({
           </div>
           {monolith ? (
             <div aria-hidden className="my-lacquer absolute inset-0" />
+          ) : headliner ? (
+            <div aria-hidden className="fa-sky absolute inset-0" />
           ) : (
             <div
               aria-hidden
@@ -2817,75 +3053,79 @@ function CardFacePlain({
           A solid ink banner on the framed template, the same banner at 90%
           opacity over the art on the bleed one, and a static prismatic band
           (black title, no motion) on a foil print. */}
-      <div
-        data-fc="masthead"
-        className={cn(
-          'relative z-20 flex items-center gap-1 pl-1.5 pr-1 shrink-0',
-          // Mythic: a centred title block straight on the lacquer.
-          'justify-between',
-          cfg.headerPy,
-          prism
-            ? 'ur-banner'
-            : monolith
-              ? null
-              : isFoil
-                ? 'fc-foil-band'
-                : bleed
-                  ? 'bg-[var(--c-ink)]/90'
-                  : 'bg-[var(--c-ink)]',
-        )}
-        // Ultra-Rare: the tilted banner reaches out over the holo frame.
-        style={
-          ur
-            ? { marginLeft: 2 - ur.frame, marginRight: 2 - ur.frame, marginTop: 1 }
-            : monolith
-              ? // Mythic: clear of the gold double keyline.
-                { paddingTop: size === 'compact' ? 4 : size === 'full' ? 6 : 5 }
-              : undefined
-        }
-      >
-        <span
+      {headliner ? (
+        faMasthead
+      ) : (
+        <div
+          data-fc="masthead"
           className={cn(
-            'flex items-center gap-1 min-w-0 uppercase leading-tight',
-            anakPx ? 'ur-anak' : 'heading-font tracking-[0.03em]',
-            monolith
-              ? 'text-[#d4af37]'
-              : isFoil || prism
-                ? 'text-[#1A1A1A]'
-                : 'text-[var(--c-paper)]',
+            'relative z-20 flex items-center gap-1 pl-1.5 pr-1 shrink-0',
+            // Mythic: a centred title block straight on the lacquer.
+            'justify-between',
+            cfg.headerPy,
+            prism
+              ? 'ur-banner'
+              : monolith
+                ? null
+                : isFoil
+                  ? 'fc-foil-band'
+                  : bleed
+                    ? 'bg-[var(--c-ink)]/90'
+                    : 'bg-[var(--c-ink)]',
           )}
-          title={def.name}
+          // Ultra-Rare: the tilted banner reaches out over the holo frame.
+          style={
+            ur
+              ? { marginLeft: 2 - ur.frame, marginRight: 2 - ur.frame, marginTop: 1 }
+              : monolith
+                ? // Mythic: clear of the gold double keyline.
+                  { paddingTop: size === 'compact' ? 4 : size === 'full' ? 6 : 5 }
+                : undefined
+          }
         >
-          {!monolith && <TypeIcon className={cn('shrink-0 opacity-80', cfg.typeIconSize)} />}
-          {/* Hard two-line clamp on top of the auto-shrink. */}
-          {stencilPx ? (
-            // Mythic: gold layered stencil (outline face under the solid one).
-            <span className="my-st uppercase" style={{ fontSize: stencilPx }}>
-              <span aria-hidden className="my-st-o">
+          <span
+            className={cn(
+              'flex items-center gap-1 min-w-0 uppercase leading-tight',
+              anakPx ? 'ur-anak' : 'heading-font tracking-[0.03em]',
+              monolith
+                ? 'text-[#d4af37]'
+                : isFoil || prism
+                  ? 'text-[#1A1A1A]'
+                  : 'text-[var(--c-paper)]',
+            )}
+            title={def.name}
+          >
+            {!monolith && <TypeIcon className={cn('shrink-0 opacity-80', cfg.typeIconSize)} />}
+            {/* Hard two-line clamp on top of the auto-shrink. */}
+            {stencilPx ? (
+              // Mythic: gold layered stencil (outline face under the solid one).
+              <span className="my-st uppercase" style={{ fontSize: stencilPx }}>
+                <span aria-hidden className="my-st-o">
+                  {def.name}
+                </span>
+                <span className="my-st-f">{def.name}</span>
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  'break-words',
+                  size === 'compact' && 'line-clamp-2',
+                  monolith && 'my-gold-text',
+                )}
+                style={{
+                  fontSize: anakPx ?? nameFontPx,
+                  // Anak Manja's caps sit high in its em box.
+                  paddingTop: anakPx ? anakPx * 0.12 : undefined,
+                  lineHeight: anakPx ? 1.05 : undefined,
+                }}
+              >
                 {def.name}
               </span>
-              <span className="my-st-f">{def.name}</span>
-            </span>
-          ) : (
-            <span
-              className={cn(
-                'break-words',
-                size === 'compact' && 'line-clamp-2',
-                monolith && 'my-gold-text',
-              )}
-              style={{
-                fontSize: anakPx ?? nameFontPx,
-                // Anak Manja's caps sit high in its em box.
-                paddingTop: anakPx ? anakPx * 0.12 : undefined,
-                lineHeight: anakPx ? 1.05 : undefined,
-              }}
-            >
-              {def.name}
-            </span>
-          )}
-        </span>
-        {!prism && costMark}
-      </div>
+            )}
+          </span>
+          {!prism && costMark}
+        </div>
+      )}
 
       {/* ---- Framed template: art window, rarity rule, type line, text box ---- */}
       {!bleed && (
@@ -3058,8 +3298,11 @@ function CardFacePlain({
         </>
       )}
 
+      {/* ---- Full-Art "Headliner": pull-quote over a ticket ---- */}
+      {headliner && faBottom}
+
       {/* ---- Full-bleed template: everything rides the bottom scrim ---- */}
-      {bleed && (
+      {bleed && !headliner && (
         <>
           {badgeStack}
           <div className="flex-1 min-h-0" />

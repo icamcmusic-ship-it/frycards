@@ -92,6 +92,12 @@ export const ENTRIES: ChangelogEntry[] = [
     tagline: 'Shattered glass, seven elemental overlays and nine new card backs.',
     items: [
       {
+        title: 'Full-Art cards get the Headliner look',
+        body: 'Full-Art cards are now printed like a gig flyer: the name is the headline act across the dark sky above the art, the flavour text sits over the art as a big white pull-quote, and the rules ride a ticket with the cost on its torn stub. Each card is lit in neon accents taken from its colours. Every word of the rules and flavour still prints on the card.',
+        category: 'collection',
+        icon: Sparkles,
+      },
+      {
         title: 'Shop Floor customers with personalities',
         body: 'Twenty CPU buyer personas now visit your Player Shop — from the Impulsive Kid and the Slab Snob to a loyalist for every colour — and they offer more for what they collect. Haggle up to three times while a mood meter tracks how fair you are, take bundle and trade-plus-cash offers, and win regulars who come back friendlier. CPU auction bidders use the same personas, as snipers, early birds, steady raisers and bluffers.',
         category: 'gameplay',
