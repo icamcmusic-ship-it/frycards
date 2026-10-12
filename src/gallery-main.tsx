@@ -6,7 +6,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-import { CardFace, CardSize, CARD_SIZES } from './components/CardFaceV4';
+import { CardFace, CardInfoMode, CardSize, CARD_SIZES } from './components/CardFaceV4';
 import { POOL } from './game/poker/cardpool';
 import { RARITY_ORDER } from './meta/rarity';
 import type { CardDef, CardType } from './game/poker/cards';
@@ -23,6 +23,33 @@ function pickBy(pred: (c: CardDef) => boolean): CardDef | undefined {
 function row(rarity: string): CardDef[] {
   return TYPES.map((t) => pickBy((c) => c.rarity === rarity && c.type === t)).filter(
     (c): c is CardDef => !!c,
+  );
+}
+
+/**
+ * `&reveal=1`: each card mounts the way the pack reveal shows it — scaled
+ * 1.06 and all but edge-on mid-flip (rotateY 88°) — then turns face-up. The face's
+ * layout passes run while it is edge-on, which is where the reveal once
+ * measured a zero-width flavour column (see `offsetIn` in CardFaceV4).
+ */
+const REVEAL = new URLSearchParams(window.location.search).get('reveal') === '1';
+function RevealWrap({ children }: { key?: React.Key; children: React.ReactNode }) {
+  const [flat, setFlat] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setFlat(true), 250);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div style={{ perspective: 800 }}>
+      <div
+        style={{
+          transform: `rotateY(${flat ? 0 : 88}deg) scale(1.06)`,
+          transformOrigin: 'top left',
+        }}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -50,15 +77,18 @@ function Band({
         {note && <span style={{ opacity: 0.6, fontWeight: 400 }}> — {note}</span>}
       </h3>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
-        {cards.map((c, i) => (
-          <CardFace
-            key={`${c.id}-${i}`}
-            def={c}
-            size={size}
-            foil={foil}
-            serial={serialized ? { number: 7 + i, cap: 75 } : undefined}
-          />
-        ))}
+        {cards.map((c, i) => {
+          const face = (
+            <CardFace
+              key={`${c.id}-${i}`}
+              def={c}
+              size={size}
+              foil={foil}
+              serial={serialized ? { number: 7 + i, cap: 75 } : undefined}
+            />
+          );
+          return REVEAL ? <RevealWrap key={`${c.id}-${i}`}>{face}</RevealWrap> : face;
+        })}
       </div>
     </div>
   );
@@ -188,18 +218,24 @@ const params = new URLSearchParams(window.location.search);
 const allRarity = params.get('all');
 const sizeParam = params.get('size');
 const allSize: CardSize = sizeParam && sizeParam in CARD_SIZES ? (sizeParam as CardSize) : 'full';
+// `&info=open|tucked`: open (or tuck) every pull-tab face (Mythic, Full-Art);
+// the layout audit measures the open faces.
+const infoParam = params.get('info');
+const infoMode = infoParam === 'open' || infoParam === 'tucked' ? infoParam : 'auto';
 createRoot(document.getElementById('root')!).render(
-  params.get('slabs') ? (
-    <Slabs rarity={params.get('slabs') === '1' ? 'Rare' : params.get('slabs')!} />
-  ) : allRarity ? (
-    <AllOfRarity
-      rarity={allRarity}
-      size={allSize}
-      foil={params.get('foil') === '1'}
-      fixtureType={params.get('fixture')}
-      reprint={params.get('reprint') === '1'}
-    />
-  ) : (
-    <Gallery />
-  ),
+  <CardInfoMode.Provider value={infoMode}>
+    {params.get('slabs') ? (
+      <Slabs rarity={params.get('slabs') === '1' ? 'Rare' : params.get('slabs')!} />
+    ) : allRarity ? (
+      <AllOfRarity
+        rarity={allRarity}
+        size={allSize}
+        foil={params.get('foil') === '1'}
+        fixtureType={params.get('fixture')}
+        reprint={params.get('reprint') === '1'}
+      />
+    ) : (
+      <Gallery />
+    )}
+  </CardInfoMode.Provider>,
 );

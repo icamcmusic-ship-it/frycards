@@ -7,6 +7,10 @@
  * rarity, and additionally reprinted at the Ultra-Rare, Full-Art and Mythic templates
  * (their art-forward layouts leave the least room for text).
  *
+ * Pull-tab faces (Mythic, Full-Art) are measured OPEN (`&info=open`): every
+ * word must fit the expanded face. Full-Art is also measured tucked (its
+ * default), where the flavour pull-quote must still print in full.
+ *
  * It FAILS on:
  *  - overlap: the stat plate (chip cost / starting nerve) intersecting the
  *    flavor block, the rules paragraph or a Leader ability row;
@@ -23,6 +27,7 @@
  *   npx tsx scripts/audit-cardface.ts
  */
 import { chromium } from 'playwright';
+import sharp from 'sharp';
 import { blockSupabase } from './lib/block-remote-media';
 import { POOL } from '../src/game/poker/cardpool';
 
@@ -63,6 +68,18 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({ viewport: { width: 1600, height: 1200 } });
 // Never touch the live project from a harness (see blockSupabase).
 await blockSupabase(ctx);
+// Remote stills come back as one local square placeholder (never the
+// network), so the art-fill check below has a real <img> to measure.
+const STILL = await sharp({
+  create: { width: 64, height: 64, channels: 3, background: '#808080' },
+})
+  .png()
+  .toBuffer();
+await ctx.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (route) =>
+  route.request().resourceType() === 'image'
+    ? route.fulfill({ body: STILL, contentType: 'image/png' })
+    : route.fallback(),
+);
 // tsx/esbuild wraps named functions in `__name(...)`, which the page lacks.
 await ctx.addInitScript({ content: 'window.__name = (f) => f;' });
 const page = await ctx.newPage();
@@ -70,16 +87,20 @@ const problems: Problem[] = [];
 const scrolled: Problem[] = [];
 let renders = 0;
 
-const runs: { rarity: string; reprint: boolean }[] = [
+const runs: { rarity: string; reprint: boolean; tucked?: boolean; reveal?: boolean }[] = [
   ...RARITIES.map((rarity) => ({ rarity, reprint: false })),
   ...REPRINT.map((rarity) => ({ rarity, reprint: true })),
+  // Full-Art opens tucked to its pull-quote: the flavour must fit there too.
+  { rarity: 'Full-Art', reprint: true, tucked: true },
+  // The pack reveal: every card laid out mid-flip (edge-on), then turned.
+  { rarity: 'Uncommon', reprint: true, reveal: true },
 ];
 
-for (const { rarity, reprint } of runs) {
+for (const { rarity, reprint, tucked, reveal } of runs) {
   for (const size of SIZES) {
-    const bucket = `${rarity}${reprint ? ' (reprint)' : ''} @ ${size}`;
+    const bucket = `${rarity}${reprint ? ' (reprint)' : ''}${tucked ? ' (tucked)' : ''}${reveal ? ' (pack reveal)' : ''} @ ${size}`;
     await page.goto(
-      `${BASE}/gallery.html?all=${encodeURIComponent(rarity)}&size=${size}${reprint ? '&reprint=1' : ''}`,
+      `${BASE}/gallery.html?all=${encodeURIComponent(rarity)}&size=${size}&info=${tucked ? 'tucked' : 'open'}${reprint ? '&reprint=1' : ''}${reveal ? '&reveal=1' : ''}`,
       { waitUntil: 'networkidle' },
     );
     await page.evaluate(async () => {
@@ -99,8 +120,9 @@ for (const { rarity, reprint } of runs) {
         const add = (kind: string) => out.push({ id, kind });
         const cr = card.getBoundingClientRect();
         // Overlaps with the corner plate.
+        // A plate folded away inside a tucked pull-tab (inert) is not drawn.
         const stats = card.querySelector('[data-fc="stats"]');
-        if (stats) {
+        if (stats && !stats.closest('[inert]')) {
           const s = stats.getBoundingClientRect();
           for (const k of ['flavor', 'rules', 'ability']) {
             for (const el of Array.from(card.querySelectorAll(`[data-fc="${k}"]`))) {
@@ -132,6 +154,27 @@ for (const { rarity, reprint } of runs) {
           if (el && el.scrollWidth > el.clientWidth + 1) add(`truncated: ${k} overflows`);
         }
         if (card.querySelector('[data-fc="chips-more"]')) add('truncated: keyword chips folded');
+        // A squeezed text column (a notch or flex sibling eating the row):
+        // every rules/flavour/ability block keeps >= 40% of the text box.
+        if (box && box.clientWidth > 0) {
+          for (const el of Array.from(
+            card.querySelectorAll<HTMLElement>(
+              '[data-fc="rules"], [data-fc="flavor"] p, [data-fc="ability"]',
+            ),
+          )) {
+            if (el.offsetParent === null || el.closest('[inert]')) continue;
+            if (el.offsetWidth < box.clientWidth * 0.4)
+              add(`squeezed: text column ${el.offsetWidth}px of ${box.clientWidth}px`);
+          }
+        }
+        // The art fills its window (no letterboxed tile).
+        for (const m of Array.from(card.querySelectorAll<HTMLElement>('img, video'))) {
+          const win = m.parentElement;
+          if (!win || m.offsetParent === null) continue;
+          if (getComputedStyle(m).objectFit !== 'cover') add('art: not filling its window');
+          else if (m.offsetWidth < win.clientWidth - 1 || m.offsetHeight < win.clientHeight - 1)
+            add('art: smaller than its window');
+        }
         const e = exp[id as keyof typeof exp] as { flavor: boolean; abilities: number } | undefined;
         if (e) {
           if (e.flavor && !card.querySelector('[data-fc="flavor"]'))
@@ -144,7 +187,13 @@ for (const { rarity, reprint } of runs) {
     }, Object.fromEntries(expect));
     renders += found.cards;
     for (const f of found.out)
-      (f.scroll ? scrolled : problems).push({ bucket, id: f.id, kind: f.kind });
+      // In the pack reveal a scroll fallback means the fit pass measured the
+      // face mid-flip and ran its ladder dry (the face fits flat): a failure.
+      (f.scroll && !reveal ? scrolled : problems).push({
+        bucket,
+        id: f.id,
+        kind: f.scroll ? 'squeezed: fit pass ran dry mid-flip (scrolls)' : f.kind,
+      });
     if (process.env.AUDIT_VERBOSE)
       console.log(`  ${bucket}: ${found.cards} cards, ${found.out.length} findings`);
   }
@@ -152,12 +201,13 @@ for (const { rarity, reprint } of runs) {
 await browser.close();
 
 const overlaps = problems.filter((p) => p.kind.startsWith('overlap'));
+const squeezed = problems.filter((p) => p.kind.startsWith('squeezed') || p.kind.startsWith('art'));
 const truncations = problems.filter((p) => p.kind.startsWith('truncated'));
 console.log(
   `Checked ${renders} card renders (${POOL.length} pool cards; ${RARITIES.length} rarities + ${REPRINT.length} reprint templates x ${SIZES.length} sizes).`,
 );
 console.log(
-  `Overlaps: ${overlaps.length}. Truncations: ${truncations.length}. Scroll fallbacks: ${scrolled.length}.`,
+  `Overlaps: ${overlaps.length}. Truncations: ${truncations.length}. Squeezed text / unfilled art: ${squeezed.length}. Scroll fallbacks: ${scrolled.length}.`,
 );
 const scrollBuckets = new Map<string, string[]>();
 for (const s of scrolled)
