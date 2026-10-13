@@ -1,4 +1,4195 @@
 {
   "minContrast": 4.5,
-  "cards": {}
+  "cards": {
+    "absolute_eruption": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.85
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.83
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.67
+      }
+    },
+    "abyssal_dragonfish": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.16
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.68
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.13
+      }
+    },
+    "abyssal_pathway": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.35
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.35
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.02
+      }
+    },
+    "admiral_iron_claw": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.85
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.65
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.21
+      }
+    },
+    "alchemists_vial_belt": {
+      "name": {
+        "ink": "accent",
+        "ratio": 9.88
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 9.47
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.87
+      }
+    },
+    "algal_veil": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.47
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 4.76
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.34
+      }
+    },
+    "amber_sphere": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.05
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.8
+      }
+    },
+    "amethyst_starfish": {
+      "name": {
+        "ink": "light",
+        "ratio": 7.56
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.59
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.43
+      }
+    },
+    "anchor_graveyard": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.07
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.51
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.5
+      }
+    },
+    "anemone_weaver": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.31
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.9
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.02
+      }
+    },
+    "apex_nanite_shinobi": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.06
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.11
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.9
+      }
+    },
+    "apocalypse_beam": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.03
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.06
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.83
+      }
+    },
+    "ash_shaper_mystic": {
+      "name": {
+        "ink": "dark",
+        "ratio": 2.83
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.26
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.1
+      }
+    },
+    "ashbreath_witch": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.61
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.9
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.75
+      }
+    },
+    "ashen_circle_rite": {
+      "name": {
+        "ink": "light",
+        "ratio": 12.6
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 9.25
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 13.36
+      }
+    },
+    "ashhound_pack": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.99
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 11.09
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.35
+      }
+    },
+    "astral_shoal": {
+      "name": {
+        "ink": "accent",
+        "ratio": 9.96
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.46
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.17
+      },
+      "mc": {
+        "ink": "light",
+        "ratio": 13.32
+      }
+    },
+    "avatar_of_the_abyss": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.83
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.95
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.62
+      }
+    },
+    "baron_von_swine": {
+      "name": {
+        "ink": "accent",
+        "ratio": 15.06
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.93
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.52
+      }
+    },
+    "barrier_projection_field": {
+      "name": {
+        "ink": "dark",
+        "ratio": 2.83
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.17
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.25
+      }
+    },
+    "binding_slab": {
+      "name": {
+        "ink": "accent",
+        "ratio": 11.91
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 13.94
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 14.67
+      }
+    },
+    "bioluminescent_tide": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.95
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.52
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.93
+      }
+    },
+    "black_coral_thicket": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.91
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.76
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.81
+      }
+    },
+    "black_glass_altar": {
+      "name": {
+        "ink": "light",
+        "ratio": 10.39
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.47
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 15.59
+      }
+    },
+    "black_smoker": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.77
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.13
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.22
+      }
+    },
+    "blackspire_obelisk": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.1
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.14
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.01
+      }
+    },
+    "bladetail_symbiont": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.08
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.05
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 1.28
+      }
+    },
+    "blight_snarler": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.79
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.43
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.01
+      },
+      "mc": {
+        "ink": "light",
+        "ratio": 7.4
+      }
+    },
+    "blind_allegiance": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.69
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.48
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.74
+      }
+    },
+    "blind_archivist": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.69
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.87
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.44
+      }
+    },
+    "blind_colossus": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.61
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.59
+      }
+    },
+    "blood_moon_descent": {
+      "name": {
+        "ink": "light",
+        "ratio": 9.53
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.11
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.28
+      }
+    },
+    "blossom_veiled_refuge": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.01
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 5.42
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.95
+      }
+    },
+    "blue_ringed_octopus": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.25
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.68
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.64
+      }
+    },
+    "bone_splinter_quill": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.71
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.94
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.63
+      }
+    },
+    "bone_throne": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.5
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.61
+      }
+    },
+    "bone_white_forest": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.47
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.52
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.62
+      }
+    },
+    "bonemasked_wanderer": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.4
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 9.73
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.46
+      }
+    },
+    "boneplate_sentinel": {
+      "name": {
+        "ink": "light",
+        "ratio": 10.82
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.3
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.48
+      }
+    },
+    "bound_leviathan": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.21
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.69
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.04
+      }
+    },
+    "brass_whale": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.66
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.13
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.74
+      }
+    },
+    "bubble_harvest": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.6
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.46
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.29
+      }
+    },
+    "butterflyfish_school": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.64
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.36
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.09
+      }
+    },
+    "caldera_harvest_works": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.12
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 4.81
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3
+      }
+    },
+    "cavernous_watcher": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.81
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.29
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.53
+      }
+    },
+    "celestial_attunement": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.86
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.07
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.68
+      }
+    },
+    "cervine_channeler": {
+      "name": {
+        "ink": "light",
+        "ratio": 11.22
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 9.43
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 14.08
+      }
+    },
+    "chalice_of_quicksilver": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.37
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.26
+      }
+    },
+    "charred_frilled_shark": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.4
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.2
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.93
+      }
+    },
+    "chrome_barracuda": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.38
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.21
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.38
+      }
+    },
+    "chrono_tide": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.65
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 4.84
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.44
+      }
+    },
+    "chrysalis_of_the_departed": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.05
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.85
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.35
+      },
+      "mc": {
+        "ink": "light",
+        "ratio": 3.49
+      }
+    },
+    "cinder_mite": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.73
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.96
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.88
+      }
+    },
+    "clam_chest": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.83
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.67
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.48
+      }
+    },
+    "clash_of_titans": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.33
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.27
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.08
+      }
+    },
+    "clawblade_greatsword": {
+      "name": {
+        "ink": "light",
+        "ratio": 11.1
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.74
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.91
+      }
+    },
+    "clockwork_nautilus": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.45
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.25
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.26
+      }
+    },
+    "cold_fire_volcano": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.07
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.96
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.56
+      }
+    },
+    "constellation_crabs": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.8
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.57
+      }
+    },
+    "consuming_ash_cloud": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.29
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.21
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.57
+      }
+    },
+    "copper_nautilus": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.5
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.65
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.13
+      }
+    },
+    "coral_cathedral": {
+      "name": {
+        "ink": "light",
+        "ratio": 5
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.06
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.4
+      }
+    },
+    "coral_collapse": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.52
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.73
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.89
+      }
+    },
+    "corrosive_bloom": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.62
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.35
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.93
+      }
+    },
+    "cracked_wastes": {
+      "name": {
+        "ink": "light",
+        "ratio": 9.16
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.66
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.53
+      }
+    },
+    "crimson_tube_worms": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.89
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.79
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.96
+      }
+    },
+    "crimson_vector_commander": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.15
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.92
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.98
+      }
+    },
+    "crown_of_the_reef": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.21
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.63
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.13
+      }
+    },
+    "crowned_manatee": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.49
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.98
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.28
+      }
+    },
+    "cruel_effervescence": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.03
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.2
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.92
+      },
+      "mc": {
+        "ink": "light",
+        "ratio": 8.08
+      }
+    },
+    "crystalline_flower": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.59
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.55
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.23
+      }
+    },
+    "crystalline_metropolis": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.86
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.14
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.01
+      }
+    },
+    "curse_of_the_ruby_tide": {
+      "name": {
+        "ink": "accent",
+        "ratio": 12.44
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 17.83
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.39
+      },
+      "mc": {
+        "ink": "light",
+        "ratio": 8.19
+      }
+    },
+    "deceptive_angler": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.19
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.69
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.51
+      }
+    },
+    "diamond_anchor": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.89
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.49
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.44
+      }
+    },
+    "dissolving_persona": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.1
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.3
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.67
+      }
+    },
+    "diver_s_lantern": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.11
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.54
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.55
+      }
+    },
+    "dr_aries_chief_biogeneticist": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.68
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 4.84
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.74
+      }
+    },
+    "dragon_amid_the_stars": {
+      "name": {
+        "ink": "accent",
+        "ratio": 12.8
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.98
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.25
+      }
+    },
+    "dragonclaw_gauntlet": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.17
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.89
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.73
+      }
+    },
+    "driftwood_harp": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.04
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.28
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.12
+      }
+    },
+    "eel_s_weave": {
+      "name": {
+        "ink": "light",
+        "ratio": 8.05
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.21
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.19
+      }
+    },
+    "ember_whisperer": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.05
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.79
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.44
+      }
+    },
+    "emerald_turtle": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.79
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.61
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.1
+      }
+    },
+    "ethereal_sea_witch": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.56
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.26
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.34
+      }
+    },
+    "familiar_in_the_dark": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.72
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.68
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.36
+      }
+    },
+    "fangblade_dagger": {
+      "name": {
+        "ink": "accent",
+        "ratio": 10.11
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 10.33
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.59
+      }
+    },
+    "fayes_true_face": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.1
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.48
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.29
+      },
+      "mc": {
+        "ink": "light",
+        "ratio": 4.52
+      }
+    },
+    "femur_catapult": {
+      "name": {
+        "ink": "light",
+        "ratio": 12.17
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.27
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.55
+      }
+    },
+    "filigree_nautilus": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.54
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.18
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.99
+      }
+    },
+    "fissure_gas_bunker": {
+      "name": {
+        "ink": "light",
+        "ratio": 1.98
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.37
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.76
+      }
+    },
+    "flash_freeze": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.08
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.71
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.11
+      }
+    },
+    "flesh_to_bone": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.46
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.39
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.66
+      }
+    },
+    "flickering_sea_pens": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.48
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.81
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.7
+      }
+    },
+    "floating_jellyfish": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.02
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 4.35
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.12
+      }
+    },
+    "fossil_fangtrap": {
+      "name": {
+        "ink": "accent",
+        "ratio": 8.67
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.41
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.89
+      }
+    },
+    "frosted_isopod": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.97
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 4.77
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.04
+      }
+    },
+    "galaxy_jellyfish": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.24
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.45
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.31
+      }
+    },
+    "galleon_shipwreck": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.99
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.44
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.19
+      }
+    },
+    "gearbone_sentinel": {
+      "name": {
+        "ink": "accent",
+        "ratio": 8.8
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.49
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 13.03
+      }
+    },
+    "gearbone_strider": {
+      "name": {
+        "ink": "accent",
+        "ratio": 10.51
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 9
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.91
+      }
+    },
+    "ghost_tunicate": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.94
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.17
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.45
+      }
+    },
+    "glacier_shark": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.38
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 4.97
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.79
+      }
+    },
+    "glass_kelp_forest": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.24
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.55
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.57
+      }
+    },
+    "glass_shrimp": {
+      "name": {
+        "ink": "light",
+        "ratio": 8.49
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.33
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.03
+      }
+    },
+    "glass_squid": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.5
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.63
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.09
+      }
+    },
+    "glassmote_construct": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.08
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.57
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.81
+      }
+    },
+    "glowing_glyph_tablet": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.39
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.99
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.65
+      }
+    },
+    "glowing_manta": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.01
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.09
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.19
+      }
+    },
+    "glowing_sea_spider": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.08
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.93
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.4
+      }
+    },
+    "goldstream_conjurer": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.34
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.31
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.91
+      }
+    },
+    "gossamer_jellyfish": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.27
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.62
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.45
+      }
+    },
+    "graftbone_colossus": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.52
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.96
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 13.18
+      }
+    },
+    "grafted_steamwings": {
+      "name": {
+        "ink": "accent",
+        "ratio": 10.66
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 11.43
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 13.37
+      }
+    },
+    "grit_and_halftones": {
+      "name": {
+        "ink": "light",
+        "ratio": 7.87
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.83
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.57
+      }
+    },
+    "gulper_eel": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.53
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.44
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.83
+      }
+    },
+    "half_faded_shade": {
+      "name": {
+        "ink": "accent",
+        "ratio": 8.45
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.02
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.95
+      }
+    },
+    "hammerhead_silhouette": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.95
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.91
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.22
+      }
+    },
+    "handed_squid": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.77
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.68
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.23
+      }
+    },
+    "haunted_submarine": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.99
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.59
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.85
+      }
+    },
+    "heart_coral": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.01
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.11
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.84
+      }
+    },
+    "heart_of_the_thermal_grid": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.88
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 19.81
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.71
+      }
+    },
+    "helix_swarm": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.59
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.25
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.87
+      }
+    },
+    "helmet_hermit": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.25
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.68
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.91
+      }
+    },
+    "hive_power_cell": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.95
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.74
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.19
+      }
+    },
+    "hollow_eyed_pyromancer": {
+      "name": {
+        "ink": "accent",
+        "ratio": 9.84
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 11.46
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 13.8
+      }
+    },
+    "hollow_suit": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.28
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.57
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.07
+      }
+    },
+    "iron_scaled_snail": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.74
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.02
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.87
+      }
+    },
+    "isle_of_shells": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.53
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.76
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.57
+      }
+    },
+    "isle_of_the_ancients": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.18
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.26
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.35
+      }
+    },
+    "jagged_dragonfang_blade": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.22
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 9.58
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.54
+      }
+    },
+    "jarred_sunspark": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.45
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.65
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.19
+      }
+    },
+    "jawbone_span": {
+      "name": {
+        "ink": "accent",
+        "ratio": 8.37
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 9.14
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.16
+      }
+    },
+    "kinetic_anchor_monolith": {
+      "name": {
+        "ink": "dark",
+        "ratio": 2.83
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.01
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.87
+      }
+    },
+    "kinetic_overflow": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.62
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.48
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.22
+      }
+    },
+    "kinetic_piercer": {
+      "name": {
+        "ink": "accent",
+        "ratio": 8.26
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 21
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.83
+      }
+    },
+    "kinetic_siphon_swarm": {
+      "name": {
+        "ink": "dark",
+        "ratio": 2.83
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 10.32
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 1.38
+      }
+    },
+    "kinetic_storage_gauntlet": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.18
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.6
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.95
+      }
+    },
+    "kinetix_blacksite_cavern": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.36
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.09
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.85
+      }
+    },
+    "kinetix_enforcer": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.28
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.57
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.42
+      }
+    },
+    "kraken_s_monolith": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.68
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.92
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.33
+      }
+    },
+    "krill_constellation": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.28
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.03
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.42
+      }
+    },
+    "kunoichi_of_the_magma_rings": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.35
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.95
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.52
+      }
+    },
+    "lace_lionfish": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.96
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.26
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.07
+      }
+    },
+    "legendary_diver": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.11
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.69
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.91
+      }
+    },
+    "levitating_coven": {
+      "name": {
+        "ink": "accent",
+        "ratio": 10.56
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 10.11
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.13
+      }
+    },
+    "light_seahorse": {
+      "name": {
+        "ink": "light",
+        "ratio": 9.14
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.65
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.21
+      }
+    },
+    "locust_veil": {
+      "name": {
+        "ink": "light",
+        "ratio": 1.74
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.81
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 1.68
+      }
+    },
+    "magma_conduit_network": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.42
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.65
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.86
+      }
+    },
+    "magma_phase_infiltrator": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.41
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.14
+      }
+    },
+    "magma_ring_adept": {
+      "name": {
+        "ink": "dark",
+        "ratio": 2.81
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 4.5
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 1.68
+      }
+    },
+    "mandarin_dragonet": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.71
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.19
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.12
+      }
+    },
+    "map_pearl": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.81
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.96
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.97
+      }
+    },
+    "marble_reef_shark": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.26
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 4.07
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.34
+      }
+    },
+    "masked_fume_walker": {
+      "name": {
+        "ink": "accent",
+        "ratio": 8.91
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.58
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.94
+      }
+    },
+    "mausoleum_edge": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.79
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.41
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2
+      }
+    },
+    "melted_hollow": {
+      "name": {
+        "ink": "accent",
+        "ratio": 10.33
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 9.08
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.88
+      }
+    },
+    "mer_king": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.38
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 5.31
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.72
+      }
+    },
+    "mer_warrior": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.8
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.14
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.77
+      }
+    },
+    "merfolk_ritual": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.51
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.96
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.11
+      }
+    },
+    "mermaid_statue": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.9
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.26
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.91
+      }
+    },
+    "mesozoic_exchange_student": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.33
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.48
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.51
+      }
+    },
+    "micro_drone_immolation": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.44
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.97
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.82
+      }
+    },
+    "mirror_hatchetfish": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.38
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.39
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.55
+      }
+    },
+    "mist_ghost_ship": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.99
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.23
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.04
+      }
+    },
+    "molten_camo_weave": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.3
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.76
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.72
+      }
+    },
+    "nanite_culture_lab": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.1
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.35
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.69
+      }
+    },
+    "nanite_division_marshal": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.55
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.63
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.23
+      }
+    },
+    "nanite_purge_protocol": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.03
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.88
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.92
+      }
+    },
+    "nanite_shock_trooper": {
+      "name": {
+        "ink": "light",
+        "ratio": 12.03
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.12
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.5
+      }
+    },
+    "narwhal_staff": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.76
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.07
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.83
+      }
+    },
+    "nebula_clutch": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.59
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.67
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.69
+      }
+    },
+    "nebula_snail": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.37
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.51
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.53
+      }
+    },
+    "needle_seamstress": {
+      "name": {
+        "ink": "accent",
+        "ratio": 9.5
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.51
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.23
+      }
+    },
+    "neon_moray": {
+      "name": {
+        "ink": "light",
+        "ratio": 9.77
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.45
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.48
+      }
+    },
+    "neon_phantom_assassin": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.8
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.48
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 18.15
+      }
+    },
+    "obsidian_altar": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.95
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.08
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.09
+      }
+    },
+    "obsidian_bore_site": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.84
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.24
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.12
+      }
+    },
+    "obsidian_dice": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.3
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.86
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.94
+      }
+    },
+    "obsidian_golem": {
+      "name": {
+        "ink": "dark",
+        "ratio": 2.54
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.57
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.2
+      }
+    },
+    "obsidian_scalpel": {
+      "name": {
+        "ink": "accent",
+        "ratio": 8.76
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 11.81
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.83
+      }
+    },
+    "obsidian_swordfish": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.83
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.25
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.08
+      }
+    },
+    "obsidian_trident": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.54
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.68
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.69
+      }
+    },
+    "ossuary_vault": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.7
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 10.56
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.95
+      }
+    },
+    "outrun_horizon": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.95
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.96
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.28
+      }
+    },
+    "overseer_optic": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.11
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.07
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.31
+      }
+    },
+    "pearl_of_the_deep": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.96
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.96
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.06
+      }
+    },
+    "perpetual_dynamo": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.02
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.46
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.04
+      }
+    },
+    "petrified_ribs_citadel": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.07
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 10.21
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.45
+      }
+    },
+    "phantom_dumbo": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.3
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.97
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.96
+      }
+    },
+    "phantom_squadron": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.01
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.83
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.8
+      }
+    },
+    "phantom_whale": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.05
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.02
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.38
+      }
+    },
+    "phantom_wing_leaper": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.6
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.45
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 13.25
+      }
+    },
+    "phosphor_lich": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.16
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.12
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.42
+      }
+    },
+    "playful_otters": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.69
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.11
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.76
+      }
+    },
+    "polished_waystone": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.91
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.21
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.9
+      }
+    },
+    "pop_culture_commando": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.32
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.83
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.15
+      }
+    },
+    "porcelain_lobster": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.38
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.91
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.02
+      }
+    },
+    "pufferfish_lantern": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.62
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.69
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.71
+      }
+    },
+    "pulsating_clam": {
+      "name": {
+        "ink": "light",
+        "ratio": 8.6
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.68
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.5
+      }
+    },
+    "pulsing_heartstone": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.02
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.26
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.37
+      }
+    },
+    "purple_lensed_goggles": {
+      "name": {
+        "ink": "accent",
+        "ratio": 10.7
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.82
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.74
+      }
+    },
+    "pyroproof_vanguard": {
+      "name": {
+        "ink": "light",
+        "ratio": 1.86
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.67
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.86
+      }
+    },
+    "research_fleet": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.36
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.64
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.76
+      }
+    },
+    "resonant_shuriken": {
+      "name": {
+        "ink": "accent",
+        "ratio": 12.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.59
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 15.64
+      }
+    },
+    "ribbone_longbow": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.87
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.75
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.56
+      }
+    },
+    "ribcage_titan": {
+      "name": {
+        "ink": "light",
+        "ratio": 10.28
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.13
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.18
+      }
+    },
+    "ribvault_cathedral": {
+      "name": {
+        "ink": "accent",
+        "ratio": 11.83
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 10.86
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.36
+      }
+    },
+    "ruin_scavenger": {
+      "name": {
+        "ink": "light",
+        "ratio": 11.82
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.57
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.7
+      }
+    },
+    "ruinwalker_overseer": {
+      "name": {
+        "ink": "accent",
+        "ratio": 8.66
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.67
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.65
+      }
+    },
+    "rune_etched_tablet": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 9.83
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.45
+      }
+    },
+    "rune_ignition": {
+      "name": {
+        "ink": "accent",
+        "ratio": 9.16
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 11.02
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.21
+      }
+    },
+    "runeforge_smith": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.15
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.84
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.62
+      }
+    },
+    "ruthless_succession": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.44
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.11
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.22
+      }
+    },
+    "sand_portal": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.54
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.23
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.7
+      }
+    },
+    "sand_waterfall": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.6
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.64
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 7.31
+      }
+    },
+    "sandstorm_effigy": {
+      "name": {
+        "ink": "light",
+        "ratio": 7.7
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.13
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.11
+      }
+    },
+    "sardine_vortex": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.2
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.12
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.29
+      }
+    },
+    "scale_butterfly": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.12
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.99
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.36
+      }
+    },
+    "scallop_map": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.22
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.53
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.56
+      }
+    },
+    "scorched_bone_standard": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.45
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.82
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.4
+      }
+    },
+    "seabed_mandala": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.93
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.77
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6
+      }
+    },
+    "secret_lair": {
+      "name": {
+        "ink": "light",
+        "ratio": 8.86
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.25
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.89
+      }
+    },
+    "shark_gathering": {
+      "name": {
+        "ink": "light",
+        "ratio": 9.55
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.87
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.48
+      }
+    },
+    "shattered_horizon_protagonist": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.96
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.41
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.71
+      }
+    },
+    "shatterline": {
+      "name": {
+        "ink": "accent",
+        "ratio": 15.8
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 10.96
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.19
+      }
+    },
+    "shimmering_statue": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.89
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.94
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.86
+      }
+    },
+    "shinobi_operations_base": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.3
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.86
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.78
+      }
+    },
+    "silver_chimera": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.26
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.35
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.73
+      }
+    },
+    "skeletal_steed_rider": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.43
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 10.95
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.47
+      }
+    },
+    "skull_cathedral": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.77
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.28
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.53
+      }
+    },
+    "skyborne_skeleton_dragon": {
+      "name": {
+        "ink": "accent",
+        "ratio": 10.53
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 10.67
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.77
+      }
+    },
+    "skydark_locust_host": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.36
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.74
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.24
+      }
+    },
+    "slate_scaled_serpent": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.84
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.32
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.54
+      }
+    },
+    "smokeveil_striketeam": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.33
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.89
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.5
+      }
+    },
+    "sonic_shatter": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.3
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 14.51
+      }
+    },
+    "sovereign_of_the_dying_star": {
+      "name": {
+        "ink": "light",
+        "ratio": 11.77
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.89
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.1
+      }
+    },
+    "sovereign_spires_of_arrak_zul": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.1
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.59
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.05
+      }
+    },
+    "sparkling_meadow": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.49
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.05
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.56
+      }
+    },
+    "spectral_leviathan": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.47
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.9
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.53
+      }
+    },
+    "sphere_pufferfish": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.74
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.47
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.73
+      }
+    },
+    "stag_of_the_cosmic_pyre": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.86
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.85
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.24
+      },
+      "mc": {
+        "ink": "light",
+        "ratio": 8.48
+      }
+    },
+    "star_patterned_manta": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.47
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.78
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.04
+      }
+    },
+    "stone_bubbles": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.18
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.08
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.67
+      }
+    },
+    "stone_hand": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.66
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.04
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.84
+      }
+    },
+    "stormcaller_adept": {
+      "name": {
+        "ink": "light",
+        "ratio": 7.01
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.48
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.6
+      }
+    },
+    "submerged_archives": {
+      "name": {
+        "ink": "light",
+        "ratio": 7.37
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.05
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.45
+      }
+    },
+    "submerged_starfall": {
+      "name": {
+        "ink": "accent",
+        "ratio": 8.77
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.11
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.09
+      }
+    },
+    "submerged_statue": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.9
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.26
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.98
+      }
+    },
+    "submerged_temple": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.77
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.01
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.47
+      }
+    },
+    "sunken_archive": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.38
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.37
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.8
+      }
+    },
+    "sunken_bounty": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.7
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.99
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.77
+      }
+    },
+    "sunken_meadow": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.1
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.25
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 5.85
+      }
+    },
+    "sunken_timepiece": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.11
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.29
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.54
+      }
+    },
+    "swaying_garden": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.67
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.63
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.4
+      }
+    },
+    "swirling_ink_cloud": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.8
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.62
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.56
+      }
+    },
+    "symbiotic_scan_swarm": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.19
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.79
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.08
+      }
+    },
+    "tailbone_throne": {
+      "name": {
+        "ink": "accent",
+        "ratio": 12.09
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 14.17
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 14.19
+      }
+    },
+    "tang_s_refuge": {
+      "name": {
+        "ink": "light",
+        "ratio": 5
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.05
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.04
+      }
+    },
+    "tangled_seahorses": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.75
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.54
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.83
+      }
+    },
+    "tattooed_sovereign": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.27
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 12.11
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.37
+      }
+    },
+    "tectonic_rift": {
+      "name": {
+        "ink": "accent",
+        "ratio": 14.76
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 15.65
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 1.85
+      }
+    },
+    "tethered_orbs": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.68
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.28
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.78
+      }
+    },
+    "the_abyssal_gate": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.43
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.03
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.5
+      }
+    },
+    "the_chimney_snacker": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.25
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.14
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.09
+      }
+    },
+    "the_descent": {
+      "name": {
+        "ink": "accent",
+        "ratio": 9.49
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 12.05
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.6
+      }
+    },
+    "the_floating_eye": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.1
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.19
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.73
+      }
+    },
+    "the_garden_variety_glock": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.34
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.48
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.82
+      }
+    },
+    "the_locksmiths_regret": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.41
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.52
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.22
+      }
+    },
+    "the_mirrored_trench": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.93
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.91
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.37
+      }
+    },
+    "the_pier_side_menace": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.04
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.31
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.08
+      }
+    },
+    "the_taking": {
+      "name": {
+        "ink": "accent",
+        "ratio": 11.81
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 13.38
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.46
+      }
+    },
+    "the_wolf_of_wall_street": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.18
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 4.19
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.61
+      }
+    },
+    "thornfang_vine": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.84
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.45
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.67
+      }
+    },
+    "threefold_bone_shield": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.01
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.73
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.85
+      }
+    },
+    "titan_of_the_trench": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.6
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.55
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.27
+      }
+    },
+    "topographic_behemoth": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.29
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.79
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.58
+      }
+    },
+    "towering_tsunami": {
+      "name": {
+        "ink": "light",
+        "ratio": 4.73
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 3.32
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.81
+      }
+    },
+    "trench_gateway": {
+      "name": {
+        "ink": "light",
+        "ratio": 7.14
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.79
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.14
+      }
+    },
+    "urnbearer_of_blight": {
+      "name": {
+        "ink": "accent",
+        "ratio": 4.82
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.93
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.33
+      }
+    },
+    "vampire_squid": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.84
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.79
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 9.27
+      }
+    },
+    "vector_blade_captain": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.58
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 3.18
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.14
+      }
+    },
+    "victorian_helmet": {
+      "name": {
+        "ink": "accent",
+        "ratio": 6.91
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.43
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3.44
+      }
+    },
+    "violet_haze_kunoichi": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.07
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 1.37
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 8.79
+      }
+    },
+    "vlad_from_accounting": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.86
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 2.74
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 3
+      }
+    },
+    "void_mother": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.23
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.51
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 2.18
+      },
+      "mc": {
+        "ink": "light",
+        "ratio": 4.44
+      }
+    },
+    "volcanic_crab": {
+      "name": {
+        "ink": "light",
+        "ratio": 3.59
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.93
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 6.47
+      }
+    },
+    "volcanic_nanite_core": {
+      "name": {
+        "ink": "light",
+        "ratio": 5.58
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 7.23
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.5
+      }
+    },
+    "wasteland_aberration": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.82
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.77
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.32
+      }
+    },
+    "wasteland_rupture": {
+      "name": {
+        "ink": "accent",
+        "ratio": 9.01
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.16
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 14.19
+      }
+    },
+    "whale_fall_ceremony": {
+      "name": {
+        "ink": "accent",
+        "ratio": 5.2
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 2.41
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.04
+      }
+    },
+    "whelpbone_hatchling": {
+      "name": {
+        "ink": "accent",
+        "ratio": 9.31
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 8.82
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.93
+      }
+    },
+    "where_the_deep_meets_the_sky": {
+      "name": {
+        "ink": "light",
+        "ratio": 8.47
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.68
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 10.16
+      }
+    },
+    "wingbone_horror": {
+      "name": {
+        "ink": "light",
+        "ratio": 10.01
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 6.14
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 11.14
+      }
+    },
+    "worm_brain_host": {
+      "name": {
+        "ink": "light",
+        "ratio": 2.46
+      },
+      "tag": {
+        "ink": "dark",
+        "ratio": 6.53
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 1.65
+      }
+    },
+    "wraithlight_lantern": {
+      "name": {
+        "ink": "accent",
+        "ratio": 7.52
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 5.72
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 12.12
+      }
+    },
+    "zen_decay": {
+      "name": {
+        "ink": "light",
+        "ratio": 6.53
+      },
+      "tag": {
+        "ink": "light",
+        "ratio": 1.2
+      },
+      "quote": {
+        "ink": "light",
+        "ratio": 4.39
+      }
+    }
+  }
 }
