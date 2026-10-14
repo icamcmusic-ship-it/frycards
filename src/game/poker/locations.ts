@@ -53,7 +53,7 @@ export const LOCATION_TEMPLATES: Record<LocationRuleId, LocationTemplate> = {
     id: 'openHand',
     name: 'Open Hand',
     tag: 'Neutral',
-    text: () => "Each player's lowest hole card is dealt face-up.",
+    text: () => "Each player's lowest hole card is dealt face-up; the dealer's highest.",
   },
   doubleBoard: {
     id: 'doubleBoard',
@@ -87,7 +87,8 @@ export const LOCATION_TEMPLATES: Record<LocationRuleId, LocationTemplate> = {
     name: 'Bomb Pot',
     tag: 'Chaos',
     params: [1, 2],
-    text: (p = 1) => `Everyone antes ${fmtUnits(p)}; no blinds and no pre-flop betting.`,
+    text: (p = 1) =>
+      `Everyone antes ${fmtUnits(p)}; no blinds and no pre-flop betting. The dealer acts first on the flop.`,
   },
   pineapple: {
     id: 'pineapple',

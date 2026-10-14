@@ -642,6 +642,20 @@ const leaderRows: BandRow[] = deckRows
   .sort((a, b) => b.rate - a.rate);
 const locationWorst = ruleRows.filter((r) => r.status !== 'thin');
 const locationMaxDev = locationWorst.reduce((a, r) => Math.max(a, Math.abs(r.delta)), 0);
+/**
+ * Audit 2026-10-14 §3.4: target 4 used to pass unless a rule was a FLAG
+ * (outside the band AND significant after the Bonferroni correction across
+ * all 18 rules), so Bomb Pot at +7.6 pts passed "by its own definition".
+ * It now also misses on any measured rule more than twice the band out
+ * (> ±4 pts) whose own deviation is significant at 90% (|z| > 1.64) — Bomb
+ * Pot was +7.6 at z 1.9. Thin rules (under the hand minimum) still never fail.
+ */
+const LOCATION_HARD_PTS = TARGET.dealerPts * 2;
+const locationMisses = ruleRows.filter(
+  (r) =>
+    r.status === 'FLAG' ||
+    (r.status !== 'thin' && Math.abs(r.delta) * 100 > LOCATION_HARD_PTS && Math.abs(r.z) > 1.64),
+);
 
 // ---------------------------------------------------------------------------
 // Report
@@ -673,7 +687,8 @@ const results = {
     baseline: dealerBase,
     maxDeviation: locationMaxDev,
     target: TARGET.dealerPts / 100,
-    ok: !ruleRows.some((r) => r.status === 'FLAG'),
+    misses: locationMisses.map((r) => r.name),
+    ok: locationMisses.length === 0,
   },
 };
 
@@ -694,7 +709,9 @@ console.log(
 );
 console.log(
   `4. Location fairness ${verdict(results.location.ok)}  dealer baseline ${pct(dealerBase)} over ` +
-    `${dealerAll.n} hands; largest rule deviation ${pts(locationMaxDev)} pts (target within ±${TARGET.dealerPts})`,
+    `${dealerAll.n} hands; largest rule deviation ${pts(locationMaxDev)} pts (target within ±${TARGET.dealerPts}; ` +
+    `misses on a FLAG or a rule beyond ±${LOCATION_HARD_PTS} at |z| > 1.64)` +
+    (locationMisses.length ? ` — MISSED BY ${locationMisses.map((r) => r.name).join(', ')}` : ''),
 );
 
 header('REVIVAL BY KEYWORD (resolved casts / turned)');

@@ -813,9 +813,11 @@ function startHand(m: Match): void {
     }
   }
   if (rule.id === 'openHand') {
+    // Audit 2026-10-14 §3.4: +5.5 to +7.9 pts for the dealer, who acts last
+    // with everyone's low card known. The dealer shows their HIGH card.
     for (const i of live) {
-      const low = [...h.holes[i]].sort((a, b) => a.r - b.r)[0];
-      low.public = true;
+      const sorted = [...h.holes[i]].sort((a, b) => a.r - b.r);
+      (i === m.button ? sorted[sorted.length - 1] : sorted[0]).public = true;
     }
   }
 
@@ -873,6 +875,10 @@ function firstToAct(m: Match, street: Street): number | null {
     return nextSeat(m, from, ok);
   }
   if (reverse) return nextSeat(m, h.button, ok, -1, true);
+  // Audit 2026-10-14 §3.4: every seat is in a Bomb Pot's flop, so acting last
+  // there was worth +7.6 pts to the dealer. The dealer leads the flop instead;
+  // turn and river run in the normal order.
+  if (h.rule.id === 'bombPot' && street === 'flop') return nextSeat(m, h.button, ok, 1, true);
   return nextSeat(m, h.button, ok);
 }
 

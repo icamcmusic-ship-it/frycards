@@ -561,12 +561,12 @@ stack** a small buff.
 | --------------- | ------------------------------------------------------------------------------------------------------------ | ----------------- |
 | Plain Table     | No rule change. Pure poker. (One per cycle; not on any card.)                                                | Pure poker        |
 | High Stakes     | Blinds ×1.5 (or ×2) this hand                                                                                | Neutral           |
-| Open Hand       | Each player's lowest hole card is dealt face-up                                                              | Neutral           |
+| Open Hand       | Each player's lowest hole card is dealt face-up; the dealer's highest                                        | Neutral           |
 | Double Board    | Turn and river are dealt twice (the flop is shared); each pot splits between the two boards                  | Neutral           |
 | Night Game      | No Quick Events this hand (Ambush cards still respond)                                                       | Neutral           |
 | Dealer's Choice | The dealer gets one free Peek (one card) on any of its turns; the shortest stack gets one too                | Favors the dealer |
 | House Rake      | The dealer antes 1 and collects 1 from the pot at the end of the hand                                        | Favors the dealer |
-| Bomb Pot        | Everyone antes 1 (or 2); no blinds and no pre-flop betting — straight to the flop                            | Chaos             |
+| Bomb Pot        | Everyone antes 1 (or 2); no blinds and no pre-flop betting — straight to the flop; the dealer acts first     | Chaos             |
 | Pineapple       | Three hole cards each; discard one after the flop                                                            | Structural        |
 | Straddle Night  | Under the gun posts a live double blind (not heads-up); the shortest stack's first power is one step cheaper | Position          |
 | Reverse Order   | Betting goes counter-clockwise; the shortest stack's first power is one step cheaper                         | Position          |
