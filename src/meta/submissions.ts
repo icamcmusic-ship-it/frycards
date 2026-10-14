@@ -73,7 +73,9 @@ export function treatmentName(t: string): string {
  *
  * These are what CardFaceV4 actually renders (`aspect-[4/3]` on the art box,
  * `CARD_SIZES.full` = 240x336 = 5:7), so a submitter cropping to them sees no
- * surprise crop at any card size.
+ * surprise crop at any card size. The Ultra-Rare "Contraband Crate" face
+ * keeps that 4:3 window fixed at every size and never trades it for text
+ * room, so a 4:3 UR print always shows whole (audit-cardface checks it).
  */
 export const ART_SPECS: Record<
   Treatment,

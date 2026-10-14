@@ -1,0 +1,16 @@
+FHWA Series B (fhwa-series-b-latin.woff2, fhwa-series-b-wide-latin.woff2)
+=========================================================================
+
+Used for: the Ultra-Rare "Contraband Crate" type line (FHWASeriesB2020plus0)
+and its cost tag (FHWASeriesB2020plus50, the heavier cut).
+
+Licence: public domain. The font's name table (nameID 0) reads "Public
+domain outline and width data from the Federal Highway Administration's
+Standard Highway Signs manual."
+
+Being public domain, both are subset to printable ASCII and converted to
+woff2:
+  pyftsubset FHWASeriesB2020plus0.otf --unicodes=U+0020-007E,U+2019
+    --flavor=woff2 --layout-features=kern,liga --no-hinting
+  pyftsubset FHWASeriesB2020plus50.otf --unicodes=U+0020-007E
+    --flavor=woff2 --layout-features=kern,liga --no-hinting

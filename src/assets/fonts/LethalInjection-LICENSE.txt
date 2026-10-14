@@ -1,0 +1,29 @@
+Lethal Injection Regular (LethalInjection-Regular.ttf)
+=====================================================
+
+Used for: the Ultra-Rare "Contraband Crate" card face (the stencilled card
+name and the ULTRA RARE seal).
+
+Licence status: UNKNOWN / NOT STATED.
+
+Provenance
+- Supplied by the project owner as lethal_injection.zip. The archive holds
+  only two font files, LethalInjection-Regular.ttf and
+  LethalInjectionScuffed-Regular.ttf (both dated 2024-01-21). It contains no
+  readme, licence or EULA.
+- The font's own name table carries no copyright (nameID 0), licence
+  (nameID 13) or licence URL (nameID 14). It reads only:
+    Family "Lethal Injection", Version 001.006,
+    Unique ID "Calligraphr : Lethal Injection Regular : 21-01-2024",
+    Designer/notes "Created with Calligraphr.com".
+- OS/2 fsType is 0 (installable embedding; no embedding restrictions set).
+
+What is shipped, and why
+- Because no terms grant permission to modify the font, it is shipped
+  UNMODIFIED: this file is byte-identical to the one in the supplied archive
+  (md5 c7d04b5f8354d19e7f24923cb8e5bdc0). It is NOT subset and NOT converted
+  to woff2 (a conversion is a modification). It is 8.7 kB, and the browser
+  fetches it only once an Ultra-Rare card renders.
+- The Scuffed variant is not shipped.
+- Shipped at the owner's request. Before a wider release, confirm the terms
+  with the font's author (Calligraphr user; no contact given in the file).
