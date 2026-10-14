@@ -46,8 +46,8 @@ describe('match-dependent objectives (audit M1)', () => {
     expect(isMatchObjective({ id: 'd_open_1', stat_key: 'packs_opened' })).toBe(false);
   });
 
-  test('CPU play is locked for non-creator accounts only', () => {
-    expect(isCpuLocked({ role: 'player' }, false)).toBe(true);
+  test('CPU play is open to every account (audit 5.4)', () => {
+    expect(isCpuLocked({ role: 'player' }, false)).toBe(false);
     expect(isCpuLocked({ role: 'creator' }, false)).toBe(false);
     expect(isCpuLocked(null, true)).toBe(false);
   });

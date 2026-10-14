@@ -42,10 +42,9 @@ describe('HowToPlay step cards', () => {
     expect(onNavigate).toHaveBeenCalledWith('play', ['practice']);
   });
 
-  test('a locked account is told practice is coming, not offered a dead button', () => {
+  test('a player account gets the practice match too (CPU play is open, audit 5.4)', () => {
     render_({ profile: { role: 'player' } as never });
-    expect(screen.queryByText(/TRY IT: PRACTICE MATCH/)).toBeNull();
-    expect(screen.getByText(/Practice matches are coming soon/)).toBeTruthy();
+    expect(screen.getAllByText(/TRY IT: PRACTICE MATCH/).length).toBeGreaterThan(0);
     // account screens still link
     expect(screen.getByText(/TRY IT: OPEN DECK BUILDER/)).toBeTruthy();
   });

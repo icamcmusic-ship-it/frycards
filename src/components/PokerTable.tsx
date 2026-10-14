@@ -808,11 +808,13 @@ function PokerTableInner({
   const raiseTo = opts?.canRaise
     ? Math.min(opts.maxRaiseTo, Math.max(opts.minRaiseTo, raiseSel))
     : raiseSel;
-  useEffect(() => {
+  // Reset per decision only (derived during render, not in an effect).
+  const decisionSig = `${myTurn}|${match.hand?.currentBet}|${match.hand?.street}|${match.handNo}`;
+  const [raiseSig, setRaiseSig] = useState(decisionSig);
+  if (raiseSig !== decisionSig) {
+    setRaiseSig(decisionSig);
     if (opts?.canRaise) setRaiseTo(opts.minRaiseTo);
-    // Reset per decision only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTurn, match.hand?.currentBet, match.hand?.street, match.handNo]);
+  }
 
   // ---- action guards (S-6, S-7) and pre-actions (S-9) ----------------------
   const [foldGuard] = useState(loadFoldGuard);
@@ -945,14 +947,15 @@ function PokerTableInner({
   const [inspectFromSpot, setInspectFromSpot] = useState(false);
   useEffect(() => {
     // Held spots wait for a tap; an open inspector holds any spot.
-    if (!spot || spot.hold || inspect) return;
+    // Audit 2.1: a spot queued behind the coach keeps its full time.
+    if (!spot || spot.hold || inspect || coachShowing) return;
     const ms =
       spot.cast.target === HUMAN
         ? SPOTLIGHT_AT_YOU_MS
         : Math.max(700, SPOTLIGHT_MS * Math.max(0.4, mult));
     const t = window.setTimeout(() => setSpot(null), ms);
     return () => window.clearTimeout(t);
-  }, [spot, mult, inspect]);
+  }, [spot, mult, inspect, coachShowing]);
 
   // ---- match end: history + result -----------------------------------------
   const reported = useRef(false);
@@ -1454,7 +1457,9 @@ function PokerTableInner({
 
             {/* Cast spotlight v2: docked by the caster, an arrow to the target,
                 and what it did (U4). Click the card for details — never on hover. */}
-            {spot && (
+            {/* Audit 2.1: on a first visit the coach card and a spotlight
+                stacked; the spotlight waits until the coach step is done. */}
+            {spot && !coachShowing && (
               <Spotlight
                 spot={spot}
                 match={view}
@@ -2646,7 +2651,18 @@ function HumanPanel({
           !me.busted &&
           h.dealtIn[HUMAN] &&
           me.stack > 0 && (
-            <div className="flex gap-1" role="group" aria-label="Pre-select your next action">
+            // Audit 2.2: labelled and dimmed, so the queued choices don't
+            // read as live actions while the table acts.
+            <div
+              className="flex items-center gap-1"
+              role="group"
+              aria-label="Pre-select your next action"
+            >
+              <span className="heading-font fs-xs text-white/60 shrink-0 leading-none" aria-hidden>
+                PRE-
+                <br />
+                ACTIONS
+              </span>
               {(
                 [
                   ['checkfold', 'CHECK / FOLD'],
@@ -2664,7 +2680,7 @@ function HumanPanel({
                     narrow ? 'min-h-[36px]' : 'py-1',
                     pre === id
                       ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                      : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                      : 'bg-transparent text-[var(--c-paper)]/70 border-dashed',
                   )}
                 >
                   {pre === id ? '✓ ' : ''}
