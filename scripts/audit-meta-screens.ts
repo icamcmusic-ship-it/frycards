@@ -77,6 +77,26 @@ const CHILD_CAP = Number(process.env.CHILD_CAP ?? 8);
 /** Total (parent, child) pairs measured per screen — the outer bound on the
  * depth-two sweep's runtime, which is otherwise quadratic in control count. */
 const PAIR_CAP = Number(process.env.PAIR_CAP ?? 24);
+/**
+ * Audit 1.2: the full run (load + reflow, text scale, keyboard walk, click
+ * sweep) overran a 9-minute budget, so the phases after the keyboard walk
+ * never reported. `PHASES=load,clicks` (any of load, reflow, textscale,
+ * keyboard, clicks) runs a subset, so the phases can run as parallel
+ * processes or in separate budgets. Default: all of them.
+ */
+const PHASE_NAMES = ['load', 'reflow', 'textscale', 'keyboard', 'clicks'] as const;
+const PHASES = new Set(
+  (process.env.PHASES ?? PHASE_NAMES.join(','))
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+for (const p of PHASES)
+  if (!(PHASE_NAMES as readonly string[]).includes(p)) {
+    console.error(`PHASES: unknown phase "${p}". Known: ${PHASE_NAMES.join(', ')}`);
+    process.exit(2);
+  }
+const phase = (p: (typeof PHASE_NAMES)[number]) => PHASES.has(p);
 
 /**
  * Keep in sync with the `screen=` branches in src/meta-preview.tsx. An entry
@@ -104,6 +124,7 @@ const ALL_SCREENS = [
   'menu',
   'howtoplay',
   'changelog',
+  'credits',
   'history',
   'submissions',
   // v13: the review queue's mechanics-override editor and the BULK ADD
@@ -1168,19 +1189,20 @@ async function keyboard(screen: string) {
 }
 
 for (const screen of SCREENS) {
-  for (const width of WIDTHS) {
-    const r = await check(screen, width);
-    if (width === 375) loadCount.set(screen, r.count);
-    console.log(`${screen} @${width}: ${r.count} controls`);
-  }
-  if (!SKIP_REFLOW) {
+  if (phase('load'))
+    for (const width of WIDTHS) {
+      const r = await check(screen, width);
+      if (width === 375) loadCount.set(screen, r.count);
+      console.log(`${screen} @${width}: ${r.count} controls`);
+    }
+  if (!SKIP_REFLOW && phase('reflow')) {
     const r = await check(screen, REFLOW_W);
     console.log(`${screen} @${REFLOW_W} (reflow): ${r.count} controls`);
   }
 }
 
 // ---- WCAG 1.4.4, measured (v29) -------------------------------------------
-if (TEXT_SCALE > 0) {
+if (TEXT_SCALE > 0 && phase('textscale')) {
   console.log(`\n=== text resize to ${TEXT_SCALE}% (WCAG 1.4.4) ===`);
   let respond = 0;
   let total = 0;
@@ -1208,7 +1230,7 @@ if (TEXT_SCALE > 0) {
 }
 
 // ---- WCAG 2.1.1 / 2.4.7 / 2.1.2, measured (v30) ---------------------------
-if (!SKIP_KEYBOARD) {
+if (!SKIP_KEYBOARD && phase('keyboard')) {
   console.log(`\n=== keyboard walk (WCAG 2.1.1 / 2.4.7 / 2.1.2) ===`);
   for (const screen of SCREENS) {
     const r = await keyboard(screen);
@@ -1224,7 +1246,7 @@ if (!SKIP_KEYBOARD) {
 
 // Click sweep at phone width only — the tighter of the two, and the one an
 // overflow actually hurts on.
-if (!process.env.SKIP_CLICKS) {
+if (!process.env.SKIP_CLICKS && phase('clicks')) {
   for (const screen of SCREENS) {
     let i = 0;
     /** First clicks that revealed controls — the parents worth descending into. */

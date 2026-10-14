@@ -144,6 +144,9 @@ const SettingsScreen = React.lazy(() =>
 const ChangelogScreen = React.lazy(() =>
   SCREEN_LOADERS.changelog().then((m) => ({ default: m.ChangelogScreen })),
 );
+const CreditsScreen = React.lazy(() =>
+  SCREEN_LOADERS.credits().then((m) => ({ default: m.CreditsScreen })),
+);
 const NewsCenterScreen = React.lazy(() =>
   SCREEN_LOADERS.news().then((m) => ({ default: m.NewsCenterScreen })),
 );
@@ -204,6 +207,7 @@ class ErrorBoundary extends React.Component {
 // Play setup — lazy (src/meta/PlayScreen.tsx)
 // ---------------------------------------------------------------------------
 import type { PlaySetup } from './components/PokerMatch';
+import { CardInfoMode, useCardTextPref } from './components/cardInfoMode';
 const PlayScreen = React.lazy(() => SCREEN_LOADERS.play().then((m) => ({ default: m.PlayScreen })));
 
 // ---------------------------------------------------------------------------
@@ -481,6 +485,7 @@ function AppInner({
   // access rules the menu applies to its tiles are enforced on the route as
   // well, so a pasted or stale link cannot skip them. A match is never a
   // route — it lives in `match` below and a hash cannot re-enter one.
+  const cardTextPref = useCardTextPref();
   const cpuLocked = isCpuLocked(profile, guest);
   // Rules can only be judged once we know who is looking: before sign-in, and
   // until a signed-in player's profile (role) has arrived, a link is kept as is
@@ -684,8 +689,11 @@ function AppInner({
             motionMode={motionMode}
             onMotionModeChange={changeMotionMode}
             onBack={back}
+            onOpenCredits={() => go('credits')}
           />
         );
+      case 'credits':
+        return <CreditsScreen onBack={back} />;
       case 'submissions':
         return <CardSubmissionsScreen onBack={back} />;
       case 'changelog':
@@ -715,24 +723,26 @@ function AppInner({
   })();
 
   return (
-    <RouterProvider value={router}>
-      <CurrencyToasts />
-      {content}
-      {linkedDeck && !match && (
-        <React.Suspense fallback={null}>
-          <DeckLinkPreview
-            code={linkedDeck}
-            canOpenBuilder={!!session}
-            onOpenBuilder={() => {
-              stashPendingDeck(linkedDeck);
-              closeLinkedDeck();
-              go('decks');
-            }}
-            onClose={closeLinkedDeck}
-          />
-        </React.Suspense>
-      )}
-    </RouterProvider>
+    <CardInfoMode.Provider value={cardTextPref}>
+      <RouterProvider value={router}>
+        <CurrencyToasts />
+        {content}
+        {linkedDeck && !match && (
+          <React.Suspense fallback={null}>
+            <DeckLinkPreview
+              code={linkedDeck}
+              canOpenBuilder={!!session}
+              onOpenBuilder={() => {
+                stashPendingDeck(linkedDeck);
+                closeLinkedDeck();
+                go('decks');
+              }}
+              onClose={closeLinkedDeck}
+            />
+          </React.Suspense>
+        )}
+      </RouterProvider>
+    </CardInfoMode.Provider>
   );
 }
 
