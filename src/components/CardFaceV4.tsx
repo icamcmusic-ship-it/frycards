@@ -89,7 +89,7 @@ export function kwList(def: CardDef): string[] {
 }
 
 /**
- * Premium templates — Ultra-Rare "Prism Pop", Mythic "Void Eclipse" and
+ * Premium templates — Ultra-Rare "Contraband Crate", Mythic "Void Eclipse" and
  * Alt-Art "Prism Ink". These styles are injected from this component (rather
  * than index.css) so the whole premium template system lives in one file with
  * the markup that uses it. Injected exactly once per document.
@@ -107,75 +107,63 @@ export function kwList(def: CardDef): string[] {
  *   setting: animations stop and the hover-gated layers settle to a faint
  *   static state.
  */
-const PREMIUM_STYLE_ID = 'frycards-premium-templates-v82';
+const PREMIUM_STYLE_ID = 'frycards-premium-templates-v83';
 const PREMIUM_CSS = `
-/* ---- Ultra-Rare "Prism Pop" (v8) ----
-   A thick holographic frame with an ink outline and a soft STATIC sheen, the
-   name in Anak Manja on a tilted yellow banner with a hard offset shadow, the
-   art as a slightly rotated print over a halftone burst in the card's colour,
-   a gold-foil starburst cost badge and a
-   black-and-yellow ULTRA RARE sash across the art's top-right corner. Nothing
-   here animates. */
-.ur-prism {
-  background-image: conic-gradient(from 210deg at 50% 50%, #ff6ad5, #ffd54f, #7dffb0, #5ad1ff, #a78bfa, #ff6ad5);
+/* ---- Ultra-Rare "Contraband Crate" (v9) ----
+   Smuggled high-stakes cargo: an ink-black crate frame, the name stencilled
+   in Lethal Injection on a hazard-striped rail in the card's colour, the art
+   in a fixed 4:3 window (never cropped, never resized by the text fit) with
+   a red stamped ULTRA RARE seal, a black type line in FHWA Series B and a
+   yellow cost tag. Nothing here animates. In a dark theme the crate gets a
+   lighter rim so it does not sink into the page (not at the poker table,
+   which keeps the classic roles). */
+.ur-crate.ur-crate { background: #151515; border-color: #151515; }
+html[data-scheme='dark'] .ur-crate.ur-crate:not(.poker-table *) { background: #5a5f6b; border-color: #8a909c; }
+.ur-hazard {
+  background: repeating-linear-gradient(-45deg, var(--ur-k) 0 var(--ur-st), #151515 var(--ur-st) calc(2 * var(--ur-st)));
+  border-bottom: solid #151515;
 }
-.ur-sheen {
-  pointer-events: none;
-  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.55) 42%, transparent 52%,
-    transparent 62%, rgba(255,255,255,0.3) 70%, transparent 78%);
-  mix-blend-mode: soft-light;
-}
-.ur-banner {
-  background: #ffd54f;
-  color: #1a1a1a;
-  border: 2px solid #1a1a1a;
-  box-shadow: 3px 3px 0 #1a1a1a;
-  transform: rotate(-2deg);
-}
-/* Hollow faces with a baked-in outline + extrusion: always on a solid plate,
-   never a text-shadow. */
-.ur-anak {
-  font-family: 'Anak Manja', 'Montserrat', sans-serif;
+.ur-stencil {
+  font-family: 'UR Stencil', 'Montserrat', sans-serif;
   font-weight: 400;
   text-transform: uppercase;
-  letter-spacing: 0;
-  text-shadow: none;
+  letter-spacing: 0.01em;
 }
-.ur-burst {
-  background:
-    radial-gradient(circle, var(--ur-k) 22%, transparent 23%) 0 0 / var(--ur-dot) var(--ur-dot),
-    repeating-conic-gradient(from 0deg at 50% 55%,
-      color-mix(in srgb, var(--ur-k) 85%, #fff) 0 6deg,
-      color-mix(in srgb, var(--ur-k) 25%, #fff) 6deg 12deg);
-}
-.ur-burst::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 50% 55%, rgba(255,255,255,0.9), rgba(255,255,255,0) 55%);
-  pointer-events: none;
-}
-.ur-print {
-  transform: rotate(-1.2deg);
-  border: 2px solid #1a1a1a;
-  box-shadow: 0 0 8px 1px var(--ur-k), 2px 2px 0 #1a1a1a;
-  overflow: hidden;
-  background: #1a1a1a;
-}
-.ur-sash {
-  background: #1a1a1a;
-  color: #ffd54f;
-  border-top: 1.5px solid #ffd54f;
-  border-bottom: 1.5px solid #ffd54f;
-  box-shadow: 0 2px 0 rgba(0,0,0,0.25);
-  text-align: center;
-  white-space: nowrap;
+.ur-name {
+  display: inline-block;
+  max-width: 100%;
+  background: #151515;
+  color: #fff;
   line-height: 1;
-  transform: rotate(45deg);
+  text-shadow: 0.1em 0.1em 0 #151515;
+}
+.ur-seal {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: solid #e2312a;
+  border-radius: 50%;
+  color: #e2312a;
+  background: rgba(255,255,255,0.75);
+  text-align: center;
+  line-height: 1;
+  white-space: pre;
+  transform: rotate(-14deg);
   pointer-events: none;
 }
-.ur-foil {
-  background: linear-gradient(135deg, #8a6d1f, #ffe9a3 30%, #d4af37 50%, #fff3c2 65%, #a77d1c);
+.ur-sign { font-family: 'UR Sign', 'Montserrat', sans-serif; font-weight: 400; word-spacing: -0.3em; }
+.ur-tag {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  background: #ffd54f;
+  color: #151515;
+  border: solid #151515;
+  box-shadow: 2px 2px 0 #151515;
+  font-family: 'UR Sign Wide', 'Montserrat', sans-serif;
+  font-weight: 400;
+  line-height: 1;
+  clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
 }
 /* Micro board token: just the holographic ring. */
 .ur-holo-ring {
@@ -321,7 +309,7 @@ html[data-motion='reduced'] .fa-tab, html[data-motion='reduced'] .fa-tab-body { 
    The shared print language every rarity now uses: an ink masthead, a boxed
    4:3 art window, a rarity rule whose weight IS the ladder, and a dashed
    flavor divider. Super-Rare animates inside the art window; Ultra-Rare
-   has its own "Prism Pop" frame (above); Full-Art and Mythic drop the frame for full-bleed
+   has its own "Contraband Crate" frame (above); Full-Art and Mythic drop the frame for full-bleed
    art (Mythic's is a looping video). Foil prints swap every animated layer
    for a STATIC prismatic foil stamp. */
 @keyframes fc-foil-diag {
@@ -510,27 +498,78 @@ ensurePremiumStyles();
  * needs to negative-inset outward by exactly this much to actually reach it. */
 const OUTER_BORDER_PX: Record<CardSize, number> = { micro: 1, compact: 2, standard: 3, full: 4 };
 
-/** Ultra-Rare "Prism Pop" geometry per tier (micro renders through MicroCard
- * and only gets the holographic ring). `frame` is the holo frame's width
- * inside the outer ink border; `badge` the gold starburst cost badge; `dot` the halftone pitch of the art window's burst. */
+/** Ultra-Rare "Contraband Crate" geometry per tier (micro renders through
+ * MicroCard and only gets the ring). `frame` is the black crate's width
+ * inside the outer border; `stripe` the hazard stripe pitch; `padX`/`padY`
+ * the hazard rail's padding around the name plate; `name` the stencil's
+ * largest/smallest size; `type` the type line size; `rule` the accent rule
+ * over the text box; `seal` the ULTRA RARE stamp's diameter and font; `tag`
+ * the cost tag's width, height and font; `inset` the crate's margin either
+ * side of the art window (the window keeps one fixed 4:3 size per tier, set
+ * so the whole pool's text fits beside it at standard). */
 const UR_GEOM: Record<
   Exclude<CardSize, 'micro'>,
-  { frame: number; badge: number; dot: number; sashFont: number }
+  {
+    frame: number;
+    stripe: number;
+    padX: number;
+    padY: number;
+    name: [number, number];
+    type: number;
+    rule: number;
+    seal: [number, number];
+    tag: [number, number, number];
+    inset: number;
+  }
 > = {
-  full: { frame: 5, badge: 27, dot: 5, sashFont: 9.5 },
-  standard: { frame: 4, badge: 19, dot: 4, sashFont: 5.5 },
-  compact: { frame: 3, badge: 16, dot: 3, sashFont: 4.5 },
+  full: {
+    frame: 4,
+    stripe: 7,
+    padX: 7,
+    padY: 3,
+    name: [19, 12],
+    type: 9,
+    rule: 3,
+    seal: [44, 9],
+    tag: [40, 30, 17],
+    inset: 3,
+  },
+  standard: {
+    frame: 2,
+    stripe: 4,
+    padX: 4,
+    padY: 1.5,
+    name: [10, 7.5],
+    type: 6,
+    rule: 2,
+    seal: [26, 5.5],
+    tag: [24, 16, 10],
+    inset: 8,
+  },
+  compact: {
+    frame: 2,
+    stripe: 3.5,
+    padX: 3,
+    padY: 1.5,
+    name: [10, 5.5],
+    type: 5.5,
+    rule: 1.5,
+    seal: [20, 4.5],
+    tag: [20, 15, 8.5],
+    inset: 0,
+  },
 };
 
-/** Anak Manja's mean advance width (em) over A–Z — used to fit a name on the
- * Ultra-Rare banner without measuring the DOM. */
-const ANAK_EM = 0.7;
+/** Lethal Injection's mean advance width (em) over A–Z (its space is much
+ * narrower, so this is the safe side) — fits a name on the Ultra-Rare
+ * hazard rail without measuring the DOM. */
+const STENCIL_EM = 0.65;
 
-/** Anak Manja size for `text` in `avail` px, or null when it would have to
- * go below `min` (the caller falls back to Montserrat). */
-function anakFit(text: string, avail: number, max: number, min: number): number | null {
-  const px = Math.min(max, avail / (Math.max(1, text.length) * ANAK_EM));
-  return px >= min ? Math.round(px * 10) / 10 : null;
+/** Stencil size for `text` on one line of `avail` px, never below `min`
+ * (where the name wraps instead). */
+function stencilFit(text: string, avail: number, max: number, min: number): number {
+  const px = Math.min(max, avail / (Math.max(1, text.length) * STENCIL_EM));
+  return Math.round(Math.max(min, px) * 10) / 10;
 }
 
 /** `el`'s layout offset inside `root` (summed offsetLeft/Top), immune to
@@ -577,49 +616,6 @@ function smashFit(text: string, avail: number, max: number, min: number): number
     (2 * avail * 0.86) / (Math.max(1, text.length) * SMASH_EM),
   );
   return Math.round(Math.max(min, px) * 10) / 10;
-}
-
-/** clip-path for an n-point starburst (outer radius 50%, inner `inner`%). */
-function starburstClip(n: number, inner: number): string {
-  const pts: string[] = [];
-  for (let i = 0; i < n * 2; i++) {
-    const a = (Math.PI * i) / n - Math.PI / 2;
-    const r = i % 2 ? inner : 50;
-    pts.push(`${(50 + r * Math.cos(a)).toFixed(2)}% ${(50 + r * Math.sin(a)).toFixed(2)}%`);
-  }
-  return `polygon(${pts.join(', ')})`;
-}
-const UR_BADGE_CLIP = starburstClip(12, 39);
-
-/** A stamped starburst: an ink burst with a coloured burst inset inside it
- * (`inset` px, painted by `fillClassName`) and `children` centered on top. */
-function Starburst({
-  clip,
-  inset,
-  fillClassName,
-  className,
-  style,
-  children,
-  ...rest
-}: {
-  clip: string;
-  inset: number;
-  fillClassName?: string;
-  className?: string;
-  style?: React.CSSProperties;
-  children?: React.ReactNode;
-} & Omit<React.HTMLAttributes<HTMLDivElement>, 'style' | 'className' | 'children'>) {
-  return (
-    <div className={cn('absolute', className)} style={style} {...rest}>
-      <div aria-hidden className="absolute inset-0 bg-[#1a1a1a]" style={{ clipPath: clip }} />
-      <div
-        aria-hidden
-        className={cn('absolute', fillClassName)}
-        style={{ inset, clipPath: clip }}
-      />
-      <div className="absolute inset-0 flex items-center justify-center">{children}</div>
-    </div>
-  );
 }
 
 /** Small per-type glyph shown next to the name — a quick visual "what is this" cue. */
@@ -2350,6 +2346,20 @@ const FIT_STEPS: Record<'full' | 'standard', { z: number; grow: 0 | 1 | 2 | 3 | 
   ],
 };
 
+/** Ultra-Rare "Contraband Crate" ladder: its 4:3 art window never gives up
+ * room, so the type alone steps down — past the 0.8x floor, to 0.7x (about
+ * the 5px the design sheet prints its standard rules at) — before the box
+ * falls back to scrolling. */
+const FIT_STEPS_UR: { z: number; grow: 0 }[] = [
+  { z: 1, grow: 0 },
+  { z: 0.92, grow: 0 },
+  { z: 0.86, grow: 0 },
+  { z: 0.8, grow: 0 },
+  { z: 0.76, grow: 0 },
+  { z: 0.73, grow: 0 },
+  { z: 0.7, grow: 0 },
+];
+
 function CardFacePlain({
   def,
   size = 'standard',
@@ -2395,26 +2405,33 @@ function CardFacePlain({
   // always printed. Step through FIT_STEPS — smaller type, tighter leading,
   // then a taller text box at the art's expense — until the text box stops
   // overflowing; past the last step the box scrolls (with a fade cue).
-  const fitSteps = FIT_STEPS[size === 'full' ? 'full' : 'standard'];
+  const fitSteps =
+    def.rarity === 'Ultra-Rare' && !serial
+      ? FIT_STEPS_UR
+      : FIT_STEPS[size === 'full' ? 'full' : 'standard'];
   const [fitStep, setFitStep] = useState(0);
-  const fitKey = `${def.id}|${def.rarity}|${size}|${serial ? 1 : 0}`;
+  // A web font landing changes every metric the ladder stepped on (a display
+  // face's fallback can wrap a name the real face sets on one line), so the
+  // ladder starts over rather than keeping steps the fallback forced.
+  const fitFonts = useFontEpoch();
+  const fitKey = `${def.id}|${def.rarity}|${size}|${serial ? 1 : 0}|${fitFonts}`;
   const [prevFitKey, setPrevFitKey] = useState(fitKey);
   if (prevFitKey !== fitKey) {
     setPrevFitKey(fitKey);
     setFitStep(0);
   }
   const textBoxRef = useRef<HTMLDivElement>(null);
-  const fitFonts = useFontEpoch();
+  // The corner plate's footprint inside the text box (see `notched`): an
+  // estimate first, then measured from the rendered plate. A new measurement
+  // re-runs the fit check below (a taller notch can push the text over).
+  const [plateNotch, setPlateNotch] = useState({ w: 44, h: PLATE_CLEARANCE[size] });
   useLayoutEffect(() => {
     if (size !== 'full' && size !== 'standard') return;
     const el = textBoxRef.current;
     if (el && fitStep < fitSteps.length && textOverflows(el)) {
       setFitStep((n) => n + 1);
     }
-  }, [fitStep, fitKey, fitFonts, size, fitSteps.length]);
-  // The corner plate's footprint inside the text box (see `notched`): an
-  // estimate first, then measured from the rendered plate.
-  const [plateNotch, setPlateNotch] = useState({ w: 44, h: PLATE_CLEARANCE[size] });
+  }, [fitStep, fitKey, fitFonts, size, fitSteps.length, plateNotch]);
   useLayoutEffect(() => {
     if (size !== 'full' && size !== 'standard') return;
     const box = textBoxRef.current;
@@ -2513,12 +2530,12 @@ function CardFacePlain({
   // framed template: ink masthead, boxed 4:3 art window, rarity rule, text box.
   const bleed = rarityBleeds(def.rarity);
   const mythicArt = isMythic(def.rarity);
-  // Ultra-Rare "Prism Pop" (framed, never serialized — a serial print has
-  // its own frame): holo frame, yellow name banner, burst-backed art print,
-  // ULTRA RARE sash and a gold starburst cost badge. Fully static.
+  // Ultra-Rare "Contraband Crate" (framed, never serialized — a serial print
+  // has its own frame): black crate, stencilled name on a hazard rail, a
+  // fixed 4:3 art window with an ULTRA RARE seal, a yellow cost tag. Static.
   const prism = def.rarity === 'Ultra-Rare' && !serial && !bleed;
   const ur = prism ? UR_GEOM[size] : null;
-  // The identity colour the UR art burst is printed in.
+  // The identity colour the UR hazard stripes and type line print in.
   const urInk = cardColorsForFace[0] ? COLOR_PIP[cardColorsForFace[0]].bg : '#9CA3AF';
   // Framed premium art treatments — the rarity ghost tint + diagonal sweep
   // (Super-Rare and up) and the corner ribbon (Ultra-Rare and up). A foil
@@ -2538,18 +2555,17 @@ function CardFacePlain({
         size === 'full' ? 12 : size === 'standard' ? 8 : 7,
       ) * (size === 'compact' ? 0.88 : 1)
     : 0;
-  // Banner name size in Anak Manja (full/standard only; null = Montserrat).
-  // The banner spans the card minus its border and most of the holo frame;
-  // the type icon and padding take the rest.
-  const anakPx =
-    ur && (size === 'full' || size === 'standard')
-      ? anakFit(
-          def.name,
-          w - 2 * OUTER_BORDER_PX[size] - 4 - (size === 'full' ? 36 : 26),
-          size === 'full' ? 20 : 15,
-          size === 'full' ? 13 : 11,
-        )
-      : null;
+  // Stencilled name size: one line of the hazard rail where it can, wrapping
+  // at the tier's floor. The rail spans the crate's inside minus its padding
+  // and the name plate's own (~0.6em).
+  const urNamePx = ur
+    ? stencilFit(
+        def.name,
+        w - 2 * OUTER_BORDER_PX[size] - 2 * ur.frame - 2 * ur.padX - 0.6 * ur.name[0],
+        ur.name[0],
+        ur.name[1],
+      )
+    : 0;
 
   // Full-Art "Headliner" (never serialized — a serial print has its own
   // frame): Smash name in the sky, Marchive pull-quote, rules on a ticket
@@ -2618,7 +2634,7 @@ function CardFacePlain({
       title={costSummary(def) || undefined}
       inert={!cfg.chipsInteractive}
     >
-      <TierMark def={def} size={size} onArt={!isFoil && !prism} />
+      <TierMark def={def} size={size} onArt={!isFoil || prism} />
     </CostInfoButton>
   );
 
@@ -2630,31 +2646,41 @@ function CardFacePlain({
       data-fc="typeline"
       className={cn(
         'relative z-10 flex items-center justify-between gap-1 shrink-0 px-1.5',
-        // Ultra-Rare standard/full: the cost mark (moved here from the banner)
-        // wraps under a long type line rather than crushing it.
-        prism && size !== 'compact' && 'flex-wrap',
-        cfg.typeLine,
+        // Ultra-Rare: a black FHWA sign strip in the card's colour; the colour
+        // dots (moved here from the name rail) wrap under a long type line.
+        prism ? cn('ur-sign bg-[#151515]', size !== 'compact' && 'flex-wrap') : cfg.typeLine,
       )}
+      style={
+        ur
+          ? {
+              fontSize: ur.type,
+              lineHeight: 1.15,
+              padding: `${ur.type * 0.3}px ${ur.type * 0.6}px ${ur.type * 0.2}px`,
+              columnGap: ur.type * 0.5,
+              color: urInk,
+            }
+          : undefined
+      }
     >
       <span
         className={cn(
-          'font-bold uppercase tracking-wide',
+          'uppercase',
+          !prism && 'font-bold tracking-wide',
           // Standard/full print the whole type line (wrapping if it must).
           size === 'compact'
-            ? 'truncate'
+            ? cn('truncate', prism && 'min-w-0 flex-1')
             : prism
-              ? 'grow break-words'
+              ? 'min-w-0 grow break-words'
               : 'min-w-0 flex-1 break-words',
-          bleed ? 'text-white/85' : 'text-[var(--c-ink)]',
+          bleed ? 'text-white/85' : !prism && 'text-[var(--c-ink)]',
         )}
         style={overArt}
       >
         {typeLineText(def)}
         {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
       </span>
-      {prism && size === 'compact' && <span className="flex-1" />}
       {prism && costMark}
-      {def.rarity && (
+      {def.rarity && !prism && (
         <span
           className={cn('font-mono font-black rounded-[2px] leading-none shrink-0', cfg.rarityChip)}
           style={{ backgroundColor: 'var(--c-ink)', color: rarityHex }}
@@ -2796,18 +2822,18 @@ function CardFacePlain({
       ? null
       : ur
         ? plateValue && (
-            // Ultra-Rare: a gold-foil starburst badge over the frame's corner.
-            <Starburst
+            // Ultra-Rare: a yellow cost tag over the crate's corner.
+            <div
               data-fc="stats"
-              clip={UR_BADGE_CLIP}
-              inset={size === 'full' ? 2 : 1.5}
-              fillClassName="ur-foil"
-              className="z-30"
+              className="ur-tag z-30"
               style={{
-                right: ur.frame - 4,
-                bottom: ur.frame - 4,
-                width: ur.badge,
-                height: ur.badge,
+                right: ur.frame - 1,
+                bottom: ur.frame - 1,
+                width: ur.tag[0],
+                height: ur.tag[1],
+                fontSize: Math.min(ur.tag[2], (ur.tag[0] * 0.72) / (plateValue.length * 0.55)),
+                borderWidth: size === 'full' ? 2.5 : 1.5,
+                paddingTop: ur.tag[2] * 0.08,
               }}
               title={
                 def.type === 'Leader'
@@ -2816,24 +2842,8 @@ function CardFacePlain({
               }
               aria-label={`${def.type === 'Leader' ? 'Starting nerve' : 'Chip cost'} ${plateValue}`}
             >
-              <span
-                className={cn(
-                  'leading-none text-[#1a1a1a]',
-                  // Below full the badge is small: a solid face reads better
-                  // than the hollow display face.
-                  size === 'full' ? 'ur-anak' : 'font-black tracking-tighter',
-                )}
-                style={{
-                  fontSize:
-                    size === 'full'
-                      ? Math.min(13, (ur.badge * 0.72) / (plateValue.length * 0.66))
-                      : Math.min(9, (ur.badge * 0.8) / (plateValue.length * 0.6)),
-                  paddingTop: size === 'full' ? 2 : 0,
-                }}
-              >
-                {plateValue}
-              </span>
-            </Starburst>
+              {plateValue}
+            </div>
           )
         : statChips && (
             <div
@@ -3221,7 +3231,7 @@ function CardFacePlain({
         // plate, not from a colored border.
         'border-[var(--c-ink)]',
         isFoil && !bleed && !prism && 'fc-foil-body',
-        prism && 'ur-prism',
+        prism && 'ur-crate',
         onClick && 'btn-pop cursor-pointer',
         tabbable && !onClick && 'cursor-pointer select-none',
         tucked && 'mc-col',
@@ -3240,19 +3250,6 @@ function CardFacePlain({
         (mythic || altArt) && !dimmed && 'premium-card',
       )}
     >
-      {/* ---- Ultra-Rare: the paper panel inside the holo frame ---- */}
-      {ur && (
-        <div
-          aria-hidden
-          className={cn(
-            'absolute z-0 pointer-events-none border-[#1a1a1a]',
-            size === 'full' ? 'border-2 rounded-[5px]' : 'border rounded-[3px]',
-            isFoil ? 'fc-foil-body' : 'bg-[var(--c-paper)]',
-          )}
-          style={{ inset: ur.frame, backgroundImage: isFoil ? undefined : bg }}
-        />
-      )}
-
       {/* ---- Full-bleed art layer (Full-Art/Alt-Art still image / Mythic video) ---- */}
       {bleed && (
         <div className="absolute inset-0 z-0 bg-[#111]">
@@ -3301,40 +3298,52 @@ function CardFacePlain({
             'justify-between',
             cfg.headerPy,
             prism
-              ? 'ur-banner'
+              ? 'ur-hazard justify-start'
               : isFoil
                 ? 'fc-foil-band'
                 : bleed
                   ? 'bg-[var(--c-ink)]/90'
                   : 'bg-[var(--c-ink)]',
           )}
-          // Ultra-Rare: the tilted banner reaches out over the holo frame.
+          // Ultra-Rare: the hazard rail runs edge to edge inside the crate.
           style={
-            ur ? { marginLeft: 2 - ur.frame, marginRight: 2 - ur.frame, marginTop: 1 } : undefined
+            ur
+              ? ({
+                  '--ur-k': urInk,
+                  '--ur-st': `${ur.stripe}px`,
+                  padding: `${ur.padY}px ${ur.padX}px ${ur.padY * 0.7}px`,
+                  borderBottomWidth: ur.rule,
+                } as React.CSSProperties)
+              : undefined
           }
         >
-          <span
-            className={cn(
-              'flex items-center gap-1 min-w-0 uppercase leading-tight',
-              anakPx ? 'ur-anak' : 'heading-font tracking-[0.03em]',
-              isFoil || prism ? 'text-[#1A1A1A]' : 'text-[var(--c-paper)]',
-            )}
-            title={def.name}
-          >
-            <TypeIcon className={cn('shrink-0 opacity-80', cfg.typeIconSize)} />
-            {/* Hard two-line clamp on top of the auto-shrink. */}
+          {ur ? (
             <span
-              className={cn('break-words', size === 'compact' && 'line-clamp-2')}
-              style={{
-                fontSize: anakPx ?? nameFontPx,
-                // Anak Manja's caps sit high in its em box.
-                paddingTop: anakPx ? anakPx * 0.12 : undefined,
-                lineHeight: anakPx ? 1.05 : undefined,
-              }}
+              className="ur-stencil ur-name break-words"
+              title={def.name}
+              style={{ fontSize: urNamePx, padding: '0.15em 0.3em 0.05em' }}
             >
               {def.name}
             </span>
-          </span>
+          ) : (
+            <span
+              className={cn(
+                'flex items-center gap-1 min-w-0 uppercase leading-tight',
+                'heading-font tracking-[0.03em]',
+                isFoil ? 'text-[#1A1A1A]' : 'text-[var(--c-paper)]',
+              )}
+              title={def.name}
+            >
+              <TypeIcon className={cn('shrink-0 opacity-80', cfg.typeIconSize)} />
+              {/* Hard two-line clamp on top of the auto-shrink. */}
+              <span
+                className={cn('break-words', size === 'compact' && 'line-clamp-2')}
+                style={{ fontSize: nameFontPx }}
+              >
+                {def.name}
+              </span>
+            </span>
+          )}
           {!prism && costMark}
         </div>
       )}
@@ -3344,34 +3353,14 @@ function CardFacePlain({
         <>
           <div
             className={cn(
-              'relative shrink-0 border',
-              // Ultra-Rare: the window runs edge to edge inside the slim holo
-              // frame and tucks up under the name banner, so the print is
-              // as large as the old 4:3 window; the sash overlaps
-              // its edges rather than taking space from it.
+              'relative shrink-0',
+              // Ultra-Rare: a FIXED 4:3 window at every size — the art (4:3
+              // landscape) shows whole, uncropped, and the text fit never
+              // trades it away; the text box takes whatever height is left.
               ur
-                ? cn(
-                    size === 'full'
-                      ? [
-                          'aspect-[8/7]',
-                          'aspect-[4/3]',
-                          'aspect-[3/2]',
-                          'aspect-[2/1]',
-                          'aspect-[5/2]',
-                          'aspect-[5/2]',
-                        ][fitGrow]
-                      : [
-                          'aspect-[4/3]',
-                          'aspect-[3/2]',
-                          'aspect-[16/9]',
-                          'aspect-[5/2]',
-                          'aspect-[3/1]',
-                          'aspect-[4/1]',
-                        ][fitGrow],
-                    'ur-burst border-[#1a1a1a] mx-0.5',
-                  )
+                ? 'aspect-[4/3] overflow-hidden bg-[#151515]'
                 : cn(
-                    'overflow-hidden border-[var(--c-ink)] mx-1.5 mt-1',
+                    'border overflow-hidden border-[var(--c-ink)] mx-1.5 mt-1',
                     [
                       'aspect-[4/3]',
                       'aspect-[16/10]',
@@ -3381,36 +3370,17 @@ function CardFacePlain({
                       'aspect-[4/1]',
                     ][fitGrow],
                   ),
-              ur && size === 'full' && 'border-2',
             )}
-            style={
-              ur
-                ? ({
-                    '--ur-k': urInk,
-                    '--ur-dot': `${ur.dot}px`,
-                    marginTop: size === 'full' ? -7 : -5,
-                  } as React.CSSProperties)
-                : undefined
-            }
+            data-fc={ur ? 'art' : undefined}
+            style={ur ? { marginLeft: ur.inset, marginRight: ur.inset } : undefined}
           >
-            {ur ? (
-              // Ultra-Rare: the art as a slightly rotated print over the burst.
+            <CardArt def={def} boxWidth={SIZES[size].w} />
+            {!ur && (
               <div
-                className="ur-print absolute z-[1]"
-                style={{ top: '5%', left: '3%', right: '3%', bottom: '3%' }}
-              >
-                <CardArt def={def} cover boxWidth={SIZES[size].w} />
-                {isFoil && <div aria-hidden className="fc-foil-wash absolute inset-0" />}
-              </div>
-            ) : (
-              <>
-                <CardArt def={def} boxWidth={SIZES[size].w} />
-                <div
-                  aria-hidden
-                  className="absolute inset-0 pointer-events-none"
-                  style={{ boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }}
-                />
-              </>
+                aria-hidden
+                className="absolute inset-0 pointer-events-none"
+                style={{ boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }}
+              />
             )}
             {/* Super-Rare and up: the rarity's own color ghosts over the art
                 and a gold sweep travels diagonally across it. */}
@@ -3424,32 +3394,23 @@ function CardFacePlain({
                 <div aria-hidden className="fc-art-sweep" />
               </>
             )}
-            {isFoil && !ur && <div aria-hidden className="fc-foil-wash absolute inset-0" />}
+            {isFoil && <div aria-hidden className="fc-foil-wash absolute inset-0" />}
             {ur && (
-              <>
-                {/* Black-and-yellow ULTRA RARE sash across the top-right corner. */}
-                <span
-                  aria-hidden
-                  className="absolute inset-0 z-[2] overflow-hidden pointer-events-none"
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'ur-sash absolute',
-                      size === 'full' ? 'ur-anak' : 'font-black uppercase tracking-wide',
-                    )}
-                    style={{
-                      width: '46%',
-                      right: '-14%',
-                      top: '8%',
-                      fontSize: ur.sashFont,
-                      padding: size === 'full' ? '3px 0 1px' : '1.5px 0 1px',
-                    }}
-                  >
-                    ULTRA RARE
-                  </span>
-                </span>
-              </>
+              // The red stamped ULTRA RARE seal, bottom-left on the art.
+              <span
+                aria-hidden
+                className="ur-seal ur-stencil z-[2]"
+                style={{
+                  left: ur.frame + 1,
+                  bottom: ur.frame + 1,
+                  width: ur.seal[0],
+                  height: ur.seal[0],
+                  fontSize: ur.seal[1],
+                  borderWidth: size === 'full' ? 2.5 : 1.5,
+                }}
+              >
+                {'ULTRA\nRARE'}
+              </span>
             )}
             {/* Keep the rarity stamp clear of the top-left ownership badges. */}
             {ribbon && (
@@ -3466,20 +3427,23 @@ function CardFacePlain({
             {badgeStack}
           </div>
 
-          {/* Rarity rule — the ladder printed as a weight of ink. */}
-          <div
-            aria-hidden
-            className="mx-1.5 mt-1 shrink-0"
-            style={
-              isFoil
-                ? {
-                    height: rarityRuleWeight(def.rarity),
-                    backgroundImage:
-                      'linear-gradient(90deg,#ffb6ea,#ffe29a,#a8f0d1,#9ec9ff,#c9a8ff)',
-                  }
-                : { height: rarityRuleWeight(def.rarity), backgroundColor: rarityHex }
-            }
-          />
+          {/* Rarity rule — the ladder printed as a weight of ink (Ultra-Rare
+              prints its rarity on the seal instead). */}
+          {!ur && (
+            <div
+              aria-hidden
+              className="mx-1.5 mt-1 shrink-0"
+              style={
+                isFoil
+                  ? {
+                      height: rarityRuleWeight(def.rarity),
+                      backgroundImage:
+                        'linear-gradient(90deg,#ffb6ea,#ffe29a,#a8f0d1,#9ec9ff,#c9a8ff)',
+                    }
+                  : { height: rarityRuleWeight(def.rarity), backgroundColor: rarityHex }
+              }
+            />
+          )}
 
           {typeLine}
 
@@ -3488,19 +3452,34 @@ function CardFacePlain({
             data-fc="textbox"
             data-fc-scroll={fitScroll ? '1' : undefined}
             className={cn(
-              'relative z-10 flex flex-col flex-1 min-h-0 mx-1.5 mt-0.5 mb-0.5 border-t border-[var(--c-ink)]',
+              'relative z-10 flex flex-col flex-1 min-h-0',
+              ur
+                ? cn(
+                    'border-solid',
+                    size === 'full' ? 'rounded-b-[4px]' : 'rounded-b-[2px]',
+                    isFoil ? 'fc-foil-body' : 'bg-[var(--c-paper)]',
+                  )
+                : 'mx-1.5 mt-0.5 mb-0.5 border-t border-[var(--c-ink)]',
               fitScroll ? 'fc-scroll-fade' : 'overflow-hidden',
               cfg.textBoxPad,
             )}
             // Reserve the bottom-right corner for the chip-cost / nerve plate
-            // (Ultra-Rare's starburst badge is taller than the ink plate).
+            // (Ultra-Rare's cost tag is taller than the ink plate).
             style={{
+              ...(ur
+                ? {
+                    borderTop: `${ur.rule}px solid ${urInk}`,
+                    paddingTop: size === 'full' ? 4 : 1,
+                    paddingLeft: size === 'full' ? 5 : 3,
+                    paddingRight: size === 'full' ? 5 : 3,
+                  }
+                : undefined),
               // No plate (a Location): nothing to clear on standard/full.
               paddingBottom:
                 notched || (size !== 'compact' && !plateValue)
                   ? 2
                   : ur
-                    ? ur.badge - 5
+                    ? ur.tag[1] - ur.frame
                     : PLATE_CLEARANCE[size],
             }}
           >
@@ -3559,7 +3538,7 @@ function CardFacePlain({
       )}
 
       {/* Set/print bar — the thin colored strip at the very bottom edge. */}
-      {def.set && !bleed && (
+      {def.set && !bleed && !ur && (
         <div className={cn('relative z-10 h-[3px] w-full shrink-0', set.bar)} title={def.set} />
       )}
 
@@ -3606,8 +3585,6 @@ function CardFacePlain({
           )}
         />
       )}
-      {/* Ultra-Rare "Prism Pop": a soft STATIC sheen over the whole face. */}
-      {prism && !dimmed && <div aria-hidden className="ur-sheen absolute inset-0 z-40" />}
       {/* Alt-Art "Prism Ink" hover-gated bloom (the base .aa-holo wash is
           rendered inside the full-bleed art layer above, always on). */}
       {altArt && !dimmed && size === 'full' && (

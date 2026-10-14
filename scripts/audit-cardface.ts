@@ -20,6 +20,9 @@
  *    card, a masthead or type line that overflows, a "+N" chip standing in
  *    for keyword chips, flavor text that is missing, or a Leader ability that
  *    is missing.
+ *  - art window: an Ultra-Rare face whose art window is not 4:3 (±1%) at
+ *    every size, or whose art is cropped (the art is 4:3 landscape, so the
+ *    image's own aspect must match the window it fills);
  *  - ink: a Full-Art face whose headline or pull-quote does not print in the
  *    ink scripts/art-ink.ts chose for that card's art.
  * A text box that had to fall back to scrolling (fade cue, every word still
@@ -76,10 +79,10 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({ viewport: { width: 1600, height: 1200 } });
 // Never touch the live project from a harness (see blockSupabase).
 await blockSupabase(ctx);
-// Remote stills come back as one local square placeholder (never the
-// network), so the art-fill check below has a real <img> to measure.
+// Remote stills come back as one local 4:3 placeholder (never the network),
+// so the art-fill and art-window checks below have a real <img> to measure.
 const STILL = await sharp({
-  create: { width: 64, height: 64, channels: 3, background: '#808080' },
+  create: { width: 64, height: 48, channels: 3, background: '#808080' },
 })
   .png()
   .toBuffer();
@@ -102,7 +105,11 @@ const runs: { rarity: string; reprint: boolean; tucked?: boolean; reveal?: boole
   { rarity: 'Full-Art', reprint: true, tucked: true },
   // The pack reveal: every card laid out mid-flip (edge-on), then turned.
   { rarity: 'Uncommon', reprint: true, reveal: true },
+  { rarity: 'Ultra-Rare', reprint: true, reveal: true },
 ];
+/** Ultra-Rare art window: 4:3, within this fraction. */
+const UR_ASPECT_TOL = 0.01;
+const urArt: { bucket: string; aspect: number; pct: number }[] = [];
 
 for (const { rarity, reprint, tucked, reveal } of runs) {
   for (const size of SIZES) {
@@ -113,14 +120,19 @@ for (const { rarity, reprint, tucked, reveal } of runs) {
     );
     await page.evaluate(async () => {
       await document.fonts.ready;
+      // Card art is lazy: load every still so the art checks can measure it.
+      const imgs = Array.from(document.images);
+      for (const i of imgs) i.loading = 'eager';
+      await Promise.all(imgs.map((i) => i.decode().catch(() => {})));
     });
     // The fit pass steps in layout effects until the text fits; measure only
     // once the page has stopped resizing itself.
     await page.waitForTimeout(600);
     const inks = rarity === 'Full-Art' ? FA_INK : {};
     const found = await page.evaluate(
-      ([exp, inks, decoded]) => {
+      ([exp, inks, decoded, tol]) => {
         const out: { id: string; kind: string; scroll?: boolean }[] = [];
+        const urArt: { aspect: number; pct: number }[] = [];
         const hit = (a: DOMRect, b: DOMRect) =>
           Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5 &&
           Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5;
@@ -185,6 +197,28 @@ for (const { rarity, reprint, tucked, reveal } of runs) {
             else if (m.offsetWidth < win.clientWidth - 1 || m.offsetHeight < win.clientHeight - 1)
               add('art: smaller than its window');
           }
+          // Ultra-Rare: a fixed 4:3 window (layout size, immune to the
+          // reveal's transforms) showing the whole art, uncropped.
+          const art = card.querySelector<HTMLElement>('[data-fc="art"]');
+          if (art) {
+            const aspect = art.clientWidth / art.clientHeight;
+            urArt.push({
+              aspect,
+              pct:
+                ((art.offsetWidth * art.offsetHeight) / (card.offsetWidth * card.offsetHeight)) *
+                100,
+            });
+            if (Math.abs(aspect / (4 / 3) - 1) > tol)
+              add(`art: UR window is ${aspect.toFixed(3)}:1, not 4:3`);
+            const img = art.querySelector('img');
+            if (img && img.naturalWidth > 0) {
+              const nat = img.naturalWidth / img.naturalHeight;
+              const fit = getComputedStyle(img).objectFit;
+              // cover crops by the aspect mismatch; contain/fill never crop.
+              const crop = fit === 'cover' ? 1 - Math.min(nat / aspect, aspect / nat) : 0;
+              if (crop > tol) add(`art: UR art cropped by ${(crop * 100).toFixed(1)}%`);
+            } else if (img) add('art: UR art never loaded');
+          }
           // Adaptive ink: the face prints in the ink chosen for its art.
           if (inks[id]) {
             const want = decoded[id];
@@ -208,15 +242,17 @@ for (const { rarity, reprint, tucked, reveal } of runs) {
             if (n < e.abilities) add(`truncated: ${e.abilities - n} ability rows missing`);
           }
         }
-        return { out, cards: cards.length };
+        return { out, cards: cards.length, urArt };
       },
       [
         Object.fromEntries(expect),
         inks as Record<string, string>,
         Object.fromEntries(Object.keys(inks).map((id) => [id, decodeFaInk(inks[id])])),
+        UR_ASPECT_TOL,
       ] as const,
     );
     renders += found.cards;
+    for (const a of found.urArt) urArt.push({ bucket, ...a });
     for (const f of found.out)
       // In the pack reveal a scroll fallback means the fit pass measured the
       // face mid-flip and ran its ladder dry (the face fits flat): a failure.
@@ -240,6 +276,15 @@ console.log(
 console.log(
   `Overlaps: ${overlaps.length}. Truncations: ${truncations.length}. Squeezed text / unfilled art: ${squeezed.length}. Scroll fallbacks: ${scrolled.length}.`,
 );
+if (urArt.length) {
+  const asp = urArt.map((a) => a.aspect);
+  const pct = urArt.map((a) => a.pct);
+  const r = (xs: number[], d: number) =>
+    `${Math.min(...xs).toFixed(d)}–${Math.max(...xs).toFixed(d)}`;
+  console.log(
+    `Ultra-Rare art window: ${urArt.length} faces, aspect ${r(asp, 4)} (4:3 = 1.3333), ${r(pct, 1)}% of the card.`,
+  );
+}
 const scrollBuckets = new Map<string, string[]>();
 for (const s of scrolled)
   (scrollBuckets.get(s.bucket) ?? scrollBuckets.set(s.bucket, []).get(s.bucket)!).push(s.id);

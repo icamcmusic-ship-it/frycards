@@ -38,7 +38,13 @@ try {
 
 const rng = rngOn({ rng: seed });
 const leader = POOL_LEADERS[seed % POOL_LEADERS.length];
-const deck = buildDeck(leader, MODES[mode], rng, `${leader.name} — Preview`);
+const built = buildDeck(leader, MODES[mode], rng, `${leader.name} — Preview`);
+// `&rarity=<rarity>`: your powers reprinted at that rarity, to see a
+// template in the hand (e.g. `&rarity=Ultra-Rare`).
+const reprint = q.get('rarity');
+const deck = reprint
+  ? { ...built, powers: built.powers.map((c) => ({ ...c, rarity: reprint }) as typeof c) }
+  : built;
 const setup = cpuTableSetup({ seed, mode, seats, seat0: { name: 'You', human: true, deck } });
 
 function Preview() {
