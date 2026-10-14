@@ -68,7 +68,8 @@ import { COLOR_PIP, colorBg } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 import { CARD_SIZES, type CardSize } from './cardSizes';
 import { FA_ACCENT, decodeFaInk, inkColor, inkHalo } from './artInk';
-import { FA_INK, MC_INK } from './artInk.generated';
+import { FA_INK, FA_SCRIM, MC_INK } from './artInk.generated';
+import { CardInfoMode, markTuckHintSeen, tuckHintSeen } from './cardInfoMode';
 import { corsReadable, useVideoInk } from './useVideoInk';
 import type { CardVariant } from '../meta/variants';
 
@@ -76,13 +77,7 @@ import type { CardVariant } from '../meta/variants';
 // once a variant card is actually on screen.
 const VariantLayer = React.lazy(() => import('./variants/VariantLayer'));
 
-/**
- * How the info pull-tab faces (Mythic, Full-Art) open. 'auto' = each
- * template's default (Mythic expanded, Full-Art tucked); 'open' = every face
- * expanded with all its text (the table, where cost and rules are play
- * information, and the layout audit); 'tucked' = every tab face tucked.
- */
-export const CardInfoMode = React.createContext<'auto' | 'open' | 'tucked'>('auto');
+export { CardInfoMode } from './cardInfoMode';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -431,8 +426,14 @@ html[data-motion='reduced'] .premium-boost .aa-corona { opacity: 0.25; }
 }
 .fa-bill { color: var(--fa-b); font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; text-shadow: 0 1px 2px #000; }
 .fa-name {
-  font-family: 'FA Smash', 'FA Cracked', 'Montserrat', sans-serif;
-  font-weight: 400;
+  /* Audit 2.3: Smash Stadium's glitched letterforms misread ("AVATAR" as
+     "AVBTAR"), so the letters are clean Montserrat Black and the glitch face
+     rides only the offset shadow layer below. */
+  position: relative;
+  isolation: isolate;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.01em;
   line-height: 0.92;
   text-transform: uppercase;
   text-align: center;
@@ -440,12 +441,28 @@ html[data-motion='reduced'] .premium-boost .aa-corona { opacity: 0.25; }
   text-shadow: 0.06em 0.06em 0 var(--fa-name-sh, #141414), 0.09em 0.09em 0 var(--fa-b);
   overflow-wrap: anywhere;
 }
+.fa-name::before {
+  content: attr(data-text);
+  position: absolute; inset: 0; z-index: -1;
+  font-family: 'FA Smash', 'FA Cracked', 'Montserrat', sans-serif;
+  font-weight: 400; letter-spacing: 0;
+  color: var(--fa-b); opacity: 0.55;
+  transform: translate(0.08em, 0.1em);
+  text-shadow: none;
+  pointer-events: none;
+}
 .fa-tag {
   display: flex; align-items: center; justify-content: center; gap: 0.6em;
   font-family: 'FA Quote', 'Montserrat', sans-serif;
   letter-spacing: 0.3em; line-height: 1; color: var(--fa-tag-ink, #fff); white-space: nowrap;
 }
 .fa-tag::before, .fa-tag::after { content: ''; width: 2.2em; height: 0.12em; background: var(--fa-a); flex: none; }
+.fa-scrim {
+  /* Audit 1.6: background + spread shadow, so it adds no layout box. */
+  background: var(--fa-scrim);
+  box-shadow: 0 0 0 0.18em var(--fa-scrim);
+  border-radius: 2px;
+}
 .fa-quote {
   font-family: 'FA Quote', 'Montserrat', sans-serif;
   font-style: italic; text-align: center; color: var(--fa-quote-ink, #fff);
@@ -602,9 +619,9 @@ function butlerFit(text: string, avail: number, max: number, min: number): numbe
   return Math.round(Math.max(min, px) * 10) / 10;
 }
 
-/** Smash Stadium's mean advance width (em) over A–Z (its fallback, Cracked
- * Bold, is narrower, so this is the safe side for digits and punctuation). */
-const SMASH_EM = 0.66;
+/** Mean advance width (em) of the Full-Art name's letterforms: Montserrat
+ * Black caps (the Smash Stadium glitch only rides the shadow layer now). */
+const SMASH_EM = 0.76;
 
 /** Full-Art "Headliner" name size: as large as `max` while the longest word
  * fits one line of `avail` px and the whole name fits about two lines. */
@@ -1464,6 +1481,7 @@ function CardArtBase({
   cover,
   boxWidth,
   corsVideo,
+  bare,
 }: {
   def: CardDef;
   onLoaded?: () => void;
@@ -1478,6 +1496,9 @@ function CardArtBase({
   /** Request a video with CORS where its host allows it, so the Mythic face
    * can read frames for its adaptive ink (see useVideoInk). */
   corsVideo?: boolean;
+  /** Full-bleed layer: the face's own lockup sits on top, so the fallback
+   * prints no labels (audit 1.9) — just the bed. */
+  bare?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
   // A resized derivative that fails falls back to the full-size original once
@@ -1486,11 +1507,14 @@ function CardArtBase({
   const [fullSize, setFullSize] = useState(false);
   // Reset whenever the image URL actually changes (a caller may swap `def`
   // without remounting).
-  useEffect(() => {
+  const [shownImage, setShownImage] = useState(def.image);
+  if (shownImage !== def.image) {
+    setShownImage(def.image);
     setBroken(false);
     setFullSize(false);
-  }, [def.image]);
+  }
   if (!def.image || broken) {
+    if (bare) return <div aria-hidden className="w-full h-full bg-[var(--c-steel)]" />;
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-[var(--c-steel)] text-[var(--c-paper)]">
         <span className="fs-xs font-black uppercase tracking-wide opacity-80">{def.type}</span>
@@ -2036,6 +2060,14 @@ function typeLineText(def: CardDef): string {
     : base;
 }
 
+/** Full-Art bill: short enough for one line ("LEADER · VOL 1"); the full
+ * type line (colours, subtype) is in the aria-label and the ticket. */
+function faBillText(def: CardDef, withSet: boolean | undefined): string {
+  const vol = def.set?.match(/#\s*(\d+)/)?.[1];
+  const set = withSet && def.set ? ` · ${vol ? `Vol ${vol}` : def.set}` : '';
+  return `${def.type}${set}`;
+}
+
 /** The card's printed rules line: the plain-English meaning of its effect
  * (chips already carry the keyword names), or a Location's rule. */
 function rulesText(def: CardDef): string {
@@ -2576,6 +2608,20 @@ function CardFacePlain({
   const faB = FA_ACCENT[cardColorsForFace[1] ?? cardColorsForFace[0]] ?? faA;
   // Per-card inks over the art, measured at build time (scripts/art-ink.ts).
   const faInk = decodeFaInk(headliner ? FA_INK[def.id] : undefined);
+  // Audit 1.6: regions under 3:1 even in their best ink print on a scrim.
+  const faScrim = headliner ? (FA_SCRIM[def.id] ?? '') : '';
+  const scrimFor = (r: 'n' | 't' | 'q', ink: 'light' | 'dark' | 'accent') =>
+    faScrim.includes(r)
+      ? ({
+          className: 'fa-scrim',
+          style: {
+            '--fa-scrim': ink === 'dark' ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.62)',
+          } as React.CSSProperties,
+        } as const)
+      : null;
+  const nameScrim = scrimFor('n', faInk.name);
+  const tagScrim = scrimFor('t', faInk.tag);
+  const quoteScrim = scrimFor('q', faInk.quote);
   const faNamePx = headliner
     ? smashFit(
         def.name,
@@ -2594,7 +2640,13 @@ function CardFacePlain({
   const tucked = tabbable
     ? (tuckState ?? tuckDefault)
     : credits && size === 'compact' && infoMode !== 'open';
-  const setTuck = (v: boolean) => setTuckState(v);
+  const setTuck = (v: boolean) => {
+    markTuckHintSeen();
+    setTuckState(v);
+  };
+  // Audit 2.6: until the player first toggles a face, a tucked full-size face
+  // says how (tap / hold), next to the chevron.
+  const showTuckHint = tabbable && tucked && size === 'full' && !tuckHintSeen();
 
   // The "FULL ART · VOL 1" tag is the first thing to go for space.
   const faTag = headliner && size !== 'compact' && fitGrow < 1;
@@ -2949,9 +3001,9 @@ function CardFacePlain({
   const faMasthead = headliner && (
     <div
       data-fc="masthead"
-      className={cn('relative z-20 flex flex-col shrink-0 min-w-0', tabbable && 'fa-tab')}
-      aria-hidden={tucked || undefined}
-      inert={tucked}
+      // Audit 1.3: the masthead (bill + name) stays up when the face is
+      // tucked, so a tucked Full-Art still says what card it is.
+      className="relative z-20 flex flex-col shrink-0 min-w-0"
       style={{
         ...faVars,
         padding: size === 'full' ? '5px 7px 0' : size === 'standard' ? '3px 4px 0' : '2px 3px 0',
@@ -2963,23 +3015,24 @@ function CardFacePlain({
         style={{ fontSize: size === 'full' ? 7.5 : size === 'standard' ? 5.5 : 5 }}
       >
         <span className="fa-bill min-w-0 flex-1 break-words leading-tight">
-          {typeLineText(def)}
-          {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
+          {faBillText(def, cfg.showSetSuffix)}
         </span>
         {costMark}
       </div>
       <h3
-        className="fa-name m-0"
+        className={cn('fa-name m-0', nameScrim?.className)}
         title={def.name}
-        style={{ fontSize: faNamePx, marginTop: size === 'full' ? 4 : 2 }}
+        data-text={def.name}
+        style={{ ...nameScrim?.style, fontSize: faNamePx, marginTop: size === 'full' ? 4 : 2 }}
       >
         {def.name}
       </h3>
       {faTag && (
         <div
           aria-hidden
-          className="fa-tag"
+          className={cn('fa-tag', tagScrim?.className)}
           style={{
+            ...tagScrim?.style,
             fontSize: size === 'full' ? 7.5 : 5,
             marginTop: size === 'full' ? 5 : 3,
           }}
@@ -3021,9 +3074,11 @@ function CardFacePlain({
             data-fc="flavor"
             className={cn(
               'fa-quote shrink-0 break-words',
+              quoteScrim?.className,
               fitStep > 0 ? 'leading-[1.1]' : 'leading-[1.2]',
             )}
             style={{
+              ...quoteScrim?.style,
               fontSize: Math.max(5.5, flavorFontPx * 1.12 * fitZ),
               margin: size === 'full' ? '0 4px 6px' : '0 2px 3px',
             }}
@@ -3166,11 +3221,12 @@ function CardFacePlain({
     // invalid HTML / break screen-reader and keyboard navigation.
     <div
       ref={faceRef}
-      role="button"
+      // Audit 1.5: only an actionable face is a button; a display-only face
+      // is a group (its pull-tab chevron is the keyboard control).
+      role={onClick ? 'button' : 'group'}
       data-card-id={def.id}
       tabIndex={onClick ? 0 : -1}
-      // Not disabled while it carries a pull-tab: its chevron is a live control.
-      aria-disabled={!onClick && !tabbable}
+      aria-disabled={onClick || tabbable ? undefined : true}
       aria-label={label}
       onClick={(e) => {
         if (onClick) return onClick();
@@ -3189,8 +3245,10 @@ function CardFacePlain({
           e.preventDefault();
         }
       }}
+      // Audit 1.4: a card with its own action (add to deck) never arms the
+      // hold, so holding it can't swallow the click.
       onPointerDown={
-        tabbable
+        tabbable && !onClick
           ? (e) => {
               if (e.button !== 0) return;
               mcHold.current.held = false;
@@ -3257,7 +3315,7 @@ function CardFacePlain({
               hasn't painted yet (or failed to load). */}
           {mythicArt && !dimmed && <div aria-hidden className="fc-my-scan absolute inset-0" />}
           <div className="absolute inset-0">
-            <CardArt def={def} cover boxWidth={SIZES[size].w} corsVideo={credits} />
+            <CardArt def={def} cover bare boxWidth={SIZES[size].w} corsVideo={credits} />
           </div>
           {credits ? (
             <div aria-hidden className="mc-halo absolute inset-0" />
@@ -3568,6 +3626,15 @@ function CardFacePlain({
             <path d="M3 3 L10 9 L17 3" />
           </svg>
         </button>
+      )}
+      {showTuckHint && (
+        <div
+          aria-hidden
+          className="absolute left-1/2 -translate-x-1/2 z-40 pointer-events-none heading-font whitespace-nowrap bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm"
+          style={{ bottom: 26, fontSize: 8, padding: '1px 5px', letterSpacing: '0.08em' }}
+        >
+          TAP TO SHOW TEXT
+        </div>
       )}
       {/* A foil print is a STATIC prismatic stamp: a shining border ring, no
           motion of any kind (that is what separates it from the animated

@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils';
 import { fetchListableInventory, type MarketListing, type PlayerCard } from '../../lib/supabase';
 import { POOL_BY_ID } from '../../game/poker/cardpool';
 import { COLORS } from '../../game/poker/colors';
-import { CardFace } from '../../components/CardFaceV4';
+import { CardFace, CardInfoMode } from '../../components/CardFaceV4';
 import { RARITY_CHIP, RARITY_ORDER } from '../rarity';
 import { fmtCredits } from '../economy';
 import { asVariant, type OwnedVariant, VARIANT_META } from '../variants';
@@ -112,7 +112,16 @@ export interface SellPanelProps {
 
 type Step = 'edit' | 'confirm' | 'done';
 
+/** Audit 1.3: the sell picker shows every face's text, as the table does. */
 export function SellPanel(props: SellPanelProps) {
+  return (
+    <CardInfoMode.Provider value="open">
+      <SellPanelInner {...props} />
+    </CardInfoMode.Provider>
+  );
+}
+
+function SellPanelInner(props: SellPanelProps) {
   const { userId, collection, decks, serializedCards, cardVariants, myListings } = props;
   const reduced = useReducedMotion();
 
