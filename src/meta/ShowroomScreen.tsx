@@ -47,7 +47,7 @@ import { PopButton, Tabs } from './ui';
 import { usePersistedState } from './usePersistedState';
 import { POOL_BY_ID, POOL } from '../game/poker/cardpool';
 import { CardDef } from '../game/poker/cards';
-import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
+import { CardFace } from '../components/CardFaceV4';
 import { SlabCase3D, SLAB3D_CSS, SLAB_CASE_W, SLAB_CASE_H, SLAB_MAX_PITCH } from './SlabCase3D';
 import { GradedCard, GRADING_SERVICE_BY_ID, fetchGradedCards, fmtGrade } from './grading';
 import {

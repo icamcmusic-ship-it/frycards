@@ -52,10 +52,14 @@ export function SafeImage({
   // Reset whenever the source changes — otherwise a component instance that's
   // reused across a changing `src` (e.g. an equipped avatar/banner swap) would
   // keep showing the fallback forever after one bad load.
-  useEffect(() => {
+  // Derived during render (not in an effect), so the stale fallback never
+  // paints for a frame.
+  const [shownSrc, setShownSrc] = useState(src);
+  if (shownSrc !== src) {
+    setShownSrc(src);
     setBroken(false);
     setAttempt(0);
-  }, [src]);
+  }
   if (!src || broken) {
     return (
       <div
