@@ -116,8 +116,9 @@
  * face once text uses it.
  *
  * UR Stencil — Lethal Injection Regular, the stencilled name and the ULTRA
- * RARE seal. Its licence is not stated (assets/fonts/LethalInjection-
- * LICENSE.txt), so it ships as the UNMODIFIED .ttf: not subset, not woff2.
+ * RARE seal. The owner confirms it is free to use and modify (assets/fonts/
+ * LethalInjection-LICENSE.txt), so it ships subset to Latin as woff2 like
+ * the others (`pyftsubset --unicodes=U+0020-007E,U+00A0,U+2018-201E`).
  * UR Sign / UR Sign Wide — FHWA Series B (public domain; assets/fonts/
  * fhwa-series-b-NOTICE.txt), the type line and the cost tag, subset to
  * ASCII with pyftsubset.
@@ -125,7 +126,8 @@
 @font-face {
   font-family: 'UR Stencil';
   font-display: swap;
-  src: url('./assets/fonts/LethalInjection-Regular.ttf') format('truetype');
+  src: url('./assets/fonts/lethal-injection-latin.woff2') format('woff2');
+  unicode-range: U+0020-007E, U+00A0, U+2018-201E;
 }
 @font-face {
   font-family: 'UR Sign';

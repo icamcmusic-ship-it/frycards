@@ -76,7 +76,7 @@ export default defineConfig(({ mode, command }) => {
       // Web fonts are never inlined as data: URIs (the Full-Art subsets are
       // under the 4 kB default), so a lazy @font-face stays a URL the browser
       // fetches only when a card uses it, and adds nothing to eager CSS.
-      assetsInlineLimit: (file: string) => (/\.(woff2?|ttf)$/.test(file) ? false : undefined),
+      assetsInlineLimit: (file: string) => (/\.woff2?$/.test(file) ? false : undefined),
       rollupOptions: {
         output: {
           // Finding 2.1: route-level lazy() splits the screens; this keeps the
