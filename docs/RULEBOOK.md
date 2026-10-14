@@ -561,7 +561,7 @@ stack** a small buff.
 | --------------- | ------------------------------------------------------------------------------------------------------------ | ----------------- |
 | Plain Table     | No rule change. Pure poker. (One per cycle; not on any card.)                                                | Pure poker        |
 | High Stakes     | Blinds ×1.5 (or ×2) this hand                                                                                | Neutral           |
-| Open Hand       | Each player's lowest hole card is dealt face-up; the dealer's highest                                        | Neutral           |
+| Open Hand       | Each player's lowest hole card is dealt face-up                                                              | Neutral           |
 | Double Board    | Turn and river are dealt twice (the flop is shared); each pot splits between the two boards                  | Neutral           |
 | Night Game      | No Quick Events this hand (Ambush cards still respond)                                                       | Neutral           |
 | Dealer's Choice | The dealer gets one free Peek (one card) on any of its turns; the shortest stack gets one too                | Favors the dealer |

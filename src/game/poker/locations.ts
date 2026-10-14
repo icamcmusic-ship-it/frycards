@@ -53,7 +53,7 @@ export const LOCATION_TEMPLATES: Record<LocationRuleId, LocationTemplate> = {
     id: 'openHand',
     name: 'Open Hand',
     tag: 'Neutral',
-    text: () => "Each player's lowest hole card is dealt face-up; the dealer's highest.",
+    text: () => "Each player's lowest hole card is dealt face-up.",
   },
   doubleBoard: {
     id: 'doubleBoard',

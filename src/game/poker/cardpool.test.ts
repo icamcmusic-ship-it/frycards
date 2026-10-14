@@ -130,9 +130,9 @@ describe('Creator overrides: colors, abilities, rule', () => {
   it('leaves cards without overrides unchanged (pool fingerprint)', () => {
     // Fingerprint of the bundled catalog's mechanics. Moved on purpose by the
     // 2026-10-14 balance pass (Swirling Ink Cloud reprint, Sovereign of the
-    // Dying Star's build ability, Bomb Pot and Open Hand rule text).
+    // Dying Star's build ability, Bomb Pot's rule text).
     expect(sha(GENERATED_CARDS.map(deriveCardMechanics))).toBe(
-      '7e71549cfec3fca033906a1d8bbc15c7e3f0cbd97487edcece8586cc6da555d0',
+      '5b95c53def2ab44ad103e84cfb7c5e868590f1f6522520c37241b0cac0e7f99c',
     );
   });
 

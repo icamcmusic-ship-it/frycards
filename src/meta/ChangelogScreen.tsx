@@ -132,7 +132,7 @@ export const ENTRIES: ChangelogEntry[] = [
       },
       {
         title: 'Card balance',
-        body: 'Four changes from the latest balance run.',
+        body: 'Three changes from the latest balance run.',
         category: 'balance',
         icon: Scale,
         changes: [
@@ -150,11 +150,6 @@ export const ENTRIES: ChangelogEntry[] = [
             label: 'Bomb Pot',
             before: 'dealer acts last on the flop',
             after: 'dealer acts first on the flop (weaker for the dealer)',
-          },
-          {
-            label: 'Open Hand',
-            before: 'dealer shows their lowest hole card',
-            after: 'dealer shows their highest (weaker for the dealer)',
           },
         ],
       },

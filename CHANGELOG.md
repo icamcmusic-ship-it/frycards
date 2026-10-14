@@ -21,8 +21,8 @@ recent entries. This file is the archive; that screen is not.
   the lowest-contrast lines; pack-reveal column/art fix.
 - Balance: Swirling Ink Cloud ★4 Burn → ★3 Erode (Warded kept); Sovereign of
   the Dying Star's build ability Erode → Tax; Bomb Pot's dealer acts first on
-  the flop; Open Hand's dealer shows their highest hole card. `sim:poker` target 4 now misses on a rule beyond ±4 pts at
-  |z| > 1.64.
+  the flop. `sim:poker` target 4 now misses on a rule beyond ±4 pts whose
+  excess over the ±2 band is significant at 90% (Open Hand now flagged).
 - Deck Builder and sell picker show every face's text; holding a card no
   longer cancels adding it. First-visit coach no longer stacks with a cast
   spotlight; pre-actions labelled; day 5 login chip shows its pack; CPU play

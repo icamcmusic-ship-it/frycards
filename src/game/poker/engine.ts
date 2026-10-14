@@ -813,11 +813,9 @@ function startHand(m: Match): void {
     }
   }
   if (rule.id === 'openHand') {
-    // Audit 2026-10-14 §3.4: +5.5 to +7.9 pts for the dealer, who acts last
-    // with everyone's low card known. The dealer shows their HIGH card.
     for (const i of live) {
-      const sorted = [...h.holes[i]].sort((a, b) => a.r - b.r);
-      (i === m.button ? sorted[sorted.length - 1] : sorted[0]).public = true;
+      const low = [...h.holes[i]].sort((a, b) => a.r - b.r)[0];
+      low.public = true;
     }
   }
 
