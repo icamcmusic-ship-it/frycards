@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, loadEnv, type HtmlTagDescriptor, type Plugin } from 'vite';
+import { configDefaults } from 'vitest/config';
 
 /**
  * Head hints that need build-time knowledge: preload the two upright latin
@@ -106,6 +107,9 @@ export default defineConfig(({ mode, command }) => {
       // `@vitest-environment jsdom` docblock, so only the DOM suites pay for
       // it.
       environment: 'node',
+      // Agent worktrees under .claude/ are other branches' checkouts; their
+      // suites read this checkout's files and fail on its changes.
+      exclude: [...configDefaults.exclude, '.claude/**'],
     },
     server: {
       // HMR/file watching can be disabled via DISABLE_HMR to save CPU in
