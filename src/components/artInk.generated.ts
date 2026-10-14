@@ -197,5 +197,4 @@ export const FA_INK: Record<string, string> = {
 };
 
 // Mythic static title ink (the live sampler's fallback); light unless listed.
-export const MC_INK: Record<string, 'dark'> = {
-};
+export const MC_INK: Record<string, 'dark'> = {};
