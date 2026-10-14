@@ -55,9 +55,9 @@ describe('ChangelogScreen', () => {
 
   test('category filters narrow the list and older releases expand', () => {
     render(<ChangelogScreen onBack={() => undefined} />);
-    const collapsed = screen.getAllByRole('button', { expanded: false })[0];
-    fireEvent.click(collapsed);
-    expect(collapsed.getAttribute('aria-expanded')).toBe('true');
+    const collapsed = screen.getAllByRole('button', { expanded: false });
+    for (const b of collapsed) fireEvent.click(b);
+    expect(collapsed[0].getAttribute('aria-expanded')).toBe('true');
 
     const before = document.querySelectorAll('.cl-item').length;
     fireEvent.click(screen.getByRole('button', { name: /^Grading/ }));
