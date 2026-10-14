@@ -1,9 +1,75 @@
 # Backend changes: live status
 
+## 2026-10-14 second-pass audit (`20261014000300` / `20261014000390`)
+
+### Applied live
+
+Repo file `20261014000300_audit2_backend.sql` (idempotent, tested in
+`supabase/audit2-backend.test.ts`). The MCP tool timed out on the whole file,
+so it went live in parts; the live history rows are
+`20261014000300_audit2_backend_seasons_packs`, `..._cron_rls`, `..._rewards`,
+`..._pipeline_attempts`, `..._pipeline_gate_fn`, `..._pipeline_rpcs_a/b/c`
+(one timed out and was retried; its content is in the others).
+
+| What | Audit |
+| --- | --- |
+| Season 2 ("Season 2 — Red Tide") starts 2026-11-10 00:05:26 UTC, the instant Season 1 ends, same length (to 2027-03-11), Season 1's 25 tiers (the Season Pass Reward Pack and the two cosmetics reused; a player who already owns a reused cosmetic gets nothing new for that tier) | 4.4, 5.1, 6.2 |
+| `ensure_next_season()` on cron `ensure-next-season` (every 10 min): flips `is_active` to the season whose window holds now, and authors the next season (same length, same tiers) once the active one is within 14 days of its end with no successor. `season_health()` returns `{ok}` for the same rule | 5.1 |
+| `rotate_color_packs()` on cron `rotate-color-packs` (daily 00:02 UTC; changes rows only on a new ISO week): one colour pack live at a time, `available_until` = end of its week. Live now: Gale Pack until 2026-10-19 | 4.1, 7.6 |
+| Starter Pack `image_url` (cdn.midjourney.com) cleared | 6.8, 7.6 |
+| cron `prune-market-cpu` (03:41 daily) runs `prune_market_listing_cpu()` | 1.11, 6.1, 7.9 |
+| `shop_regulars_own` uses `(select auth.uid())` | 6.7, 7.4 |
+| Table comments on the deny-all tables | 7.5 |
+| `art_pipeline_gate()` + `art_pipeline_attempts`: 20 bad tokens in 15 min lock every token RPC; the RPCs are VOLATILE and return an empty/`-1`/`{error}` result instead of raising, so the failure is recorded | 7.3 |
+| Daily rotating missions pay at least 120 credits (rotating dailies 1,950 -> 2,990) | 5.5 |
+| Collection achievements worth 1,000+ credits: credits x0.7, plus a Booster Pack (a Booster Box from 5,000). Collection credits 191,699 -> 140,700 | 5.2 |
+
+### Pending (SQL editor): `20261014000390_pending_audit2_revokes.sql`
+
+1. Revoke EXECUTE on the three trigger functions (`grading_pop_track`,
+   `player_card_variants_guard`, `shop_listing_release_slab`) from the API roles.
+2. Revoke EXECUTE on `submission_art_*` job RPCs from the API roles (the Edge
+   Function uses the service-role key).
+3. (Commented out) revoke the art/cosmetics pipeline RPCs from anon: only after
+   adding the repo secret `SUPABASE_SERVICE_ROLE_KEY` (the showcase-art workflow
+   passes it and `publish-showcase-art.ts` then uses it).
+4. A cron that prunes `art_pipeline_attempts` rows older than a day (the MCP
+   tool will not run a DELETE, even inside a function body).
+
+### Dashboard only
+
+- Auth → leaked-password protection on; Auth connection pool size (7.8).
+- Unused indexes (7.7): keep the FK indexes; revisit `profiles_role_idx` /
+  `cards_leader_draw_idx` after 30 days of stats.
+
+### Migration history drift (7.1): recorded, not repaired
+
+The live `supabase_migrations.schema_migrations` table cannot be written
+safely over MCP, so it is documented here instead:
+
+- **Applied live with no history row:** `20261012000092` (Charm CHECK fixed, v1
+  RPC dropped), `20261012000093` (quicksell via `grading_slab_price`),
+  `20261013000090` (`showcase_slabs` and its shim gone), `20261013000091` §2
+  (`crack_variant_slab` is a plain alias; crack restores variants) and
+  `20261013000190` (`prune_market_listing_cpu` exists, now scheduled).
+- **Name/version mismatch:** live rows are stamped with the apply time and carry
+  the repo file name in their `name` (e.g. live `20261011153346` =
+  `20261013000100_cpu_buyer_personas`); this PR's file went in as several rows.
+- **To align (user, CLI):** `supabase migration repair --status applied
+  20261012000092 20261012000093 20261013000090 20261013000091 20261013000190
+  20261014000300`, and `--status reverted` for the apply-time versions if a
+  clean `db push` history is wanted.
+
+### Client follow-up from 2026-10-12, now done
+
+- `beginMatch` passes the chosen difficulty (`App.tsx`, SHARK pays as HARD), and
+  CPU play is no longer Creator-only (`cpuAccess.ts`), so the 44 battle
+  achievements and match missions are reachable (3.7, 5.4).
+
 ## 2026-10-13 CPU buyer personas
 
 Applied live: `20261013000100_cpu_buyer_personas.sql`, `20261013000101_shop_haggle_log_opening.sql`.
-Pending (DELETE): `20261013000190_pending_cpu_buyer_personas.sql` — `prune_market_listing_cpu()` sweeps
+Applied live (2026-10-14 check; no history row, see 7.1 above), and scheduled by `20261014000300`: `20261013000190_pending_cpu_buyer_personas.sql` — `prune_market_listing_cpu()` sweeps
 `market_listing_cpu` rows of finished listings (the live `run_cpu_bidders` no longer deletes them).
 Design and before/after cost: [CPU_BUYERS.md](CPU_BUYERS.md).
 
@@ -33,6 +99,10 @@ public profile RPCs granted to `anon` for guests in B1 (`get_player_profile_card
   triggers on the public topics (gated keyword); (2) after the screens below
   switch, trim the publication to `player_shops`, `shop_listings`,
   `shop_purchases` (still used by PlayerShopsScreen's filtered subscriptions).
+  **Status 2026-10-14:** §2 is live (the realtime publication holds those 3
+  tables; checked by the second-pass audit, 7.11), with no history row (7.1).
+  `20261013000090` and `20261013000190` are live too (see the 2026-10-14
+  section).
 - Auth settings (not SQL): leaked-password protection (advisor WARN) and the
   Auth connection strategy (absolute 10 → percentage), Dashboard →
   Authentication.
