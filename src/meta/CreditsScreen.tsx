@@ -114,10 +114,10 @@ function CreditList({ title, items }: { title: string; items: CreditEntry[] }) {
                 href={c.link.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="self-start inline-flex items-center gap-1.5 min-h-[44px] px-1 text-sm font-black underline underline-offset-2 text-[var(--c-ink)] focus-visible:outline focus-visible:outline-2"
+                className="self-start max-w-full inline-flex items-center gap-1.5 min-h-[44px] px-1 text-sm font-black underline underline-offset-2 text-[var(--c-ink)] focus-visible:outline focus-visible:outline-2"
               >
-                {c.link.label}
-                <ExternalLink className="w-3.5 h-3.5" aria-hidden />
+                <span className="break-all min-w-0">{c.link.label}</span>
+                <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden />
                 <span className="sr-only">(opens in a new tab)</span>
               </a>
             )}
