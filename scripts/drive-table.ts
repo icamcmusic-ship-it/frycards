@@ -170,7 +170,8 @@ async function step(page: Page, rand: () => number, cov: Coverage): Promise<stri
       if ((await heading.innerText()).includes(`(${need}/${need})`)) break;
       await costs.nth((from + k) % n).click();
     }
-    const go = dialog.getByRole('button', { name: /^(CAST|USE LEADER)/ });
+    // The card sheet's first CAST (a Feint card adds CAST AS FEINT below it).
+    const go = dialog.getByRole('button', { name: /^(CAST|USE LEADER)/ }).first();
     if (await go.isEnabled()) {
       const leader = (await go.innerText()).startsWith('USE');
       await go.click();
@@ -221,8 +222,9 @@ async function step(page: Page, rand: () => number, cov: Coverage): Promise<stri
     if (n) {
       await powers.nth(Math.floor(rand() * n)).click();
       await page.waitForTimeout(80);
+      // Every hand card opens the one card sheet; one that cannot be cast
+      // shows a disabled CAST, and the next step closes it.
       if (await page.locator('div[role="dialog"][aria-label^="Cast "]').count()) return 'open-cast';
-      // Not castable: that opened the card inspector — close it.
       await page.keyboard.press('Escape');
       return 'inspect';
     }

@@ -26,7 +26,6 @@
  */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronRight,
   Clock,
   Flame,
   History,
@@ -40,47 +39,34 @@ import {
 } from 'lucide-react';
 import { botAction, botRng, estimateEquity } from '../game/poker/bot';
 import type { CardDef } from '../game/poker/cards';
-import { hasKw, tierLabel } from '../game/poker/cards';
-import {
-  HUMAN_ACTION_CAP_MS,
-  MAX_EXCLUSIONS,
-  MODES,
-  TURN_TIMER_MS,
-  bigBlindAt,
-} from '../game/poker/constants';
+import { tierLabel } from '../game/poker/cards';
+import { HUMAN_ACTION_CAP_MS, MODES, TURN_TIMER_MS, bigBlindAt } from '../game/poker/constants';
 import {
   applyAction,
   betOptions,
   canCast,
   canUseLeader,
-  castCost,
-  castTargets,
+  chipsInPlay,
   cloneMatch,
   createMatch,
-  effectiveEffect,
-  excludableCategories,
   fallbackAction,
   forecast,
   IllegalAction,
   inHand,
-  leaderPseudoDef,
-  legalTargets,
-  needsOpponentTarget,
   potTotal,
   standings,
   tilted,
   waitingOn,
   type Action,
   type CastRecord,
-  type ExtraCost,
   type LogEntry,
   type Match,
   type SeatStats,
   type MatchSetup,
   type PCard,
 } from '../game/poker/engine';
-import { CATEGORY_NAMES, cardLabel, describeHand } from '../game/poker/evaluator';
-import { KEYWORD_SPECS, keywordLabel } from '../game/poker/keywords';
+import { CATEGORY_NAMES, describeHand } from '../game/poker/evaluator';
+import { keywordLabel } from '../game/poker/keywords';
 import { LOCATION_TEMPLATES, ruleText } from '../game/poker/locations';
 import { minPaidHands, ordinal, placementReward } from '../game/poker/rewards';
 import { runBots, styleTag } from '../game/poker/sim';
@@ -129,6 +115,8 @@ import { SfxBurst, type Sfx } from './SfxBurst';
 import { CardFace, CardInfoMode } from './CardFaceV4';
 import { Card3DInspector } from './Card3DInspector';
 import { HoverGlare } from './holo/HoverGlare';
+import { CastSheet } from './CastSheet';
+import { PanelBoundary } from './PanelBoundary';
 import { CoachOverlay } from './CoachOverlay';
 import { PlayingCard } from './PlayingCard';
 import { VisibleVideo } from './VisibleVideo';
@@ -536,6 +524,8 @@ function PokerTableInner({
   humanDeckCode,
 }: PokerTableProps) {
   const [match, setMatch] = useState<Match>(() => createMatch(setup));
+  /** Chips at the deal, for the button fuzzer's conservation check. */
+  const [chipsAtStart] = useState(() => chipsInPlay(match));
   const matchRef = useRef(match);
   useEffect(() => {
     matchRef.current = match;
@@ -895,6 +885,8 @@ function PokerTableInner({
       const k = e.key.toLowerCase();
       if (myWindow) {
         // OFF timers wait for an explicit pass: P (or Esc) answers the window.
+        // An Esc that closes the log or the settings popover is not a pass.
+        if (k === 'escape' && document.querySelector('[data-esc-panel]')) return;
         if (k === 'p' || k === 'escape') humanAct({ type: 'pass', seat: HUMAN });
         return;
       }
@@ -1115,6 +1107,20 @@ function PokerTableInner({
   const amt = (c: number) => (amtCtx ? fmtAmount(c, amtCtx) : `◎${fmtAmount(c, null)}`);
   const lastLines = view.log.filter((e) => !e.text.startsWith('—')).slice(-2);
 
+  /** The card sheet is the only layer open: it closes the inspector and the
+   * settings popover rather than stacking over them. */
+  const openCast = (flow: { uid?: string; leader?: number }) => {
+    setInspect(null);
+    setShowPrefs(false);
+    setCastFlow(flow);
+  };
+  const closeCast = useCallback(() => setCastFlow(null), []);
+  /** The inspector, for cards that are not yours to cast (seats, Location,
+   * a spotlight). Never queued behind an open card sheet. */
+  const inspectCard = (d: CardDef) => {
+    if (!castFlow) setInspect(d);
+  };
+
   const cycleSpeed = () => {
     const n = (speedIdx + 1) % CPU_SPEEDS.length;
     setSpeedIdx(n);
@@ -1149,6 +1155,11 @@ function PokerTableInner({
         }
         data-human-decision={myTurn || myWindow || myChoice || awaitingDeal ? '1' : undefined}
         data-paused={paused || spotHold ? '1' : undefined}
+        // For scripts/fuzz-table-buttons.ts: actions applied (progress) and the
+        // chip total, which powers move but never mint or burn.
+        data-seq={seq}
+        data-chips={chipsInPlay(match)}
+        data-chips-start={chipsAtStart}
       >
         {/* Top bar */}
         <div
@@ -1242,7 +1253,8 @@ function PokerTableInner({
               <ScrollText className="w-4 h-4" />
             </IconToggle>
           </div>
-          {showPrefs && (
+          {/* A held spotlight waits on GOT IT: nothing may sit over it. */}
+          {showPrefs && !spotHold && (
             <TablePrefs
               onClose={() => setShowPrefs(false)}
               rows={[
@@ -1311,7 +1323,7 @@ function PokerTableInner({
               rule: f.card.rule ? ruleText(f.card.rule) : '',
             }))}
             narrow={narrow}
-            onInspect={() => location.id.startsWith('__') || setInspect(location)}
+            onInspect={() => location.id.startsWith('__') || inspectCard(location)}
           />
         )}
 
@@ -1408,7 +1420,7 @@ function PokerTableInner({
                   inWindow={windowSeats.includes(i)}
                   reduced={reduced}
                   bubble={b && b.hand === match.handNo ? b : null}
-                  onInspect={setInspect}
+                  onInspect={inspectCard}
                   think={botThink && botThink.seat === i && clockSeat === i ? botThink : null}
                 />
               );
@@ -1461,23 +1473,29 @@ function PokerTableInner({
             {/* Audit 2.1: on a first visit the coach card and a spotlight
                 stacked; the spotlight waits until the coach step is done. */}
             {spot && !coachShowing && (
-              <Spotlight
-                spot={spot}
-                match={view}
-                positions={positions}
-                felt={felt}
-                narrow={narrow}
-                onInspect={(d) => {
-                  setInspectFromSpot(true);
-                  setInspect(d);
-                }}
-                onDismiss={() => setSpot(null)}
-              />
+              <PanelBoundary name="cast spotlight" key={`spot-${spot.at}`}>
+                <Spotlight
+                  spot={spot}
+                  match={view}
+                  positions={positions}
+                  felt={felt}
+                  narrow={narrow}
+                  onInspect={(d) => {
+                    setInspectFromSpot(true);
+                    inspectCard(d);
+                  }}
+                  onDismiss={() => setSpot(null)}
+                />
+              </PanelBoundary>
             )}
           </div>
 
           {/* Log drawer (a bottom sheet on a phone) */}
-          {showLog && <LogPanel match={view} narrow={narrow} onClose={() => setShowLog(false)} />}
+          {showLog && !spotHold && (
+            <PanelBoundary name="table log" onClose={() => setShowLog(false)}>
+              <LogPanel match={view} narrow={narrow} onClose={() => setShowLog(false)} />
+            </PanelBoundary>
+          )}
         </div>
 
         {/* Persistent action ticker (U3): the last two lines, read aloud. */}
@@ -1521,9 +1539,9 @@ function PokerTableInner({
           playerAct={playerAct}
           pre={preActionsOn && !over ? (pre?.kind ?? null) : undefined}
           setPre={setPre}
-          openCast={(uid) => setCastFlow({ uid })}
-          openLeader={(i) => setCastFlow({ leader: i })}
-          onInspect={setInspect}
+          openCast={(uid) => openCast({ uid })}
+          openLeader={(i) => openCast({ leader: i })}
+          onInspect={inspectCard}
           onSkip={busted && !over ? skipToEnd : undefined}
           onDeal={awaitingDeal ? deal : undefined}
           notice={notice}
@@ -1535,35 +1553,48 @@ function PokerTableInner({
           }}
         />
 
-        {castFlow && h && (
-          <CastDialog
-            view={view}
-            flow={castFlow}
-            secondsLeft={
-              myTurn && turnLeft !== null
-                ? Math.ceil((turnLeft + Math.max(0, bankMs)) / 1000)
-                : windowLeft !== null
-                  ? Math.ceil(windowLeft / 1000)
-                  : null
-            }
-            onClose={() => setCastFlow(null)}
-            onCast={(a) => humanAct(a)}
-            onInspect={setInspect}
-          />
-        )}
-        {showHistory && <HistoryModal match={view} onClose={() => setShowHistory(false)} />}
-        {inspect && (
-          <Card3DInspector
-            def={inspect}
-            onClose={() => {
-              setInspect(null);
-              // A spotlight the player opened from closes with its inspector.
-              if (inspectFromSpot) {
-                setInspectFromSpot(false);
-                setSpot((s) => (s?.hold ? s : null));
+        {/* ONE sheet for a hand card: the enlarged card, its rules and the
+            cast buttons together — never the cast options with an inspector
+            stacked behind them. */}
+        {castFlow && h && !over && (
+          <PanelBoundary name="card sheet" onClose={closeCast}>
+            <CastSheet
+              view={view}
+              seat={HUMAN}
+              flow={castFlow}
+              narrow={narrow}
+              amt={amt}
+              secondsLeft={
+                myTurn && turnLeft !== null
+                  ? Math.ceil((turnLeft + Math.max(0, bankMs)) / 1000)
+                  : windowLeft !== null
+                    ? Math.ceil(windowLeft / 1000)
+                    : null
               }
-            }}
-          />
+              onClose={closeCast}
+              onCast={(a) => humanAct(a)}
+            />
+          </PanelBoundary>
+        )}
+        {showHistory && (
+          <PanelBoundary name="hand history" onClose={() => setShowHistory(false)}>
+            <HistoryModal match={view} onClose={() => setShowHistory(false)} />
+          </PanelBoundary>
+        )}
+        {inspect && !castFlow && (
+          <PanelBoundary name="card inspector" onClose={() => setInspect(null)}>
+            <Card3DInspector
+              def={inspect}
+              onClose={() => {
+                setInspect(null);
+                // A spotlight the player opened from closes with its inspector.
+                if (inspectFromSpot) {
+                  setInspectFromSpot(false);
+                  setSpot((s) => (s?.hold ? s : null));
+                }
+              }}
+            />
+          </PanelBoundary>
         )}
         {over && (
           <GameOver
@@ -1592,7 +1623,9 @@ function PokerTableInner({
               (castFlow || inspect || showHistory) && 'opacity-0 pointer-events-none',
             )}
           >
-            <CoachOverlay stage={coachStage} onShowingChange={setCoachShowing} />
+            <PanelBoundary name="coach">
+              <CoachOverlay stage={coachStage} onShowingChange={setCoachShowing} />
+            </PanelBoundary>
           </div>
         )}
       </div>
@@ -1676,8 +1709,12 @@ function TablePrefs({
   onTimers: (t: TimerMode) => void;
   onClose: () => void;
 }) {
+  // Esc closes the popover (it used to ignore the key, so a popover left open
+  // sat over a held spotlight's GOT IT on a phone).
+  useEscapeClose(onClose);
   return (
     <div
+      data-esc-panel
       className="absolute right-2 top-full mt-1 z-50 w-[280px] max-w-[calc(100vw-16px)] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-black-sm p-3 flex flex-col gap-2"
       role="group"
       aria-label="Table settings"
@@ -2422,12 +2459,19 @@ function HumanPanel({
               const ok = live && castable(p.uid);
               return (
                 <HoverGlare key={p.uid}>
-                  <CardFace
-                    def={p.def}
-                    size={narrow ? 'micro' : 'compact'}
-                    dimmed={!ok && live}
-                    onClick={ok ? () => openCast(p.uid) : () => onInspect(p.def)}
-                  />
+                  <div className="relative shrink-0">
+                    {/* One tap, one sheet: castable or not, the card opens the cast
+                      sheet (which says why a cast is unavailable). A long-press
+                      or right-click opens nothing more. */}
+                    <span className="contents" onContextMenu={(e) => e.preventDefault()}>
+                      <CardFace
+                        def={p.def}
+                        size={narrow ? 'micro' : 'compact'}
+                        dimmed={!ok && live}
+                        onClick={() => openCast(p.uid)}
+                      />
+                    </span>
+                  </div>
                 </HoverGlare>
               );
             })}
@@ -2747,283 +2791,6 @@ function FreePeek({ view, onPeek }: { view: Match; onPeek: (seat: number) => voi
   );
 }
 
-// ===========================================================================
-// Cast dialog: targets, second costs, Feint
-// ===========================================================================
-function CastDialog({
-  view,
-  flow,
-  secondsLeft,
-  onClose,
-  onCast,
-  onInspect,
-}: {
-  view: Match;
-  flow: { uid?: string; leader?: number };
-  /** The decision's remaining time (the clock keeps running, A4). */
-  secondsLeft: number | null;
-  onClose: () => void;
-  onCast: (a: Action) => boolean;
-  onInspect: (d: CardDef) => void;
-}) {
-  const amt = useAmt();
-  const [refused, setRefused] = useState(false);
-  const h = view.hand!;
-  const me = view.seats[HUMAN];
-  const inst = flow.uid ? me.hand.find((p) => p.uid === flow.uid) : null;
-  const leaderIdx = flow.leader;
-  const def: CardDef | null = inst
-    ? inst.def
-    : leaderIdx !== undefined
-      ? leaderPseudoDef(me.leader, leaderIdx)
-      : null;
-  const [target, setTarget] = useState<number | null>(null);
-  const [targetCast, setTargetCast] = useState<number | null>(null);
-  const [costs, setCosts] = useState<ExtraCost[]>([]);
-  const [feint, setFeint] = useState(false);
-  // The shared Escape stack: Escape in an inspector opened from here closes
-  // only the inspector, not the half-built cast under it (A23).
-  useEscapeClose(onClose);
-  if (!def) return null;
-  const isLeader = leaderIdx !== undefined;
-  const check = isLeader ? canUseLeader(view, HUMAN, leaderIdx!) : canCast(view, HUMAN, inst!.uid);
-  const cost = isLeader ? null : castCost(view, HUMAN, def);
-  const eff = effectiveEffect(h, def);
-  const needsTarget = isLeader
-    ? KEYWORD_SPECS[def.effect!.kw].target === 'opponent'
-    : needsOpponentTarget(h, def);
-  const targets = needsTarget ? legalTargets(view, HUMAN, def) : [];
-  const castOpts =
-    !isLeader && (eff?.kw === 'Call Out' || eff?.kw === 'Snuff')
-      ? castTargets(view, HUMAN, def)
-      : [];
-  const extraNeeded = cost?.extra ?? 0;
-  const shedOpts = me.hand.filter((p) => p.uid !== inst?.uid);
-  const debuffOpts = h.holes[HUMAN].map((c, i) => ({ c, i })).filter(
-    ({ c }) => !c.blinded && c.r !== 0,
-  );
-  const exclOpts = extraNeeded > 0 ? excludableCategories(view, HUMAN) : [];
-  const exclRoom = MAX_EXCLUSIONS - h.exclusions[HUMAN].length;
-  const has = (e: ExtraCost) =>
-    costs.some((x) => x.kind === e.kind && JSON.stringify(x) === JSON.stringify(e));
-  const toggle = (e: ExtraCost) =>
-    setCosts((cs) =>
-      has(e)
-        ? cs.filter((x) => JSON.stringify(x) !== JSON.stringify(e))
-        : cs.length < extraNeeded &&
-            (e.kind !== 'exclude' || cs.filter((x) => x.kind === 'exclude').length < exclRoom)
-          ? [...cs, e]
-          : cs,
-    );
-  const ready =
-    check.ok &&
-    (!needsTarget || target !== null) &&
-    (castOpts.length === 0 || targetCast !== null || castOpts.length === 1) &&
-    costs.length === extraNeeded;
-  const submit = () => {
-    setRefused(false);
-    let ok: boolean;
-    if (isLeader) ok = onCast({ type: 'leader', seat: HUMAN, ability: leaderIdx!, target });
-    else
-      ok = onCast({
-        type: 'cast',
-        seat: HUMAN,
-        uid: inst!.uid,
-        target,
-        targetCast: targetCast ?? castOpts[castOpts.length - 1]?.id ?? null,
-        costs,
-        feint,
-      });
-    // A10: a hidden (veiled) seat can make a pick illegal after all.
-    if (!ok) {
-      setRefused(true);
-      setTarget(null);
-    }
-  };
-  return (
-    <div
-      className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-black max-w-2xl w-full p-4 flex flex-col sm:flex-row gap-4 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Cast ${def.name}`}
-      >
-        <div className="shrink-0 flex flex-col items-center gap-2">
-          {isLeader ? (
-            <CardFace def={me.leader} size="standard" />
-          ) : (
-            <CardFace def={def} size="standard" onClick={() => onInspect(def)} />
-          )}
-        </div>
-        <div className="flex-1 min-w-0 flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="heading-font text-lg leading-tight">
-              {isLeader ? `${me.leader.name} — Leader` : def.name}
-            </h3>
-            <span className="flex items-center gap-1">
-              {secondsLeft !== null && (
-                <span
-                  className={cn(
-                    'fs-xs font-black tabular-nums px-1 ink-border-sm',
-                    secondsLeft <= 10 && 'bg-[var(--c-red)] text-white',
-                  )}
-                  title="Time left on this decision"
-                >
-                  {Math.max(0, secondsLeft)}s
-                </span>
-              )}
-              <button onClick={onClose} aria-label="Close" className="p-1">
-                <X className="w-4 h-4" />
-              </button>
-            </span>
-          </div>
-          {eff && (
-            <p className="text-sm font-bold">
-              {keywordLabel(eff.kw, eff.n)}
-              {def.effect?.kw === 'Mimic' && ' (copied from the last cast)'}
-            </p>
-          )}
-          <p className="text-xs">
-            {isLeader
-              ? me.leader.abilities![leaderIdx!].text
-              : `Costs ${amt(cost!.chips)}${cost!.gambitOwed ? ` now (Gambit: owe ${amt(cost!.gambitOwed * 2)} if you lose)` : ''}${extraNeeded ? ` + ${extraNeeded} second cost${extraNeeded > 1 ? 's' : ''}` : ''}. The cast is public — everyone sees this card${needsTarget ? ' and its target' : ''}.`}
-          </p>
-          {!check.ok && <p className="text-xs font-bold text-[var(--c-red)]">{check.why}</p>}
-          {needsTarget && (
-            <div>
-              <div className="fs-xs font-black mb-1">TARGET</div>
-              <div className="flex flex-wrap gap-1">
-                {targets.length === 0 && (
-                  <span className="text-xs">
-                    No legal target (one hostile power per seat per street).
-                  </span>
-                )}
-                {targets.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTarget(t)}
-                    className={cn(
-                      'btn-pop text-xs font-bold px-2 py-1 ink-border-sm',
-                      target === t ? 'bg-[var(--c-yellow)]' : 'bg-white',
-                    )}
-                  >
-                    {view.seats[t].name} {amt(view.seats[t].stack)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {refused && (
-            <p className="text-xs font-bold text-[var(--c-red)]" role="alert">
-              No legal target — that pick was refused. Choose another.
-            </p>
-          )}
-          {castOpts.length > 1 && (
-            <div>
-              <div className="fs-xs font-black mb-1">WHICH CAST</div>
-              <div className="flex flex-wrap gap-1">
-                {castOpts.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setTargetCast(c.id)}
-                    className={cn(
-                      'btn-pop text-xs font-bold px-2 py-1 ink-border-sm',
-                      targetCast === c.id ? 'bg-[var(--c-yellow)]' : 'bg-white',
-                    )}
-                  >
-                    {view.seats[c.seat].name}: {c.def.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {extraNeeded > 0 && (
-            <div>
-              <div className="fs-xs font-black mb-1">
-                SECOND COST — pick {extraNeeded} ({costs.length}/{extraNeeded})
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {shedOpts.map((p) => (
-                  <CostChip
-                    key={p.uid}
-                    on={has({ kind: 'shed', uid: p.uid })}
-                    onClick={() => toggle({ kind: 'shed', uid: p.uid })}
-                  >
-                    Shed {p.def.name}
-                  </CostChip>
-                ))}
-                {debuffOpts.map(({ c, i }) => (
-                  <CostChip
-                    key={`d${i}`}
-                    on={has({ kind: 'debuff', hole: i })}
-                    onClick={() => toggle({ kind: 'debuff', hole: i })}
-                  >
-                    Blind your {cardLabel(c)} this street
-                  </CostChip>
-                ))}
-                {exclOpts.map((cat) => (
-                  <CostChip
-                    key={`x${cat}`}
-                    on={has({ kind: 'exclude', category: cat })}
-                    onClick={() => toggle({ kind: 'exclude', category: cat })}
-                  >
-                    Exclude {CATEGORY_NAMES[cat]}
-                  </CostChip>
-                ))}
-              </div>
-            </div>
-          )}
-          {!isLeader && hasKw(def, 'Feint') && (
-            <label className="flex items-center gap-2 text-xs font-bold">
-              <input type="checkbox" checked={feint} onChange={(e) => setFeint(e.target.checked)} />
-              Feint: secretly let it fizzle (only a Call Out can tell)
-            </label>
-          )}
-          <button
-            disabled={!ready}
-            onClick={submit}
-            className="btn-pop heading-font text-base px-4 py-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-md shadow-hard-black-xs disabled:opacity-40 disabled:cursor-not-allowed mt-auto"
-          >
-            {isLeader ? 'USE LEADER' : 'CAST'} <ChevronRight className="inline w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CostChip({
-  on,
-  onClick,
-  children,
-}: {
-  key?: React.Key;
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'btn-pop text-[11px] font-bold px-2 py-1 ink-border-sm',
-        on ? 'bg-[var(--c-yellow)]' : 'bg-white',
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ===========================================================================
-// Spotlight, results, log, history, game over
-// ===========================================================================
-/** The log lines a cast produced so far: everything after its anchor line in
- * the same hand, minus street headers. */
 function castResults(log: LogEntry[], anchor: string, hand: number): LogEntry[] {
   let i = -1;
   for (let k = log.length - 1; k >= 0; k--)
@@ -3299,9 +3066,11 @@ function LogPanel({
 }) {
   const entries = match.log.slice(-120);
   const endRef = useRef<HTMLDivElement>(null);
+  useEscapeClose(onClose);
   useEffect(() => endRef.current?.scrollIntoView({ block: 'end' }), [entries.length]);
   return (
     <aside
+      data-esc-panel
       className={cn(
         'absolute z-40 bg-[var(--c-ink)]/95 border-black flex flex-col',
         // A bottom sheet on a phone: a side drawer covered the right-hand seats.
