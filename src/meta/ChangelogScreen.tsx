@@ -86,6 +86,27 @@ export interface ChangelogEntry {
 // headline, so the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: '36.0',
+    name: 'Table Fixes',
+    date: 'October 2026',
+    tagline: 'One tap, one card sheet — and no more dead ends at the poker table.',
+    items: [
+      {
+        title: 'One card sheet',
+        body: 'Tap a card in your hand and one sheet opens: the big card with its full rules, and the cast buttons right under it. No more cast options with a second card viewer stacked behind them. If you can’t cast it yet, the button says why. On a phone it slides up from the bottom; Esc or CLOSE puts it away.',
+        category: 'qol',
+        icon: Layers,
+        route: { screen: 'play', label: 'PLAY A TABLE' },
+      },
+      {
+        title: 'Fixes',
+        body: 'Esc closes the table log and settings (and no longer passes a response window when it does), and neither can cover GOT IT when a power is aimed at you. If one part of the table hits an error, only that part closes — the match keeps going.',
+        category: 'gameplay',
+        icon: ShieldCheck,
+      },
+    ],
+  },
+  {
     version: '35.9',
     name: 'Variants in Motion',
     date: 'October 2026',

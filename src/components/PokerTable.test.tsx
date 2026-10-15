@@ -274,3 +274,91 @@ describe('match result (A20: the app owns the reward floor)', () => {
     expect(screen.getByText(/no credits or XP/)).toBeTruthy();
   });
 });
+
+describe('one card sheet (hand card → cast + full info, never stacked)', () => {
+  const powers = () =>
+    Array.from(table().querySelectorAll<HTMLElement>('[data-coach="powers"] [data-card-id]'));
+  const dialogs = () => screen.queryAllByRole('dialog');
+
+  test('tapping a hand card opens exactly one dialog: the sheet, with its CAST', () => {
+    mount();
+    expect(untilHuman('bet')).toBe(true);
+    expect(powers().length).toBeGreaterThan(0);
+    for (const card of powers()) {
+      fireEvent.click(card);
+      expect(dialogs()).toHaveLength(1);
+      const sheet = dialogs()[0];
+      expect(sheet.getAttribute('aria-label')).toMatch(/^Cast /);
+      expect(sheet.getAttribute('aria-modal')).toBe('true');
+      expect(screen.queryByRole('dialog', { name: /^Inspecting/ })).toBeNull();
+      // The full rules are in the same sheet.
+      expect(sheet.querySelector('section[aria-label="Complete card rules"]')).toBeTruthy();
+      expect(screen.getAllByRole('button', { name: /^CAST/ }).length).toBeGreaterThan(0);
+      // Tapping or right-clicking the big card opens no second layer.
+      const big = screen.getByTestId('cast-sheet-card');
+      fireEvent.click(big);
+      fireEvent.contextMenu(big);
+      expect(dialogs()).toHaveLength(1);
+      // Focus is inside the sheet; Esc closes it.
+      expect(sheet.contains(document.activeElement)).toBe(true);
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(dialogs()).toHaveLength(0);
+    }
+  });
+
+  test('a card that cannot be cast shows a disabled CAST and the reason inline', () => {
+    mount();
+    expect(untilHuman('bet')).toBe(true);
+    // Fold: no power can be cast for the rest of the hand.
+    fireEvent.click(screen.getByRole('button', { name: /^FOLD/ }));
+    step(ACT_GUARD_MS + 50);
+    const card = powers()[0];
+    expect(card).toBeTruthy();
+    fireEvent.click(card);
+    expect(dialogs()).toHaveLength(1);
+    const cast = screen.getAllByRole('button', { name: /^CAST/ })[0] as HTMLButtonElement;
+    expect(cast.disabled).toBe(true);
+    const why = screen.getByTestId('cast-why');
+    expect(why.textContent?.length).toBeGreaterThan(3);
+    expect(cast.getAttribute('aria-describedby')).toBe(why.id);
+    fireEvent.click(screen.getByRole('button', { name: /^CLOSE/ }));
+    expect(dialogs()).toHaveLength(0);
+  });
+
+  test('a long-press (context menu) on a hand card opens nothing', () => {
+    mount();
+    expect(untilHuman('bet')).toBe(true);
+    const card = powers()[0];
+    const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    card.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(dialogs()).toHaveLength(0);
+  });
+});
+
+describe('panels and Escape', () => {
+  test('Esc closes the table log and settings, and is not a pass or a fold', () => {
+    mount();
+    expect(untilHuman('bet')).toBe(true);
+    const seq = table().getAttribute('data-seq');
+    fireEvent.click(screen.getByRole('button', { name: 'Table log' }));
+    expect(document.querySelector('aside[aria-label="Table log"]')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(document.querySelector('aside[aria-label="Table log"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Table settings' }));
+    expect(screen.getByRole('group', { name: 'Table settings' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('group', { name: 'Table settings' })).toBeNull();
+    expect(table().getAttribute('data-seq')).toBe(seq);
+  });
+
+  test('the table reports its chip total, which never drifts', () => {
+    mount(3, 11);
+    for (let i = 0; i < 4; i++) {
+      if (!untilHuman('bet', 20_000)) break;
+      expect(table().getAttribute('data-chips')).toBe(table().getAttribute('data-chips-start'));
+      fireEvent.keyDown(window, { key: 'c' });
+      step(ACT_GUARD_MS + 50);
+    }
+  });
+});

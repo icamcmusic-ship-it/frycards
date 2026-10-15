@@ -9,6 +9,40 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v36.0 — Table fixes: one card sheet, no dead ends
+
+- **One card sheet** (`src/components/CastSheet.tsx`): tapping a card in your
+  hand opens a single sheet — the enlarged card (tilt and holo, as in the
+  inspector), its complete rules, and the cast controls (targets, second
+  costs, `CAST — ◎n`, `CAST AS FEINT` for Feint cards, `CLOSE`). It replaces
+  the cast dialog, whose card face opened the 3D inspector _behind_ it (z-50
+  under z-60): two modals, two backdrops, two focus traps. A card you cannot
+  cast now opens the same sheet with a disabled CAST and the reason printed
+  under it ("Slow Events go before you act on a street"), instead of a
+  different popup. Bottom sheet on a phone (card above the buttons, its own
+  scroll, `pan-y` on the card), centred modal on desktop; focus trap, Esc
+  closes, 44px controls; right-click / long-press opens nothing more. A card
+  that leaves your hand while its sheet is open now closes the sheet (it
+  used to leave an invisible dialog holding the hotkeys and pausing your
+  clock).
+- **Escape and covered controls**: the table log and the settings popover
+  close on Esc (Esc there no longer also passes a response window), and
+  neither is shown while a power aimed at you waits on GOT IT — on a phone
+  either one covered GOT IT, and the bots stay paused until it is pressed.
+- **Crash fences** (`src/components/PanelBoundary.tsx`): the card sheet, the
+  inspector, hand history, the log, the cast spotlight and the coach each
+  sit behind their own error boundary. A render error there now closes that
+  part (with a notice for overlays) and the match keeps running, instead of
+  replacing the whole app with "Something broke". Errors are still logged.
+- **`scripts/fuzz-table-buttons.ts`**: a random-clicker over every enabled,
+  on-top control (plus F / C / R / P / Esc / Tab / Enter) across 2/3/6 seats,
+  phone and desktop, forced Locations, no powers, mutators, manual deal and
+  standard timers. Fails on page / console errors, an error-boundary
+  fallback, a blank screen, a soft-lock, two modals open at once, or chips
+  not conserved (the table root now exposes `data-seq`, `data-chips` and
+  `data-chips-start`). `table-preview.html` gains `location=`, `mutators=`,
+  `powers=0`, `autodeal=` and `timers=`.
+
 ### v35.9 — Variants in motion
 
 - **Card variants redrawn and animated** (`src/components/variants/`). Ids
@@ -361,7 +395,7 @@ of those re-downloads billed as cached egress off the CDN. Widened to 30 days
 (`20260907000000_storage_cache_control.sql`), which retires the repeat traffic
 entirely: the browser answers from its own cache without reaching the CDN. Not
 a year, deliberately — the filenames carry generation UUIDs and are effectively
-immutable, but a file that *is* replaced in place should self-heal within a
+immutable, but a file that _is_ replaced in place should self-heal within a
 month rather than being pinned in caches until 2027. Append `?v=` to a catalog
 URL to force an earlier refresh.
 
@@ -414,7 +448,6 @@ is actually enabled on the project. If it is off, every card face requests a
 derivative, fails, and falls back to the full-resolution original — worse than
 before any of this work. It is the one switch that dominates every number
 above, and it is worth confirming before reading anything into the bill.
-
 
 #### The transformation add-on is off, so the resizing moves offline — and the art moves to R2
 
@@ -555,8 +588,8 @@ top-level-await CLI: importing it to test anything would run it.
 Two changes that go together, because the second is what makes the first safe.
 
 **It runs in Actions now.** `.github/workflows/art-pipeline.yml` does the whole
-pipeline on a runner: a manual *full-migration* for the one-time cleanup, a
-*shrink-video* phase (ffmpeg is preinstalled there, which is most of why this
+pipeline on a runner: a manual _full-migration_ for the one-time cleanup, a
+_shrink-video_ phase (ffmpeg is preinstalled there, which is most of why this
 beats asking anyone to install it), and a **weekly `sync`** — which is what
 finally makes new art automatic. Drop a file in the Supabase dashboard and its
 resized copies appear within the week with nobody remembering to do anything.
@@ -584,7 +617,7 @@ in CI. Pointing `ART_S3_ENDPOINT` elsewhere still moves the art off Supabase.
 
 #### Leader stability: the design of a draw matters as much as the number of them
 
-v28 wrote the standing rule — *two draws, always, for anything about a Leader*
+v28 wrote the standing rule — _two draws, always, for anything about a Leader_
 — and v29 gave it an instrument and a three-draw triangle that measured
 Spearman rho = 0.417 / 0.733 / 0.450, mean **0.53**. The conclusion drawn from
 that was that the pinned suite's Leader ranking barely survives a recipe
@@ -596,7 +629,7 @@ three-draw triangle measures rho = **0.883 / 0.850 / 0.767, mean 0.833**.
 
 That is not luck, it is the experiment. The question this instrument exists to
 ask is "does the ranking survive a RECIPE re-roll." An unpaired triangle varies
-the recipe salt *and* the game RNG at once, so its rho is a joint measure of
+the recipe salt _and_ the game RNG at once, so its rho is a joint measure of
 both variances and under-states recipe stability by however much game-RNG noise
 is in the cohorts. Holding the seeds fixed cancels that term and leaves the
 question actually being asked. **v29's 0.53 was measuring two things and
@@ -612,12 +645,12 @@ must say so where it would have printed the measurement.)
 This partially reopens a question v29 closed. Under a paired design, four of
 nine Leaders clear the rank-range bar rather than the extremes alone:
 
-| Leader                      | draw 1    | draw 2    | draw 3    | range |
-| --------------------------- | --------- | --------- | --------- | ----- |
-| Avatar of the Abyss         | 64.8 (#1) | 64.9 (#1) | 59.2 (#1) | **0** |
-| Mer-King                    | 59.3 (#2) | 53.5 (#3) | 57.2 (#2) | 1     |
-| Void Mother                 | 50.0 (#4) | 50.5 (#4) | 56.3 (#3) | 1     |
-| Sentinel of the Nether Pit  | 39.5 (#9) | 40.9 (#9) | 41.3 (#8) | 1     |
+| Leader                     | draw 1    | draw 2    | draw 3    | range |
+| -------------------------- | --------- | --------- | --------- | ----- |
+| Avatar of the Abyss        | 64.8 (#1) | 64.9 (#1) | 59.2 (#1) | **0** |
+| Mer-King                   | 59.3 (#2) | 53.5 (#3) | 57.2 (#2) | 1     |
+| Void Mother                | 50.0 (#4) | 50.5 (#4) | 56.3 (#3) | 1     |
+| Sentinel of the Nether Pit | 39.5 (#9) | 40.9 (#9) | 41.3 (#8) | 1     |
 
 Measured on the CURRENT engine, i.e. **after** the v32 first-player fix, which
 answers the open question about whether that fix would move Avatar on its own:
@@ -633,10 +666,10 @@ with game length, which points the lever at Avatar's late game. Aggregated
 across all twelve reports of this pass (n = 5,520 Avatar games rather than a
 few hundred), it is not a ramp:
 
-| Leader                     | 1st invoke | ≤10 turns    | 11–20         | 21–30         | >30          |
-| -------------------------- | ---------- | ------------ | ------------- | ------------- | ------------ |
-| Avatar of the Abyss        | **7.98**   | 22.2 (n=81)  | 65.5 (n=2619) | 69.5 (n=2127) | 66.7 (n=693) |
-| Sentinel of the Nether Pit | 6.48       | 29.1 (n=93)  | 46.8 (n=5769) | 35.6 (n=3405) | 31.8 (n=1188)|
+| Leader                     | 1st invoke | ≤10 turns   | 11–20         | 21–30         | >30           |
+| -------------------------- | ---------- | ----------- | ------------- | ------------- | ------------- |
+| Avatar of the Abyss        | **7.98**   | 22.2 (n=81) | 65.5 (n=2619) | 69.5 (n=2127) | 66.7 (n=693)  |
+| Sentinel of the Nether Pit | 6.48       | 29.1 (n=93) | 46.8 (n=5769) | 35.6 (n=3405) | 31.8 (n=1188) |
 
 Avatar's `avgFirstInvokeTurn` is 7.98, the latest of any Leader by a clear
 margin (every other one is 6.0–6.65). And its win rate is a **step function**:
@@ -666,12 +699,12 @@ those apart, so the sim now splits the waste at the point it happens, by
 amount, into the four cases that call for different fixes. Two seeds at 4
 games/pairing, 24 decks:
 
-| bucket                                              | seed 1337 | seed 4242 |
-| --------------------------------------------------- | --------- | --------- |
-| `handEmptyPct` — nothing in hand to buy at any price | **83.4%** | **78.0%** |
-| `curveShortPct` — not enough for the cheapest card   | 12.4%     | 16.5%     |
-| `colorShortPct` — enough essence, wrong colours      | 3.0%      | 3.5%      |
-| `spendablePct` — affordable and went uncast (misplay)| 1.2%      | 2.0%      |
+| bucket                                                | seed 1337 | seed 4242 |
+| ----------------------------------------------------- | --------- | --------- |
+| `handEmptyPct` — nothing in hand to buy at any price  | **83.4%** | **78.0%** |
+| `curveShortPct` — not enough for the cheapest card    | 12.4%     | 16.5%     |
+| `colorShortPct` — enough essence, wrong colours       | 3.0%      | 3.5%      |
+| `spendablePct` — affordable and went uncast (misplay) | 1.2%      | 2.0%      |
 
 **Colour screw is 3% of it.** Roughly 80% is essence generated on turns where
 the hand is empty — the late-game topdeck state, where a player with six
@@ -713,7 +746,7 @@ real `pack_types` row, priced at 699 credits, pinned to
 the 297 live cards.** It is `is_active = false` today, which is the only reason
 this is latent; the pass that flips that flag is the pass that ships the
 Showcase set, and if the flag moves first the pack sells Volume #1 cards under
-a Showcase name. The fallback now raises. Raising is correct here *because* the
+a Showcase name. The fallback now raises. Raising is correct here _because_ the
 caller is SECURITY DEFINER: the exception rolls the transaction back, so the
 player is not debited for a pack that could not be filled. A refused purchase
 is recoverable; a mis-delivered one is a support ticket.
@@ -735,7 +768,7 @@ to sell — and it validated rarities against three hardcoded literal lists that
 all include `Alt-Art`. The live catalogue is Common 120 · Uncommon 76 · Rare 46
 · Full-Art 29 · Super-Rare 12 · Mythic 8 · Ultra-Rare 6 · **Alt-Art 0**. So a
 shop owner could build and sell a pack promising a guaranteed Alt-Art that
-cannot contain one, and the rarity ladder falls *downward* on an empty tier, so
+cannot contain one, and the rarity ladder falls _downward_ on an empty tier, so
 it silently pays a Full-Art instead. The roadmap files Alt-Art under "Later" as
 harmless dead plumbing; it is reachable from a player-facing surface, and in an
 economy with `shop_reports` and `shop_fraud_strikes` tables, mis-advertised
@@ -745,7 +778,7 @@ generates the misrepresentation itself and no shop owner did anything wrong.
 The fix is not a shorter literal list — a literal list is what let this outlive
 the catalogue it described. `rarity_is_deliverable(text)` asks the catalogue, so
 Alt-Art becomes legal by itself on the day an Alt-Art card is printed, with no
-migration and nobody remembering. A weight of *zero* on an unprintable rarity
+migration and nobody remembering. A weight of _zero_ on an unprintable rarity
 stays legal, since it is never rolled.
 
 **And a dead guard found while replacing those lists.** `rarity_tier` ends
@@ -773,7 +806,7 @@ load-bearing for callers that rank arbitrary rarities and must not get a NULL.
   granted to `authenticated` with no `assert_creator()`, which reads like an
   outlier; it is a legitimate player feature gated on `player_shops` ownership
   with thorough input validation. Negative result recorded so the next audit
-  does not spend time on it. (Its *rarity* validation was wrong — see above —
+  does not spend time on it. (Its _rarity_ validation was wrong — see above —
   which is a correctness bug, not an authorization one.)
 - **`match_receipts` and `match_tickets` have RLS on and zero policies**, which
   is deny-all to clients despite table-level grants, and is intentional
@@ -861,11 +894,11 @@ to prevent exactly that.
 Exhausting the bonus Wellspring was believed to have bought back a 19-point
 overcorrection. Measured against its own alternatives, three seeds each:
 
-| regime                            | P1 win % | error vs 50% |
-| --------------------------------- | -------- | ------------ |
-| no compensation (allowance 1)     | 67.2%    | +17.2        |
-| allowance 2, bonus one **ready**  | 34.1%    | −15.9        |
-| allowance 2, bonus one _exhausted_ | 42.1%   | −7.9         |
+| regime                             | P1 win % | error vs 50% |
+| ---------------------------------- | -------- | ------------ |
+| no compensation (allowance 1)      | 67.2%    | +17.2        |
+| allowance 2, bonus one **ready**   | 34.1%    | −15.9        |
+| allowance 2, bonus one _exhausted_ | 42.1%    | −7.9         |
 
 The true first-mover edge is +17.2 points. The bonus Wellspring is worth about
 **25 points of swing**, and entering it exhausted buys back only ~8 of the ~33
@@ -895,12 +928,12 @@ permanent invisible exhausted-on-entry state was not.
 
 Sweeping the decay turn, three seeds × two independent deck draws, 24 runs:
 
-| decay turn        | draw A | draw B | mean  | error |
-| ----------------- | ------ | ------ | ----- | ----- |
-| never (shipped)   | 42.1   | 43.1   | 42.6% | −7.4  |
-| turn 5            | 51.5   | 52.3   | 51.9% | +1.9  |
-| **turn 6**        | 48.5   | 49.4   | 48.97% | **−1.0** |
-| turn 7            | 46.4   | 46.2   | 46.3% | −3.7  |
+| decay turn      | draw A | draw B | mean   | error    |
+| --------------- | ------ | ------ | ------ | -------- |
+| never (shipped) | 42.1   | 43.1   | 42.6%  | −7.4     |
+| turn 5          | 51.5   | 52.3   | 51.9%  | +1.9     |
+| **turn 6**      | 48.5   | 49.4   | 48.97% | **−1.0** |
+| turn 7          | 46.4   | 46.2   | 46.3%  | −3.7     |
 
 Turn 6 ships: a **7× reduction in error**, both draws agreeing, and the value
 bracketed on both sides rather than being the first thing that worked.
@@ -1200,7 +1233,7 @@ for entry.
 **Every axis this project has ever measured is a POINTER axis.** Overflow is
 what a finger cannot scroll to. The 24x24 minimum is what a thumb cannot hit.
 Reflow at 320px and the 200% text pass are both about a phone. Eighteen passes
-of geometry, and the question *can this be operated without a pointer at all*
+of geometry, and the question _can this be operated without a pointer at all_
 had never once been asked — which matters more here than in most apps, because
 this one draws a large share of its controls as `<div role="button">` (a card
 face cannot be a `<button>`: it prints its own keyword and cost chips as
@@ -1216,8 +1249,8 @@ and 2.1.2 (no trap).
 dialogs across the match board, the card inspectors and the meta screens all
 declare `role="dialog"` and `aria-modal="true"`, and most of them carry an
 effect that focuses the dialog on open — with a comment, copied from one to the
-next since v4.24, saying that this is *"so a keyboard user can't Tab through to
-the (only visually) obscured page underneath"*. **It is not, in any browser.**
+next since v4.24, saying that this is _"so a keyboard user can't Tab through to
+the (only visually) obscured page underneath"_. **It is not, in any browser.**
 `aria-modal` is a statement to the accessibility tree and says nothing to
 sequential focus navigation, and moving focus in once does not keep it there: a
 dialog mounts at the END of the DOM, so Tab from its last control walks off the
@@ -1249,7 +1282,7 @@ in the DOM is the one on top.
 day it shipped.** A PRELUDE entry drives a screen into a deeper state by
 clicking a button label, and it decided the click had LANDED by watching the
 control COUNT change. `auth@signup` presses CREATE ACCOUNT, whose difference
-from SIGN IN is a third *field* — and a field is an `<input>`, which the
+from SIGN IN is a third _field_ — and a field is an `<input>`, which the
 control selector does not select. The count went 6 → 6, the harness concluded
 the click had missed, and every check it then ran — overflow at three widths,
 tap targets, text resize, the whole click sweep — ran on the SIGN IN screen
