@@ -67,6 +67,8 @@ export function useHoloTilt(
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // Variant layers below read the same vars instead of tracking their own.
+    el.setAttribute('data-tilt-vars', '');
     const cur = { ...REST };
     const vel = { px: 0, py: 0, act: 0 };
     let tgt: HoloPose = { ...REST };
@@ -110,10 +112,11 @@ export function useHoloTilt(
       kick();
     };
     const timers: number[] = [];
-    const sweep = (ms = 1100) => {
+    // Gentle: a partial-strength pass over the middle of the card.
+    const sweep = (ms = 1500) => {
       if (reduced) return;
-      set({ px: 0.05, py: 0.3, act: 1 }, true);
-      timers.push(window.setTimeout(() => set({ px: 0.95, py: 0.7 }), 30));
+      set({ px: 0.2, py: 0.35, act: 0.6 }, true);
+      timers.push(window.setTimeout(() => set({ px: 0.8, py: 0.65 }), 30));
       timers.push(window.setTimeout(() => set({ px: 0.5, py: 0.5, act: 0.35 }), ms));
     };
     handle.current = { set, sweep };

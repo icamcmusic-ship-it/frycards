@@ -86,6 +86,33 @@ export interface ChangelogEntry {
 // headline, so the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: '35.9',
+    name: 'Variants in Motion',
+    date: 'October 2026',
+    tagline: 'All eight card variants were redrawn, renamed and now move.',
+    items: [
+      {
+        title: 'Eight variants, new names',
+        body: 'Every variant has new art that moves. Shattered is now Smash Cut, and its shards drift as you tilt it while light runs along the cracks. Ember Sparks is now Grease Fire, Tide Frost is Flash Freeze, Root Overgrown is Overgrowth, Gale Lightning is Crosswind, Light Radiant is Headliner, Shadow Ink is Ink Spill and Void Rift is Null Tear. Cards you own keep their variant, and odds and value are unchanged.',
+        category: 'collection',
+        icon: Sparkles,
+        route: { screen: 'collection', label: 'OPEN COLLECTION' },
+      },
+      {
+        title: 'Motion that stays out of the way',
+        body: 'Variants animate in the inspector and on the pack reveal. Collection cards wake up on hover or focus, and grids and the table hold a still frame. No more than four cards move at once. The ink never covers card text, Smash Cut keeps its words on a steady plate, and Reduced Motion (in Settings or on your device) shows a still card.',
+        category: 'qol',
+        icon: Sparkles,
+      },
+      {
+        title: 'Softer shine',
+        body: 'Every rarity\u2019s holo is about a third gentler, with Ultra-Rare, Mythic and Full-Art brought back down the most. Foil frames no longer shimmer at rest, and the pack-reveal sweep is gentler. Table cards get a light glare only while you hover or focus them. On iPhone, the inspector has a TILT TO SHINE button to let the card follow your phone.',
+        category: 'qol',
+        icon: Sparkles,
+      },
+    ],
+  },
+  {
     version: '35.8',
     name: 'Card Shine',
     date: 'October 2026',

@@ -15,12 +15,12 @@ import { revealTier } from './pack/revealTier';
 import { pullScore } from './packHistory';
 import { sanitizeFilters, tileMatchesVariant } from './collectionFilters';
 import { packVariantOdds } from './packodds';
-import { shardsFor } from '../components/variants/VariantLayer';
-import { seededRandom } from '../components/variants/overlayArt';
+import { shardsFor } from '../components/variants/fx/Shattered';
+import { seededRandom } from '../components/variants/rng';
 import type { PackType } from '../lib/supabase';
 
 describe('card variants', () => {
-  test('eight variants: Shattered plus one elemental per colour', () => {
+  test('eight variants: Smash Cut (shattered) plus one elemental per colour', () => {
     expect(CARD_VARIANTS).toHaveLength(8);
     expect(ELEMENTAL_VARIANTS).toHaveLength(7);
     const colours = ELEMENTAL_VARIANTS.map((v) => VARIANT_META[v].colour);
@@ -92,10 +92,10 @@ describe('card variants', () => {
   });
 
   test('shards: 3-4 per card, seeded per card id', () => {
-    const a = shardsFor('card-a');
+    const a = shardsFor('card-a').shards;
     expect(a.length).toBeGreaterThanOrEqual(3);
     expect(a.length).toBeLessThanOrEqual(4);
-    expect(shardsFor('card-a')).toEqual(a);
+    expect(shardsFor('card-a').shards).toEqual(a);
     for (const s of a) {
       expect(s.poly.length).toBeGreaterThanOrEqual(3);
       for (const [x, y] of s.poly) {

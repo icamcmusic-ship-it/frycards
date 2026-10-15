@@ -8,12 +8,18 @@
  * filters, market rows) while the overlay renderer itself
  * (src/components/variants/VariantLayer.tsx) is lazy-loaded.
  *
+ * Names (v2, animated): ids are the stored values and never change, so the
+ * display names can: shattered = Smash Cut, ember_sparks = Grease Fire,
+ * tide_frost = Flash Freeze, root_overgrown = Overgrowth, gale_lightning =
+ * Crosswind, light_radiant = Headliner, shadow_ink = Ink Spill, void_rift =
+ * Null Tear.
+ *
  * ART DROP-IN: each overlay is drawn procedurally (seeded per card id). To
  * replace one with painted art, upload a transparent 750x1050 WebP to
  * `https://frycards-art.pages.dev/Overlays/<variant>.webp` (e.g.
  * `Overlays/ember_sparks.webp`). The renderer probes that URL once per
  * session; when it loads, the image is laid over the card instead of the
- * procedural SVG (Shattered keeps its shard split and lays the image on top).
+ * procedural ink (Smash Cut keeps its shard split and lays the image on top).
  * Nothing else needs to change.
  */
 
@@ -55,83 +61,84 @@ export const ELEMENTAL_MULT = 3;
 export const VARIANT_META: Record<CardVariant, VariantMeta> = {
   shattered: {
     id: 'shattered',
-    name: 'Shattered',
+    name: 'Smash Cut',
     colour: null,
     mult: SHATTERED_MULT,
     odds: SHATTERED_ODDS,
-    short: 'SHAT',
+    short: 'SMASH',
     hex: '#E5E7EB',
-    blurb: 'Split into shards that shift as you move it.',
+    blurb:
+      'Cracked clean through. The shards drift apart as you tilt it, and light runs along the breaks.',
   },
   ember_sparks: {
     id: 'ember_sparks',
-    name: 'Ember Sparks',
+    name: 'Grease Fire',
     colour: 'Ember',
     mult: ELEMENTAL_MULT,
     odds: ELEMENTAL_ODDS,
-    short: 'SPARK',
-    hex: '#F97316',
-    blurb: 'Sparks and a glowing heat edge.',
+    short: 'FLAME',
+    hex: '#FF6A2B',
+    blurb: 'The fryer caught. Flames lick up the frame and embers float off the edges.',
   },
   tide_frost: {
     id: 'tide_frost',
-    name: 'Tide Frost',
+    name: 'Flash Freeze',
     colour: 'Tide',
     mult: ELEMENTAL_MULT,
     odds: ELEMENTAL_ODDS,
-    short: 'FROST',
-    hex: '#38BDF8',
-    blurb: 'Frost creeping in from the edges, ice-crystal corners.',
+    short: 'RIME',
+    hex: '#38D6FF',
+    blurb: 'Rime creeps in from the corners. Catch the light and a glint runs across the ice.',
   },
   root_overgrown: {
     id: 'root_overgrown',
-    name: 'Root Overgrown',
+    name: 'Overgrowth',
     colour: 'Root',
     mult: ELEMENTAL_MULT,
     odds: ELEMENTAL_ODDS,
     short: 'VINE',
-    hex: '#22C55E',
-    blurb: 'Vines and leaves wrapping the border.',
+    hex: '#7CFF4F',
+    blurb: 'Vines have claimed the frame. The leaves sway, and spores drift up past the art.',
   },
   gale_lightning: {
     id: 'gale_lightning',
-    name: 'Gale Lightning',
+    name: 'Crosswind',
     colour: 'Gale',
     mult: ELEMENTAL_MULT,
     odds: ELEMENTAL_ODDS,
-    short: 'BOLT',
-    hex: '#FACC15',
-    blurb: 'Forking bolts with a flash where they strike.',
+    short: 'GUST',
+    hex: '#2DF5D0',
+    blurb: 'A gale tears across the card. Gust lines streak past, and scraps tumble with them.',
   },
   light_radiant: {
     id: 'light_radiant',
-    name: 'Light Radiant',
+    name: 'Headliner',
     colour: 'Light',
     mult: ELEMENTAL_MULT,
     odds: ELEMENTAL_ODDS,
     short: 'HALO',
-    hex: '#FDE68A',
-    blurb: 'Sunburst rays from behind the art and a halo edge.',
+    hex: '#E6FF2E',
+    blurb: 'Top billing. Stage rays sweep behind the art, and a halo crowns the card.',
   },
   shadow_ink: {
     id: 'shadow_ink',
-    name: 'Shadow Ink',
+    name: 'Ink Spill',
     colour: 'Shadow',
     mult: ELEMENTAL_MULT,
     odds: ELEMENTAL_ODDS,
     short: 'INK',
-    hex: '#A855F7',
-    blurb: 'Ink bleeding in from the edges, smoky tendrils.',
+    hex: '#B98CFF',
+    blurb: 'Ink seeps in from the edges and drips from the top. Smoke curls off it.',
   },
   void_rift: {
     id: 'void_rift',
-    name: 'Void Rift',
+    name: 'Null Tear',
     colour: 'Void',
     mult: ELEMENTAL_MULT,
     odds: ELEMENTAL_ODDS,
-    short: 'RIFT',
-    hex: '#EC4899',
-    blurb: 'A torn hole with stars showing through.',
+    short: 'TEAR',
+    hex: '#D9DCE3',
+    blurb: 'Reality ripped open over the art. Tilt it to look into the void behind it.',
   },
 };
 

@@ -839,6 +839,7 @@ function RevealStage({
                 size="full"
                 foil={current.foil}
                 variant={asVariant(current.variant)}
+                variantLive={currentShown}
                 dimmed={current.converted_to_credits}
                 serial={
                   current.serialized

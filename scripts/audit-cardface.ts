@@ -38,7 +38,7 @@
  */
 import { chromium } from 'playwright';
 import sharp from 'sharp';
-import { blockSupabase } from './lib/block-remote-media';
+import { blockRemoteMedia, blockSupabase } from './lib/block-remote-media';
 import { readFileSync } from 'node:fs';
 import { POOL } from '../src/game/poker/cardpool';
 import { FA_INK, FA_SCRIM } from '../src/components/artInk.generated';
@@ -114,7 +114,20 @@ const UR_ASPECT_TOL = 0.01;
 const urArt: { bucket: string; aspect: number; pct: number }[] = [];
 
 // AUDIT_HOLO_ONLY=1 skips the layout runs (iterate on the holo pass alone).
-for (const { rarity, reprint, tucked, reveal } of process.env.AUDIT_HOLO_ONLY ? [] : runs) {
+// AUDIT_VFX_ONLY=1 runs the variant pass alone. To split a long run:
+// AUDIT_PASSES=layout,holo,variant (default all) picks passes, and
+// AUDIT_RUNS=<from>-<to> picks layout runs by index (0-based, inclusive).
+const PASSES = new Set(
+  process.env.AUDIT_HOLO_ONLY
+    ? ['holo']
+    : process.env.AUDIT_VFX_ONLY
+      ? ['variant']
+      : (process.env.AUDIT_PASSES ?? 'layout,holo,variant').split(','),
+);
+const [runFrom, runTo] = (process.env.AUDIT_RUNS ?? `0-${runs.length - 1}`).split('-').map(Number);
+for (const { rarity, reprint, tucked, reveal } of PASSES.has('layout')
+  ? runs.slice(runFrom, runTo + 1)
+  : []) {
   for (const size of SIZES) {
     const bucket = `${rarity}${reprint ? ' (reprint)' : ''}${tucked ? ' (tucked)' : ''}${reveal ? ' (pack reveal)' : ''} @ ${size}`;
     await page.goto(
@@ -293,7 +306,7 @@ const lum = (r: number, g: number, b: number) => {
   return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b);
 };
 const holoPage = await ctx.newPage();
-for (const { rarity, foil, info } of HOLO_RUNS) {
+for (const { rarity, foil, info } of PASSES.has('holo') ? HOLO_RUNS : []) {
   const bucket = `holo ${rarity}${foil ? ' foil' : ''}${info === 'tucked' ? ' (tucked)' : ''} @ full`;
   await holoPage.goto(
     `${BASE}/gallery.html?all=${encodeURIComponent(rarity)}&size=full&info=${info}&reprint=1&holo=1${foil ? '&foil=1' : ''}`,
@@ -400,6 +413,175 @@ console.log(
   `Holo: ${holoTexts} text elements on ${HOLO_RUNS.length} tiers x ${HOLO_N} cards at full strength; ${holoProblems.length} problems.`,
 );
 problems.push(...holoProblems);
+
+// ---- Variant pass -------------------------------------------------------
+// Every card variant x VFX_RARITIES x the first VFX_N pool cards reprinted at
+// that template, under reduced motion (the static, seeded frame grids show),
+// with everything outside the variant layer frozen (animation: none) so the
+// bare and variant pages print the same face. Each text element (own-text
+// leaf) is compared against the same card with no variant: a pixel counts
+// as changed when any channel moves by more than 16.
+//  - Elementals: their ink is masked off the text (hard holes per line, a
+//    soft hole on the rules box), so a text element may change at most
+//    VFX_MAX_CHANGED (3%: the 1.2px feather at the hole's edge).
+//  - Smash Cut (shattered) splits the face itself, so the shards do move the
+//    art and frame. Its documented allowance is SHATTER_MAX_CHANGED (8%):
+//    the text sits on a still plate (an unshattered copy of the face shown
+//    only at the text), and what remains is the plate's feathered edge and
+//    the crack glint passing near the words. Before the plate it was 34%.
+const VFX_N = Number(process.env.VFX_N ?? 4);
+const VFX_RARITIES = ['Common', 'Rare', 'Ultra-Rare', 'Full-Art', 'Mythic'];
+const VFX_VARIANTS = [
+  'shattered',
+  'ember_sparks',
+  'tide_frost',
+  'root_overgrown',
+  'gale_lightning',
+  'light_radiant',
+  'shadow_ink',
+  'void_rift',
+];
+const VFX_MAX_CHANGED = 0.03;
+const SHATTER_MAX_CHANGED = 0.08;
+const vfxProblems: Problem[] = [];
+const vfxWorst = new Map<string, number>();
+let vfxTexts = 0;
+const vfxCtx = await browser.newContext({
+  viewport: { width: 1600, height: 1200 },
+  reducedMotion: 'reduce',
+});
+const vfxPage = await vfxCtx.newPage();
+// No remote art: the comparison is face vs face, and a painted overlay
+// (Overlays/<id>.webp) must not stand in for the procedural ink here.
+await blockRemoteMedia(vfxCtx);
+const FREEZE =
+  '*:not(.vfx, .vfx *, .vfx-shard, .vfx-shatter__fx *),*::before,*::after{animation:none!important;transition:none!important}';
+async function loadVfx(rarity: string, variant: string) {
+  await vfxPage.goto(
+    `${BASE}/gallery.html?all=${encodeURIComponent(rarity)}&size=full&info=open&reprint=1&sample=${VFX_N}&variant=${variant}`,
+    { waitUntil: 'networkidle' },
+  );
+  await vfxPage.addStyleTag({ content: FREEZE });
+  await vfxPage.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all(
+      Array.from(document.querySelectorAll('video')).map(
+        (v) =>
+          new Promise<void>((res) => {
+            v.pause();
+            if (v.currentTime === 0) return res();
+            v.addEventListener('seeked', () => res(), { once: true });
+            v.currentTime = 0;
+          }),
+      ),
+    );
+  });
+  // Regions are measured on the next frame; masks are data URIs.
+  await vfxPage.waitForTimeout(700);
+}
+async function vfxShots(n: number, withRects: boolean) {
+  const wraps = (await vfxPage.$$('[data-vfx-wrap]')).slice(0, n);
+  const out: {
+    id: string;
+    rects: { x: number; y: number; w: number; h: number; tag: string }[];
+    img: { data: Buffer; info: { width: number; channels: number } };
+  }[] = [];
+  for (const wrap of wraps) {
+    await wrap.scrollIntoViewIfNeeded();
+    const meta = await wrap.evaluate((root, want) => {
+      const R = root.getBoundingClientRect();
+      const rects: { x: number; y: number; w: number; h: number; tag: string }[] = [];
+      if (want)
+        root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+          if (el.closest('.vfx, .sr-only')) return;
+          const own = Array.from(el.childNodes).some(
+            (c) => c.nodeType === 3 && (c.textContent || '').trim().length > 1,
+          );
+          if (!own) return;
+          const cs = getComputedStyle(el);
+          if (cs.visibility === 'hidden' || Number(cs.opacity) === 0) return;
+          const r = el.getBoundingClientRect();
+          const x = Math.round(r.left - R.left) + 1;
+          const y = Math.round(r.top - R.top) + 1;
+          const w = Math.round(r.width) - 2;
+          const h = Math.round(r.height) - 2;
+          if (w < 4 || h < 4 || x < 0 || y < 0 || x + w > R.width || y + h > R.height) return;
+          rects.push({
+            x,
+            y,
+            w,
+            h,
+            tag: `${el.tagName}"${(el.textContent || '').trim().slice(0, 16)}"`,
+          });
+        });
+      return { id: root.getAttribute('data-vfx-wrap')!, rects };
+    }, withRects);
+    const png = await wrap.screenshot();
+    const img = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    out.push({ ...meta, img });
+  }
+  return out;
+}
+const vfxShotDir = process.env.VFX_SHOTS;
+for (const rarity of PASSES.has('variant') ? VFX_RARITIES : []) {
+  await loadVfx(rarity, 'none');
+  const bare = await vfxShots(VFX_N, true);
+  for (const variant of VFX_VARIANTS) {
+    const bucket = `variant ${variant} on ${rarity} @ full (reduced motion)`;
+    const limit = variant === 'shattered' ? SHATTER_MAX_CHANGED : VFX_MAX_CHANGED;
+    await loadVfx(rarity, variant);
+    const shots = await vfxShots(VFX_N, false);
+    for (let k = 0; k < shots.length; k++) {
+      const a = bare[k];
+      const b = shots[k];
+      if (!a || a.id !== b.id) {
+        vfxProblems.push({ bucket, id: b.id, kind: 'variant: card order differs from bare page' });
+        continue;
+      }
+      if (vfxShotDir && k === 0)
+        await sharp(await vfxPage.locator('[data-vfx-wrap]').first().screenshot()).toFile(
+          `${vfxShotDir}/${variant}-${rarity}.png`,
+        );
+      const W = a.img.info.width;
+      const ch = a.img.info.channels;
+      if (b.img.info.width !== W) {
+        vfxProblems.push({ bucket, id: b.id, kind: 'variant: card size changed' });
+        continue;
+      }
+      for (const r of a.rects) {
+        vfxTexts++;
+        let changed = 0;
+        for (let yy = r.y; yy < r.y + r.h; yy++)
+          for (let xx = r.x; xx < r.x + r.w; xx++) {
+            const i = (yy * W + xx) * ch;
+            const d = Math.max(
+              Math.abs(a.img.data[i] - b.img.data[i]),
+              Math.abs(a.img.data[i + 1] - b.img.data[i + 1]),
+              Math.abs(a.img.data[i + 2] - b.img.data[i + 2]),
+            );
+            if (d > 16) changed++;
+          }
+        const frac = changed / (r.w * r.h);
+        vfxWorst.set(variant, Math.max(vfxWorst.get(variant) ?? 0, frac));
+        if (frac > limit)
+          vfxProblems.push({
+            bucket,
+            id: a.id,
+            kind: `variant over text: ${r.tag} ${(100 * frac).toFixed(1)}% of its pixels changed (limit ${100 * limit}%)`,
+          });
+      }
+    }
+    if (process.env.AUDIT_VERBOSE) console.log(`  ${bucket}: ${shots.length} cards`);
+  }
+}
+console.log(
+  `Variants: ${vfxTexts} text elements (${VFX_VARIANTS.length} variants x ${VFX_RARITIES.length} rarities x ${VFX_N} cards, reduced motion); ${vfxProblems.length} problems. Worst text change: ${[
+    ...vfxWorst,
+  ]
+    .map(([v, f]) => `${v} ${(100 * f).toFixed(1)}%`)
+    .join(', ')}.`,
+);
+problems.push(...vfxProblems);
 
 await browser.close();
 
