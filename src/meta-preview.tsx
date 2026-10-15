@@ -119,6 +119,17 @@ const collection = POOL.map((c, i) => ({
   foil_quantity: i % 7 === 0 ? 1 : 0,
 }));
 
+// One variant copy per variant (on a card of its colour), so the collection
+// shows variant tiles: still at rest, animated on hover.
+const cardVariants = CARD_VARIANTS.map((variant) => {
+  const colour = VARIANT_META[variant].colour;
+  const c =
+    POOL.find(
+      (d) => d.type !== 'Leader' && (!colour || (d.colors ?? []).includes(colour as never)),
+    ) ?? POOL[0];
+  return { card_id: c.id, foil: false, variant, quantity: 1 };
+});
+
 // A legal FryCards Poker deck (1 Location + the Standard format's powers),
 // built the way the CPU builds one, from a fixed seed so the preview is stable.
 const leader = POOL.find((c) => c.type === 'Leader')!;
@@ -424,6 +435,7 @@ const meta: MetaState = {
   shopItems,
   packTypes,
   collection,
+  cardVariants,
   cosmetics,
   decks,
   inventory,

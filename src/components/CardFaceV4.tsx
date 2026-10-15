@@ -2294,6 +2294,7 @@ interface CardFaceProps {
   serial?: { number: number; cap: number };
   variant?: CardVariant | null;
   variantDepth?: number;
+  variantLive?: boolean;
 }
 
 /** What the bottom-right plate shows: a power's chip cost in units (a "+"
@@ -2307,7 +2308,7 @@ function statValue(def: CardDef): string | null {
 }
 
 /**
- * A card variant (Shattered / elemental overlay, see meta/variants.ts) wraps
+ * A card variant (Smash Cut / elemental ink, see meta/variants.ts) wraps
  * the plain face in the lazy VariantLayer; until that chunk arrives the
  * plain face shows.
  */
@@ -2317,9 +2318,12 @@ function CardFaceBase(
     variant?: CardVariant | null;
     /** 3D inspector only: shard depth for Shattered (0..1). */
     variantDepth?: number;
+    /** Animate the variant whenever on screen (inspector, pack reveal);
+     * otherwise it holds a still frame until hovered. */
+    variantLive?: boolean;
   },
 ) {
-  const { variant, variantDepth, ...rest } = props;
+  const { variant, variantDepth, variantLive, ...rest } = props;
   const face = <CardFacePlain {...rest} />;
   if (!variant) return face;
   const { w, h } = SIZES[rest.size ?? 'standard'];
@@ -2332,6 +2336,7 @@ function CardFaceBase(
         height={h}
         face={face}
         depth={variantDepth}
+        live={variantLive}
       />
     </React.Suspense>
   );

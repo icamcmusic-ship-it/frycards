@@ -9,6 +9,51 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v35.9 — Variants in motion
+
+- **Card variants redrawn and animated** (`src/components/variants/`). Ids
+  are unchanged, so owned cards carry over; colour, value and odds are
+  unchanged. New names: `shattered` **Smash Cut** (SMASH), `ember_sparks`
+  **Grease Fire** (FLAME), `tide_frost` **Flash Freeze** (RIME),
+  `root_overgrown` **Overgrowth** (VINE), `gale_lightning` **Crosswind**
+  (GUST), `light_radiant` **Headliner** (HALO), `shadow_ink` **Ink Spill**
+  (INK), `void_rift` **Null Tear** (TEAR).
+- Animations: flames flicker and embers rise, frost glints and snow drifts,
+  leaves sway and spores rise, gusts and scraps blow across, stage rays turn
+  behind the art (now edged in ink so they read on yellow art), ink drips and
+  smoke drifts, the tear's stars parallax and glitch, and Smash Cut's shards
+  keep the v1 crack geometry, parallax on tilt and breathe at half the
+  mockup's amplitude while a spark runs each crack. Only transform and
+  opacity are animated; every texture is procedural.
+- Where it runs: the inspector and the pack reveal animate; Collection tiles
+  animate on hover or focus; grids, the table and off-screen cards hold a
+  seeded still frame. At most four variant cards animate at once. Reduced
+  motion (OS or in-app) stops all of it. The tilt is shared with the holo
+  foil (`useHoloTilt`'s `--px/--py/--act`), and the variant ink sits above
+  the foil (z 70 over 60). CSS is injected on first use (eager CSS budget
+  unchanged). Painted `Overlays/<id>.webp` art still overrides the ink.
+- Readability: the ink is masked off every text line and the rules box;
+  Smash Cut shows its text on a still, unshattered plate (text disruption was
+  34% in the mockup). Seeds are per part (card id + variant + part), so
+  StrictMode dev renders match production. `audit:cardface` gains a variant
+  pass (every variant x five rarities, reduced motion, frozen frame) that
+  fails if a variant changes a text element's pixels beyond 3% (Smash Cut:
+  documented 8% allowance).
+- **Holo toned down** (`src/components/holo/holoCss.ts`): one strength
+  constant per tier (`HOLO_STRENGTH`, multiplies every layer's opacity),
+  about 35-40% lower peak, softer saturation and a narrower sheen band;
+  Ultra-Rare, Mythic and Full-Art come down the most. The foil reverse has no
+  at-rest shimmer, about half the colour-dodge, and stays frame only. The
+  pack-reveal auto-sweep is gentler (partial strength, mid-card, slower).
+- **Table glare**: hand cards and the respond-window card get the Common
+  Grease Glare (one layer) only while hovered or focused (`HoverGlare`);
+  nothing is mounted at rest. The in-match preview is the inspector, which
+  shows the full tier and any variant, live.
+- **iOS tilt permission**: when `DeviceOrientationEvent.requestPermission`
+  exists and has not been answered, the inspector shows a 44px TILT TO SHINE
+  button; the answer is remembered (localStorage, guarded) and grants
+  orientation to `useHoloTilt`. Hidden under reduced motion.
+
 ### v35.8 — Card shine per rarity
 
 - **Holo foil per rarity** (`src/components/holo/`): every texture is

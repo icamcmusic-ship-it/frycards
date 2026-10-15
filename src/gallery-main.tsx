@@ -13,6 +13,7 @@ import type { CardDef, CardType } from './game/poker/cards';
 import { HoloLayer, tierForRarity } from './components/holo/HoloLayer';
 import { GradedSlab, SLAB_CSS } from './meta/GradedSlab';
 import type { GradedCard } from './meta/grading';
+import { asVariant, type CardVariant } from './meta/variants';
 
 const TYPES: CardType[] = ['Unit', 'Location', 'Item', 'Event', 'Leader'];
 
@@ -97,6 +98,14 @@ function HoloWrap({
   );
 }
 
+/**
+ * `&variant=<id>`: every face carries that card variant (`&variant=none`:
+ * the same wrapper with no variant, the audit's "bare" reference). Each is
+ * wrapped in `[data-vfx-wrap]` so the audit's variant pass can screenshot it.
+ */
+const VARIANT_Q = new URLSearchParams(window.location.search).get('variant');
+const VARIANT: CardVariant | null = asVariant(VARIANT_Q);
+
 function Band({
   title,
   note,
@@ -129,8 +138,15 @@ function Band({
               size={size}
               foil={foil}
               serial={serialized ? { number: 7 + i, cap: 75 } : undefined}
+              variant={VARIANT}
             />
           );
+          if (VARIANT_Q)
+            return (
+              <div key={`${c.id}-${i}`} data-vfx-wrap={c.id} className="relative">
+                {face}
+              </div>
+            );
           if (HOLO)
             return (
               <HoloWrap
@@ -177,11 +193,17 @@ function AllOfRarity({
   const fixture = fixtureType ? POOL.find((c) => c.type === fixtureType) : undefined;
   // `&reprint=1`: every card in the pool reprinted at this rarity (the
   // layout audit checks each template against the whole pool's text).
-  const cards = fixture
+  const all = fixture
     ? [{ ...fixture, rarity } as CardDef]
     : reprint
       ? POOL.map((c) => ({ ...c, rarity }) as CardDef)
       : POOL.filter((c) => c.rarity === rarity);
+  // `&sample=N`: N cards spread evenly across the list (the variant pass).
+  const sample = Number(new URLSearchParams(window.location.search).get('sample')) || 0;
+  const cards =
+    sample > 0 && sample < all.length
+      ? Array.from({ length: sample }, (_, i) => all[Math.floor((i * all.length) / sample)])
+      : all;
   return (
     <div style={{ background: '#20242c', padding: 16 }}>
       <Band title={`${rarity} — all ${cards.length}`} cards={cards} size={size} foil={foil} />

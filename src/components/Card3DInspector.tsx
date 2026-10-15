@@ -19,6 +19,7 @@ import { cn } from '../lib/utils';
 import { useFocusTrap, useEscapeClose } from './useFocusTrap';
 import { HoloLayer, tierForRarity } from './holo/HoloLayer';
 import { useHoloTilt } from './holo/useHoloTilt';
+import { useTiltPermission } from './holo/useTiltPermission';
 
 const MAX_TILT_DEG = 14;
 
@@ -43,7 +44,7 @@ export function Card3DInspector({
   actions,
   onClose,
 }: {
-  /** Cosmetic variant overlay on the enlarged card (Shattered gets 3D depth). */
+  /** Cosmetic variant overlay on the enlarged card (Smash Cut gets 3D depth). */
   variant?: CardVariant | null;
   def: CardDef;
   /** Show the foil treatment on the enlarged card. */
@@ -72,7 +73,12 @@ export function Card3DInspector({
   // the card (--rx/--ry/--mx/…) from a rAF loop — no React render per move.
   // Reduced motion (OS or in-app) gets a static, readable pose.
   const cardRef = useRef<HTMLDivElement>(null);
-  useHoloTilt(cardRef, { maxTilt: MAX_TILT_DEG, reduced: reducedMotion, orientation: true });
+  const tiltPerm = useTiltPermission();
+  useHoloTilt(cardRef, {
+    maxTilt: MAX_TILT_DEG,
+    reduced: reducedMotion,
+    orientation: tiltPerm.orientation,
+  });
 
   useEscapeClose(onClose);
 
@@ -211,6 +217,7 @@ export function Card3DInspector({
                         serial={serial}
                         variant={variant}
                         variantDepth={1}
+                        variantLive
                       />
                       {/* Per-rarity foil (see holo/HoloLayer): replaces the
                         old inline glare / foil sheen / UR glint / Mythic glow.
@@ -257,6 +264,16 @@ export function Card3DInspector({
                 className="btn-pop heading-font fs-sm bg-[var(--c-paper)] text-[var(--c-ink)] px-4 py-2 min-h-[44px] pointer-fine:min-h-[36px] ink-border-sm shadow-hard-black-xs"
               >
                 {flipped ? '↺ SHOW FRONT' : '↻ SHOW BACK'}
+              </button>
+            )}
+            {/* iOS asks before a page may read device tilt. */}
+            {tiltPerm.needsButton && !reducedMotion && (
+              <button
+                onClick={() => void tiltPerm.request()}
+                data-testid="tilt-permission"
+                className="btn-pop heading-font fs-sm bg-[var(--c-paper)] text-[var(--c-ink)] px-4 py-2 min-h-[44px] min-w-[44px] ink-border-sm shadow-hard-black-xs"
+              >
+                ✦ TILT TO SHINE
               </button>
             )}
             {canToggleFoil && !serial && (

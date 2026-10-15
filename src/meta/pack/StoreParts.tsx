@@ -471,7 +471,7 @@ export function VariantOddsLine({ pack, pool }: { pack: StorePack; pool: CardDef
       data-testid="variant-odds"
     >
       <span className="heading-font text-[11px] text-[var(--c-yellow)]">◆ VARIANTS</span>{' '}
-      {pct(v.any)} per {pack.pack_tier === 'booster_box' ? 'box' : 'pack'} · Shattered 1 in{' '}
+      {pct(v.any)} per {pack.pack_tier === 'booster_box' ? 'box' : 'pack'} · Smash Cut 1 in{' '}
       {Math.round(1 / SHATTERED_ODDS)} cards (×{SHATTERED_MULT}) · Elemental 1 in{' '}
       {Math.round(1 / ELEMENTAL_ODDS)} cards of its colour (×{ELEMENTAL_MULT}). Stacks with foil.
     </div>

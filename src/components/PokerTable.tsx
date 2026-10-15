@@ -128,6 +128,7 @@ import { ChipFlights } from './ChipFlights';
 import { SfxBurst, type Sfx } from './SfxBurst';
 import { CardFace, CardInfoMode } from './CardFaceV4';
 import { Card3DInspector } from './Card3DInspector';
+import { HoverGlare } from './holo/HoverGlare';
 import { CoachOverlay } from './CoachOverlay';
 import { PlayingCard } from './PlayingCard';
 import { VisibleVideo } from './VisibleVideo';
@@ -2420,14 +2421,14 @@ function HumanPanel({
             {hand.map((p) => {
               const ok = live && castable(p.uid);
               return (
-                <div key={p.uid} className="relative shrink-0">
+                <HoverGlare key={p.uid}>
                   <CardFace
                     def={p.def}
                     size={narrow ? 'micro' : 'compact'}
                     dimmed={!ok && live}
                     onClick={ok ? () => openCast(p.uid) : () => onInspect(p.def)}
                   />
-                </div>
+                </HoverGlare>
               );
             })}
           </div>
@@ -2490,13 +2491,15 @@ function HumanPanel({
             {winCast ? (
               <div className="flex items-start gap-2">
                 {!narrow && (
-                  <CardFace
-                    def={winCast.leader ? view.seats[winCast.seat].leader : winCast.def}
-                    size="micro"
-                    onClick={() =>
-                      onInspect(winCast.leader ? view.seats[winCast.seat].leader : winCast.def)
-                    }
-                  />
+                  <HoverGlare>
+                    <CardFace
+                      def={winCast.leader ? view.seats[winCast.seat].leader : winCast.def}
+                      size="micro"
+                      onClick={() =>
+                        onInspect(winCast.leader ? view.seats[winCast.seat].leader : winCast.def)
+                      }
+                    />
+                  </HoverGlare>
                 )}
                 <div className="text-[11px] font-bold min-w-0">
                   <div>

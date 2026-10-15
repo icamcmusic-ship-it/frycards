@@ -1,6 +1,33 @@
 /* Injected lazily by HoloLayer (ensureHoloStyles) so it costs nothing in the
    eager CSS budget — same pattern as CardFaceV4's premium styles. */
+/**
+ * One strength per tier (multiplies every layer's opacity). Tune here.
+ * v35.9 toned everything down ~35-40%; UR, Mythic and Full-Art went back
+ * down the most, so Mythic is no longer the boldest by a lot.
+ */
+export const HOLO_STRENGTH = {
+  common: 0.62,
+  uncommon: 0.62,
+  rare: 0.62,
+  'super-rare': 0.6,
+  'ultra-rare': 0.55,
+  mythic: 0.5,
+  'full-art': 0.55,
+  /** Grease-Fire Reverse (foil copies, frame only). */
+  foil: 0.5,
+  /** Pit Boss Plate (serialized). */
+  serialized: 0.65,
+} as const;
+
+const strengthCss = Object.entries(HOLO_STRENGTH)
+  .filter(([k]) => k !== 'foil' && k !== 'serialized')
+  .map(([k, v]) => `.holo--${k} { --k: ${v}; }`)
+  .join('\n');
+
 export const HOLO_CSS = `
+.holo { --kf: ${HOLO_STRENGTH.foil}; --ks: ${HOLO_STRENGTH.serialized}; }
+${strengthCss}
+
 /* HoloLayer — FryCards foil treatments.
    Inputs (set by useHoloTilt on an ancestor): --px --py (0..1), --mx --my (%),
    --bgx --bgy (%), --hyp (0..1), --act (0..1).
@@ -30,20 +57,20 @@ export const HOLO_CSS = `
   background: radial-gradient(farthest-corner circle at var(--mx) var(--my),
       rgba(255, 255, 255, 0.75) 8%, rgba(255, 255, 255, 0.22) 30%, rgba(0, 0, 0, 0.32) 95%);
   mix-blend-mode: overlay;
-  opacity: calc(var(--act) * 0.55);
+  opacity: calc((var(--act) * 0.55) * var(--k, 1));
 }
-.holo--common .fx-glare { opacity: calc(var(--act) * 0.4); }
-.holo--mythic .fx-glare, .holo--full-art .fx-glare { opacity: calc(var(--act) * 0.4); }
+.holo--common .fx-glare { opacity: calc((var(--act) * 0.4) * var(--k, 1)); }
+.holo--mythic .fx-glare, .holo--full-art .fx-glare { opacity: calc((var(--act) * 0.4) * var(--k, 1)); }
 
 /* ---------- Uncommon · Fryer Sheen -------------------------------------- */
 .fx-sheen {
   background:
-    linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255, 255, 255, 0.85) 45%,
-      rgba(255, 240, 200, 0.6) 50%, transparent 62%, transparent 100%) ;
+    linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255, 255, 255, 0.85) 46%,
+      rgba(255, 240, 200, 0.6) 50%, transparent 55%, transparent 100%) ;
   background-size: 300% 300%;
   background-position: calc(100% - var(--px) * 100%) calc(100% - var(--py) * 100%);
   mix-blend-mode: soft-light;
-  opacity: calc(var(--act) * 0.75);
+  opacity: calc((var(--act) * 0.75) * var(--k, 1));
 }
 
 /* ---------- Rare · Chip-Stack Holo (art window) ------------------------- */
@@ -66,8 +93,8 @@ export const HOLO_CSS = `
     center, 0 0;
   background-blend-mode: soft-light, overlay, normal, normal;
   mix-blend-mode: color-dodge;
-  filter: brightness(calc(0.5 + var(--hyp) * 0.35)) contrast(2) saturate(1.2);
-  opacity: calc(var(--act) * 0.8);
+  filter: brightness(calc(0.5 + var(--hyp) * 0.35)) contrast(2) saturate(1);
+  opacity: calc((var(--act) * 0.8) * var(--k, 1));
 }
 
 /* ---------- Super-Rare · Colour Bleed ----------------------------------- */
@@ -89,10 +116,10 @@ export const HOLO_CSS = `
     center;
   background-blend-mode: overlay, soft-light, multiply, normal;
   mix-blend-mode: color-dodge;
-  filter: brightness(calc(0.55 + var(--hyp) * 0.35)) contrast(1.8) saturate(1.4);
-  opacity: calc(var(--act) * 0.9);
+  filter: brightness(calc(0.55 + var(--hyp) * 0.35)) contrast(1.8) saturate(1.05);
+  opacity: calc((var(--act) * 0.9) * var(--k, 1));
 }
-.fx-bleed-frame { opacity: calc(var(--act) * 0.6); }
+.fx-bleed-frame { opacity: calc((var(--act) * 0.6) * var(--k, 1)); }
 
 /* ---------- Ultra-Rare · Contraband Cosmos ------------------------------ */
 /* Etched sparkle on the crate frame + hazard stripes only. Sparkles scroll
@@ -111,8 +138,8 @@ export const HOLO_CSS = `
     center;
   background-blend-mode: multiply, screen, normal, multiply;
   mix-blend-mode: color-dodge;
-  filter: brightness(calc(0.5 + var(--hyp) * 0.5)) contrast(1.5) saturate(1.5);
-  opacity: calc(var(--act) * 1);
+  filter: brightness(calc(0.5 + var(--hyp) * 0.5)) contrast(1.5) saturate(1.1);
+  opacity: calc((var(--act) * 1) * var(--k, 1));
 }
 .fx-etch {
   background-image: var(--etch), linear-gradient(calc(var(--px) * 120deg + 60deg), var(--pop));
@@ -120,7 +147,7 @@ export const HOLO_CSS = `
   background-position: 0 0, var(--bgx) var(--bgy);
   background-blend-mode: multiply;
   mix-blend-mode: screen;
-  opacity: calc(var(--act) * 0.45);
+  opacity: calc((var(--act) * 0.45) * var(--k, 1));
 }
 .fx-seal {
   border-radius: 50%;
@@ -131,7 +158,7 @@ export const HOLO_CSS = `
       transparent calc(var(--px) * 100% + 16%), transparent 100%);
   mix-blend-mode: overlay;
   filter: brightness(1.4);
-  opacity: calc(0.25 + var(--act) * 0.85);
+  opacity: calc((0.25 + var(--act) * 0.85) * var(--k, 1));
 }
 
 /* ---------- Mythic · Opening Night Prism -------------------------------- */
@@ -152,15 +179,15 @@ export const HOLO_CSS = `
     center;
   background-blend-mode: screen, multiply, normal;
   mix-blend-mode: color-dodge;
-  filter: brightness(calc(0.55 + var(--hyp) * 0.4)) contrast(1.6) saturate(1.5);
-  opacity: calc(var(--act) * 0.85);
+  filter: brightness(calc(0.55 + var(--hyp) * 0.4)) contrast(1.6) saturate(1.1);
+  opacity: calc((var(--act) * 0.85) * var(--k, 1));
 }
 .fx-prism-flare {
   background:
     radial-gradient(ellipse 60% 6% at var(--mx) var(--my), rgba(255, 255, 255, 0.9), transparent 70%),
     radial-gradient(ellipse 4% 45% at var(--mx) var(--my), rgba(255, 255, 255, 0.75), transparent 70%);
   mix-blend-mode: screen;
-  opacity: calc(var(--act) * 0.7);
+  opacity: calc((var(--act) * 0.7) * var(--k, 1));
 }
 
 /* ---------- Full-Art · Headliner Oil Slick ------------------------------ */
@@ -179,8 +206,8 @@ export const HOLO_CSS = `
     center;
   background-blend-mode: soft-light, multiply, normal;
   mix-blend-mode: color-dodge;
-  filter: brightness(calc(0.55 + var(--hyp) * 0.4)) contrast(1.7) saturate(1.5);
-  opacity: calc(var(--act) * 0.9);
+  filter: brightness(calc(0.55 + var(--hyp) * 0.4)) contrast(1.7) saturate(1.1);
+  opacity: calc((var(--act) * 0.9) * var(--k, 1));
 }
 
 /* ---------- Foil copy · Grease-Fire Reverse (frame only) --------------- */
@@ -194,8 +221,8 @@ export const HOLO_CSS = `
   background-position: 0 0, var(--bgx) var(--bgy), center;
   background-blend-mode: soft-light, multiply, normal;
   mix-blend-mode: color-dodge;
-  filter: brightness(calc(0.6 + var(--hyp) * 0.35)) contrast(1.5) saturate(1.5);
-  opacity: calc(0.15 + var(--act) * 0.85);
+  filter: brightness(calc(0.6 + var(--hyp) * 0.35)) contrast(1.5) saturate(1.1);
+  opacity: calc(var(--act) * 0.42 * var(--kf, 1)); /* no at-rest shimmer; half the dodge */
 }
 
 /* ---------- Serialized · Pit Boss Plate --------------------------------- */
@@ -210,7 +237,7 @@ export const HOLO_CSS = `
   background-size: 100% 100%, 400px 400px;
   background-position: 0 0, calc(var(--px) * -30px) 0;
   mix-blend-mode: overlay;
-  opacity: calc(0.2 + var(--act) * 0.55);
+  opacity: calc((0.2 + var(--act) * 0.55) * var(--ks, 1));
 }
 .fx-serial {
   border-radius: 999px;
@@ -220,7 +247,7 @@ export const HOLO_CSS = `
       rgba(255, 213, 79, 0.9) calc(var(--px) * 140% - 18%),
       transparent calc(var(--px) * 140% - 5%));
   mix-blend-mode: screen;
-  opacity: calc(0.35 + var(--act) * 0.65);
+  opacity: calc((0.35 + var(--act) * 0.65) * var(--ks, 1));
 }
 
 /* Reduced motion: HoloLayer still renders (static pose from useHoloTilt). */
