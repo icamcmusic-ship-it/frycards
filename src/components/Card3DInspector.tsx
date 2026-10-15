@@ -17,6 +17,8 @@ import { getCardBackImage } from '../meta/cardback';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { cn } from '../lib/utils';
 import { useFocusTrap, useEscapeClose } from './useFocusTrap';
+import { HoloLayer, tierForRarity } from './holo/HoloLayer';
+import { useHoloTilt } from './holo/useHoloTilt';
 
 const MAX_TILT_DEG = 14;
 
@@ -66,10 +68,11 @@ export function Card3DInspector({
   const reducedMotion = usePrefersReducedMotion();
   const [showFoil, setShowFoil] = useState(!!foil && !serial);
   const [flipped, setFlipped] = useState(false);
-  // Tilt state: rotation in degrees + pointer position as 0..1 fractions of
-  // the card, used to place the glare/holo highlight.
-  const [tilt, setTilt] = useState<{ rx: number; ry: number; px: number; py: number } | null>(null);
+  // Tilt: useHoloTilt springs pointer / device orientation into CSS vars on
+  // the card (--rx/--ry/--mx/…) from a rAF loop — no React render per move.
+  // Reduced motion (OS or in-app) gets a static, readable pose.
   const cardRef = useRef<HTMLDivElement>(null);
+  useHoloTilt(cardRef, { maxTilt: MAX_TILT_DEG, reduced: reducedMotion, orientation: true });
 
   useEscapeClose(onClose);
 
@@ -112,48 +115,7 @@ export function Card3DInspector({
   }, [viewport, narrow]);
   const { w, h } = CARD_SIZES.full;
 
-  const handleMove = (clientX: number, clientY: number) => {
-    if (reducedMotion) return;
-    const rect = cardRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const px = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    const py = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
-    setTilt({
-      // Pointer at top tips the card away (negative rotateX is toward viewer
-      // at the bottom), pointer right rotates right edge away from viewer.
-      rx: (0.5 - py) * 2 * MAX_TILT_DEG,
-      ry: (px - 0.5) * 2 * MAX_TILT_DEG,
-      px,
-      py,
-    });
-  };
-
-  const resetTilt = () => setTilt(null);
-
-  const rx = tilt?.rx ?? 0;
-  const ry = tilt?.ry ?? 0;
-  const px = tilt?.px ?? 0.5;
-  const py = tilt?.py ?? 0.5;
   const back = getCardBackImage();
-
-  // Glare strength scales with how far the card is tilted.
-  const tiltAmount = Math.min(1, Math.hypot(rx, ry) / MAX_TILT_DEG);
-
-  // v4.7 premium templates get their own pointer-driven sheen in here, on
-  // top of CardFace's always-on inspector treatment (see premium-boost):
-  // Ultra-Rare a gold-leaf glint that sweeps with the tilt angle, Mythic a
-  // molten ember glow that pools under the pointer.
-  // Gated on !serial like everywhere else: the serialized prismatic frame
-  // REPLACES the rarity treatment (CardFaceV4 gates mythic/ultra/altArt the
-  // same way), so a serialized print must not stack the gold-leaf glint or
-  // ember glow on top of it.
-  const premium = serial
-    ? null
-    : def.rarity === 'Ultra-Rare'
-      ? 'ultra'
-      : def.rarity === 'Mythic'
-        ? 'mythic'
-        : null;
 
   return (
     <div
@@ -195,13 +157,6 @@ export function Card3DInspector({
           <div style={{ perspective: 1100 }}>
             <div
               ref={cardRef}
-              onPointerMove={(e) => handleMove(e.clientX, e.clientY)}
-              onPointerLeave={resetTilt}
-              onTouchMove={(e) => {
-                const t = e.touches[0];
-                if (t) handleMove(t.clientX, t.clientY);
-              }}
-              onTouchEnd={resetTilt}
               style={{
                 width: w * scale,
                 height: h * scale,
@@ -213,134 +168,84 @@ export function Card3DInspector({
                 transformStyle: 'preserve-3d',
                 transform: reducedMotion
                   ? undefined
-                  : `rotateX(${rx}deg) rotateY(${ry + (flipped ? 180 : 0)}deg)`,
-                // Snappy while tracking the pointer, springy on release/flip.
-                transition: tilt
-                  ? 'transform 60ms linear'
-                  : 'transform 450ms cubic-bezier(0.22, 1.4, 0.36, 1)',
+                  : 'rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))',
               }}
             >
-              {/* Front face */}
+              {/* Flip lives on its own wrapper so its CSS transition never
+                  fights the spring-driven tilt above. */}
               <div
                 className="absolute inset-0"
-                style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+                style={{
+                  transformStyle: 'preserve-3d',
+                  transform: flipped ? 'rotateY(180deg)' : undefined,
+                  transition: 'transform 450ms cubic-bezier(0.22, 1.4, 0.36, 1)',
+                }}
               >
+                {/* Front face */}
                 <div
-                  style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
-                  className="relative"
+                  className="absolute inset-0"
+                  style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
                 >
-                  {/* premium-boost: keeps CardFace's hover-gated premium
+                  <div
+                    style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+                    className="relative"
+                  >
+                    {/* premium-boost: keeps CardFace's hover-gated premium
                       layers (Ultra-Rare prismatic sheen, Mythic heat glow)
                       always on inside the inspector — this is the "admire
                       the card" view, so the full treatment should show
                       without needing the pointer to sit on the face. */}
-                  <div
-                    className="relative overflow-hidden rounded-[4px] premium-boost"
-                    style={{ width: w }}
-                  >
-                    {/* foilEffect=false: this view supplies its own pointer-driven
+                    <div
+                      className="relative overflow-hidden rounded-[4px] premium-boost"
+                      style={{ width: w }}
+                    >
+                      {/* foilEffect=false: this view supplies its own pointer-driven
                         holographic sheen below, so CardFace's built-in animated
                         shimmer is suppressed — stacking both caused visible
                         flicker/banding where the two competing overlays met. */}
-                    <CardFace
-                      def={def}
-                      size="full"
-                      foil={showFoil}
-                      foilEffect={false}
-                      serial={serial}
-                      variant={variant}
-                      variantDepth={1}
-                    />
-                    {/* Dynamic glare / light sweep following the tilt */}
-                    {!reducedMotion && (
-                      <div
-                        aria-hidden
-                        className="absolute inset-0 pointer-events-none mix-blend-overlay"
-                        style={{
-                          opacity: 0.25 + tiltAmount * 0.5,
-                          background: `radial-gradient(circle at ${px * 100}% ${py * 100}%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.18) 32%, rgba(0,0,0,0.12) 75%)`,
-                          transition: tilt ? 'none' : 'opacity 450ms ease, background 450ms ease',
-                        }}
+                      <CardFace
+                        def={def}
+                        size="full"
+                        foil={showFoil}
+                        foilEffect={false}
+                        serial={serial}
+                        variant={variant}
+                        variantDepth={1}
                       />
-                    )}
-                    {/* Holographic rainbow sheen for foils, angle follows tilt.
-                        Always mounted (never conditionally added/removed) so
-                        toggling "VIEW FOIL" crossfades via opacity instead of
-                        popping the gradient in/out with no transition. */}
-                    {!reducedMotion && (
-                      <div
-                        aria-hidden
-                        className="absolute inset-0 pointer-events-none mix-blend-color-dodge"
-                        style={{
-                          opacity: showFoil ? 0.2 + tiltAmount * 0.45 : 0,
-                          background: `linear-gradient(${115 + ry * 5 + rx * 3}deg,
-                            rgba(255,0,132,0.55) ${px * 30}%,
-                            rgba(255,229,0,0.5) ${20 + px * 30}%,
-                            rgba(0,255,163,0.5) ${40 + px * 30}%,
-                            rgba(0,178,255,0.55) ${60 + px * 30}%,
-                            rgba(196,0,255,0.5) ${80 + px * 30}%)`,
-                          transition: tilt ? 'none' : 'opacity 450ms ease',
-                        }}
+                      {/* Per-rarity foil (see holo/HoloLayer): replaces the
+                        old inline glare / foil sheen / UR glint / Mythic glow.
+                        Under reduced motion it still renders, in a fixed pose. */}
+                      <HoloLayer
+                        tier={tierForRarity(def.rarity)}
+                        finish={serial ? 'serialized' : showFoil ? 'foil' : null}
+                        colour={def.colors?.[0]}
                       />
-                    )}
-                    {/* Ultra-Rare: tilt-tracking gold-leaf glint. */}
-                    {!reducedMotion && premium === 'ultra' && (
-                      <div
-                        aria-hidden
-                        className="absolute inset-0 pointer-events-none mix-blend-overlay"
-                        style={{
-                          opacity: 0.25 + tiltAmount * 0.5,
-                          background: `linear-gradient(${105 + ry * 6 + rx * 4}deg,
-                            transparent ${Math.max(0, px * 60 - 18)}%,
-                            rgba(255, 233, 163, 0.75) ${px * 60}%,
-                            rgba(255, 255, 255, 0.9) ${px * 60 + 8}%,
-                            rgba(212, 175, 55, 0.7) ${px * 60 + 16}%,
-                            transparent ${px * 60 + 34}%)`,
-                          transition: tilt ? 'none' : 'opacity 450ms ease, background 450ms ease',
-                        }}
-                      />
-                    )}
-                    {/* Mythic: molten ember glow pooling under the pointer. */}
-                    {!reducedMotion && premium === 'mythic' && (
-                      <div
-                        aria-hidden
-                        className="absolute inset-0 pointer-events-none mix-blend-screen"
-                        style={{
-                          opacity: 0.3 + tiltAmount * 0.5,
-                          background: `radial-gradient(circle at ${px * 100}% ${py * 100}%,
-                            rgba(255, 179, 0, 0.55) 0%,
-                            rgba(225, 29, 46, 0.4) 28%,
-                            rgba(122, 20, 32, 0.15) 55%,
-                            transparent 75%)`,
-                          transition: tilt ? 'none' : 'opacity 450ms ease, background 450ms ease',
-                        }}
-                      />
-                    )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Back face (purely decorative card-back art) */}
-              <div
-                aria-hidden
-                className="absolute inset-0"
-                style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-              >
+                {/* Back face (purely decorative card-back art) */}
                 <div
-                  className={cn(
-                    'w-full h-full rounded-[6px] border-4 border-[var(--c-ink)] shadow-hard-black overflow-hidden',
-                    !back && 'classic-black-back',
-                  )}
-                  style={
-                    back
-                      ? {
-                          backgroundImage: `url(${back})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }
-                      : undefined
-                  }
-                />
+                  aria-hidden
+                  className="absolute inset-0"
+                  style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                >
+                  <div
+                    className={cn(
+                      'w-full h-full rounded-[6px] border-4 border-[var(--c-ink)] shadow-hard-black overflow-hidden',
+                      !back && 'classic-black-back',
+                    )}
+                    style={
+                      back
+                        ? {
+                            backgroundImage: `url(${back})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
               </div>
             </div>
           </div>

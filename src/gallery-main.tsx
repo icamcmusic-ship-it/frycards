@@ -10,6 +10,7 @@ import { CardFace, CardInfoMode, CardSize, CARD_SIZES } from './components/CardF
 import { POOL } from './game/poker/cardpool';
 import { RARITY_ORDER } from './meta/rarity';
 import type { CardDef, CardType } from './game/poker/cards';
+import { HoloLayer, tierForRarity } from './components/holo/HoloLayer';
 import { GradedSlab, SLAB_CSS } from './meta/GradedSlab';
 import type { GradedCard } from './meta/grading';
 
@@ -53,6 +54,49 @@ function RevealWrap({ children }: { key?: React.Key; children: React.ReactNode }
   );
 }
 
+/**
+ * `&holo=1`: every face carries its rarity's HoloLayer frozen at full
+ * strength (handled, at the far corner where the light is brightest) — the
+ * audit's holo pass checks that the foil never reaches the text.
+ */
+const HOLO = new URLSearchParams(window.location.search).get('holo') === '1';
+const HOLO_POSE = {
+  '--px': '1',
+  '--py': '1',
+  '--mx': '100%',
+  '--my': '100%',
+  '--bgx': '63%',
+  '--bgy': '67%',
+  '--hyp': '1',
+  '--act': '1',
+} as React.CSSProperties;
+function HoloWrap({
+  def,
+  size,
+  foil,
+  serialized,
+  children,
+}: {
+  key?: React.Key;
+  def: CardDef;
+  size: CardSize;
+  foil?: boolean;
+  serialized?: boolean;
+  children: React.ReactNode;
+}) {
+  const { w, h } = CARD_SIZES[size];
+  return (
+    <div data-holo-wrap={def.id} className="relative" style={{ width: w, height: h, ...HOLO_POSE }}>
+      {children}
+      <HoloLayer
+        tier={tierForRarity(def.rarity)}
+        finish={serialized ? 'serialized' : foil ? 'foil' : null}
+        colour={def.colors?.[0]}
+      />
+    </div>
+  );
+}
+
 function Band({
   title,
   note,
@@ -87,6 +131,18 @@ function Band({
               serial={serialized ? { number: 7 + i, cap: 75 } : undefined}
             />
           );
+          if (HOLO)
+            return (
+              <HoloWrap
+                key={`${c.id}-${i}`}
+                def={c}
+                size={size}
+                foil={foil}
+                serialized={serialized}
+              >
+                {face}
+              </HoloWrap>
+            );
           return REVEAL ? <RevealWrap key={`${c.id}-${i}`}>{face}</RevealWrap> : face;
         })}
       </div>

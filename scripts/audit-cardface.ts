@@ -23,6 +23,8 @@
  *  - art window: an Ultra-Rare face whose art window is not 4:3 (±1%) at
  *    every size, or whose art is cropped (the art is 4:3 landscape, so the
  *    image's own aspect must match the window it fills);
+ *  - holo: a rarity's HoloLayer (at full strength) changing a text element's
+ *    pixels, or dropping its contrast (see the holo pass below);
  *  - ink: a Full-Art face whose headline or pull-quote does not print in the
  *    ink scripts/art-ink.ts chose for that card's art.
  * A text box that had to fall back to scrolling (fade cue, every word still
@@ -111,7 +113,8 @@ const runs: { rarity: string; reprint: boolean; tucked?: boolean; reveal?: boole
 const UR_ASPECT_TOL = 0.01;
 const urArt: { bucket: string; aspect: number; pct: number }[] = [];
 
-for (const { rarity, reprint, tucked, reveal } of runs) {
+// AUDIT_HOLO_ONLY=1 skips the layout runs (iterate on the holo pass alone).
+for (const { rarity, reprint, tucked, reveal } of process.env.AUDIT_HOLO_ONLY ? [] : runs) {
   for (const size of SIZES) {
     const bucket = `${rarity}${reprint ? ' (reprint)' : ''}${tucked ? ' (tucked)' : ''}${reveal ? ' (pack reveal)' : ''} @ ${size}`;
     await page.goto(
@@ -265,6 +268,139 @@ for (const { rarity, reprint, tucked, reveal } of runs) {
       console.log(`  ${bucket}: ${found.cards} cards, ${found.out.length} findings`);
   }
 }
+// ---- Holo pass ----------------------------------------------------------
+// Every rarity's HoloLayer (plus the foil-copy reverse) frozen at full
+// strength over the first HOLO_N pool cards reprinted at that template. Two
+// checks per text element (every own-text leaf, plus `[data-holo-protect]`
+// such as the Full-Art headliner title):
+//  - masked: with the glare hidden, the tier layers must not change the
+//    text's pixels at all (the mask cuts a hard hole there);
+//  - contrast: with everything on, the text's light/dark spread must not
+//    drop below min(its bare-card spread, MIN_CONTRAST) (5% slack).
+const HOLO_N = Number(process.env.HOLO_N ?? 10);
+const HOLO_RUNS: { rarity: string; foil?: boolean; info: string }[] = [
+  ...RARITIES.filter((r) => r !== 'Alt-Art').map((rarity) => ({ rarity, info: 'open' })),
+  { rarity: 'Full-Art', info: 'tucked' },
+  { rarity: 'Rare', foil: true, info: 'open' },
+];
+const holoProblems: Problem[] = [];
+let holoTexts = 0;
+const lum = (r: number, g: number, b: number) => {
+  const c = (v: number) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b);
+};
+const holoPage = await ctx.newPage();
+for (const { rarity, foil, info } of HOLO_RUNS) {
+  const bucket = `holo ${rarity}${foil ? ' foil' : ''}${info === 'tucked' ? ' (tucked)' : ''} @ full`;
+  await holoPage.goto(
+    `${BASE}/gallery.html?all=${encodeURIComponent(rarity)}&size=full&info=${info}&reprint=1&holo=1${foil ? '&foil=1' : ''}`,
+    { waitUntil: 'networkidle' },
+  );
+  await holoPage.addStyleTag({
+    content:
+      '*,*::before,*::after{animation-play-state:paused!important;transition:none!important}',
+  });
+  await holoPage.evaluate(async () => {
+    await document.fonts.ready;
+    document.querySelectorAll('video').forEach((v) => v.pause());
+  });
+  await holoPage.waitForTimeout(800);
+  const wraps = (await holoPage.$$('[data-holo-wrap]')).slice(0, HOLO_N);
+  for (const wrap of wraps) {
+    await wrap.scrollIntoViewIfNeeded();
+    const info = await wrap.evaluate((root) => {
+      const R = root.getBoundingClientRect();
+      const rects: { x: number; y: number; w: number; h: number; tag: string }[] = [];
+      root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+        if (el.closest('.holo')) return;
+        const own = Array.from(el.childNodes).some(
+          (c) => c.nodeType === 3 && (c.textContent || '').trim().length > 1,
+        );
+        if (!own && !el.hasAttribute('data-holo-protect')) return;
+        const cs = getComputedStyle(el);
+        if (cs.visibility === 'hidden' || Number(cs.opacity) === 0) return;
+        const r = el.getBoundingClientRect();
+        // Inset 1px: the hole's soft edge sits in the 2px padding outside.
+        const x = Math.round(r.left - R.left) + 1;
+        const y = Math.round(r.top - R.top) + 1;
+        const w = Math.round(r.width) - 2;
+        const h = Math.round(r.height) - 2;
+        if (w < 4 || h < 4 || x < 0 || y < 0 || x + w > R.width || y + h > R.height) return;
+        rects.push({
+          x,
+          y,
+          w,
+          h,
+          tag: el.hasAttribute('data-holo-protect') ? 'protect' : el.tagName,
+        });
+      });
+      return {
+        id: root.getAttribute('data-holo-wrap')!,
+        rects,
+        layers: root.querySelectorAll('.holo__l').length,
+      };
+    });
+    const shot = async (css: string) => {
+      const tag = await holoPage.addStyleTag({ content: css });
+      const png = await wrap.screenshot();
+      await tag.evaluate((n) => (n as Element).remove());
+      return sharp(png).raw().toBuffer({ resolveWithObject: true });
+    };
+    const bare = await shot('.holo{display:none!important}');
+    const layers = await shot('.holo .fx-glare{display:none!important}');
+    const full = await shot('.holo-audit-noop{}');
+    const W = bare.info.width;
+    const ch = bare.info.channels;
+    for (const r of info.rects) {
+      holoTexts++;
+      let changed = 0;
+      const lb: number[] = [];
+      const lf: number[] = [];
+      for (let yy = r.y; yy < r.y + r.h; yy++)
+        for (let xx = r.x; xx < r.x + r.w; xx++) {
+          const i = (yy * W + xx) * ch;
+          const d = Math.max(
+            Math.abs(bare.data[i] - layers.data[i]),
+            Math.abs(bare.data[i + 1] - layers.data[i + 1]),
+            Math.abs(bare.data[i + 2] - layers.data[i + 2]),
+          );
+          if (d > 16) changed++;
+          lb.push(lum(bare.data[i], bare.data[i + 1], bare.data[i + 2]));
+          lf.push(lum(full.data[i], full.data[i + 1], full.data[i + 2]));
+        }
+      const n = r.w * r.h;
+      if (changed / n > 0.02)
+        holoProblems.push({
+          bucket,
+          id: info.id,
+          kind: `holo over text: ${r.tag} ${((100 * changed) / n).toFixed(1)}% of its pixels changed`,
+        });
+      const spread = (xs: number[]) => {
+        xs.sort((a, b) => a - b);
+        return (
+          (xs[Math.floor(xs.length * 0.95)] + 0.05) / (xs[Math.floor(xs.length * 0.05)] + 0.05)
+        );
+      };
+      const before = spread(lb);
+      const after = spread(lf);
+      if (after < Math.min(before, MIN_CONTRAST) * 0.95)
+        holoProblems.push({
+          bucket,
+          id: info.id,
+          kind: `holo contrast: ${r.tag} ${before.toFixed(2)}:1 → ${after.toFixed(2)}:1`,
+        });
+    }
+  }
+  if (process.env.AUDIT_VERBOSE) console.log(`  ${bucket}: ${wraps.length} cards`);
+}
+console.log(
+  `Holo: ${holoTexts} text elements on ${HOLO_RUNS.length} tiers x ${HOLO_N} cards at full strength; ${holoProblems.length} problems.`,
+);
+problems.push(...holoProblems);
+
 await browser.close();
 
 const overlaps = problems.filter((p) => p.kind.startsWith('overlap'));
