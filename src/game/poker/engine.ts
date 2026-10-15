@@ -873,6 +873,10 @@ function firstToAct(m: Match, street: Street): number | null {
     return nextSeat(m, from, ok);
   }
   if (reverse) return nextSeat(m, h.button, ok, -1, true);
+  // Audit 2026-10-14 §3.4: every seat is in a Bomb Pot's flop, so acting last
+  // there was worth +7.6 pts to the dealer. The dealer leads the flop instead;
+  // turn and river run in the normal order.
+  if (h.rule.id === 'bombPot' && street === 'flop') return nextSeat(m, h.button, ok, 1, true);
   return nextSeat(m, h.button, ok);
 }
 

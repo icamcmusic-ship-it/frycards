@@ -28,6 +28,7 @@ export const SCREEN_LOADERS = {
   profile: () => import('./ProfileScreen'),
   settings: () => import('./SettingsScreen'),
   changelog: () => import('./ChangelogScreen'),
+  credits: () => import('./CreditsScreen'),
   news: () => import('./NewsCenterScreen'),
   submissions: () => import('./CardSubmissionsScreen'),
 } satisfies Partial<Record<MetaScreen | 'match', () => Promise<unknown>>>;

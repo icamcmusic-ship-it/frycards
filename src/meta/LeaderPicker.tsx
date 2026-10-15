@@ -63,9 +63,11 @@ export function LeaderPicker({
   // If the claim fails, the parent drops `busy` back to false but this
   // dialog stays open for a retry — release the local latch so the tiles
   // become clickable again instead of being stuck disabled forever.
-  useEffect(() => {
+  const [wasBusy, setWasBusy] = useState(busy);
+  if (wasBusy !== busy) {
+    setWasBusy(busy);
     if (!busy) setPickStarted(false);
-  }, [busy]);
+  }
 
   return (
     <div

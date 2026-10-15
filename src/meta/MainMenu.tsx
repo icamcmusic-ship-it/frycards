@@ -63,14 +63,16 @@ export type { MetaScreen } from './routes';
  * Days 3 and 6 previously showed "+100✦"/"+150✦" shard bonuses — Shards were
  * removed from the game entirely, and the server now pays plain credits
  * (450/950) on those days instead. */
-const LOGIN_CYCLE: { label: string }[] = [
-  { label: '250cr' },
-  { label: '400cr' },
-  { label: '450cr' },
-  { label: '600cr' },
-  { label: '250cr + PACK' },
-  { label: '950cr' },
-  { label: '1,000cr + 5 VOUCHERS' },
+const LOGIN_CYCLE: { label: string; chip: string; extra?: string }[] = [
+  { label: '250cr', chip: '250cr' },
+  { label: '400cr', chip: '400cr' },
+  { label: '450cr', chip: '450cr' },
+  { label: '600cr', chip: '600cr' },
+  // Audit 1.10: the chip printed only "250cr" and dropped the pack, so day 5
+  // read as a drop from 600 to 250. The bonus gets its own line.
+  { label: '250cr + PACK', chip: '250cr', extra: '+PACK' },
+  { label: '950cr', chip: '950cr' },
+  { label: '1,000cr + 5 VOUCHERS', chip: '1,000cr', extra: '+5V' },
 ];
 
 function DailyLoginPanel() {
@@ -202,7 +204,13 @@ function DailyLoginPanel() {
               >
                 D{dayNum}
                 <br />
-                {d.label.split(' ')[0]}
+                {d.chip}
+                {d.extra && (
+                  <>
+                    <br />
+                    <span className="underline decoration-2">{d.extra}</span>
+                  </>
+                )}
               </span>
             );
           })}

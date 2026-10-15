@@ -585,11 +585,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   // A rival bid while the modal is open raises the minimum — lift the
   // pre-filled amount with it rather than leaving a number the button below
   // has just disabled itself against.
-  useEffect(() => {
-    // Idempotent clamp (Math.max), so re-running on any of these is harmless;
-    // the case it exists for is the live current bid moving under the modal.
-    if (bidFor && !bidForEnded) setBidAmount((a) => Math.max(a, minBid));
-  }, [bidFor, bidForEnded, minBid]);
+  // Idempotent clamp, during render; the case it exists for is the live
+  // current bid moving under the modal.
+  if (bidFor && !bidForEnded && bidAmount < minBid) setBidAmount(minBid);
   // A bid at or above the buyout is refused server-side: it would let a later
   // buyer take the card for LESS than the standing bid. Buy Now is the move.
   const maxBid = bidForLive?.buyout != null ? bidForLive.buyout - 1 : null;

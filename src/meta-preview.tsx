@@ -62,6 +62,7 @@ import { NewsCenterScreen } from './meta/NewsCenterScreen';
 import { SettingsScreen } from './meta/SettingsScreen';
 import { MainMenu } from './meta/MainMenu';
 import { ChangelogScreen } from './meta/ChangelogScreen';
+import { CreditsScreen } from './meta/CreditsScreen';
 import { MatchHistoryScreen } from './meta/MatchHistoryScreen';
 import { CardSubmissionsScreen } from './meta/CardSubmissionsScreen';
 import { GradingScreen } from './meta/GradingScreen';
@@ -606,6 +607,8 @@ createRoot(document.getElementById('root')!).render(
       <MatchHistoryScreen onBack={() => undefined} />
     ) : screen === 'changelog' ? (
       <ChangelogScreen onBack={() => undefined} />
+    ) : screen === 'credits' ? (
+      <CreditsScreen onBack={() => undefined} />
     ) : screen === 'submissions' ? (
       <CardSubmissionsScreen onBack={() => undefined} />
     ) : screen === 'showroom' ? (

@@ -39,8 +39,8 @@ import sharp from 'sharp';
 import { blockSupabase } from './lib/block-remote-media';
 import { readFileSync } from 'node:fs';
 import { POOL } from '../src/game/poker/cardpool';
-import { FA_INK } from '../src/components/artInk.generated';
-import { MIN_CONTRAST, decodeFaInk } from '../src/components/artInk';
+import { FA_INK, FA_SCRIM } from '../src/components/artInk.generated';
+import { MIN_CONTRAST, SCRIM_CONTRAST, decodeFaInk } from '../src/components/artInk';
 
 const BASE = process.env.AUDIT_BASE ?? 'http://localhost:3000';
 const RARITIES = [
@@ -314,7 +314,28 @@ console.log(
 );
 for (const s of short.slice(0, 12)) console.log(`  contrast: ${s}`);
 if (short.length > 12) console.log(`  ...and ${short.length - 12} more`);
-if (problems.length === 0) process.exit(0);
+// Audit 1.6: under SCRIM_CONTRAST the text-shadow alone is not enough; the
+// region must print on a scrim (FA_SCRIM, written by npm run art:ink).
+const unscrimmed: string[] = [];
+for (const c of measured)
+  for (const [region, row] of Object.entries(inkReport[c.id]))
+    if (
+      region !== 'mc' &&
+      row.ratio < SCRIM_CONTRAST &&
+      !(FA_SCRIM[c.id] ?? '').includes(region[0])
+    )
+      unscrimmed.push(`${c.id} ${region} ${row.ink} ${row.ratio}:1`);
+console.log(
+  `Under ${SCRIM_CONTRAST}:1: ${short.filter((s) => Number(s.split(' ').pop()!.replace(':1', '')) < SCRIM_CONTRAST).length} region(s), ${unscrimmed.length} without a scrim.`,
+);
+for (const s of unscrimmed.slice(0, 12)) console.log(`  NO SCRIM: ${s}`);
+if (problems.length === 0 && unscrimmed.length === 0) process.exit(0);
+if (problems.length === 0) {
+  console.log(
+    `\nFAIL: ${unscrimmed.length} region(s) under ${SCRIM_CONTRAST}:1 with no scrim (run npm run art:ink).`,
+  );
+  process.exit(1);
+}
 const byBucket = new Map<string, Problem[]>();
 for (const o of problems)
   (byBucket.get(o.bucket) ?? byBucket.set(o.bucket, []).get(o.bucket)!).push(o);

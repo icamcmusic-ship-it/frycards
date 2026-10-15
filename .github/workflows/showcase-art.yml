@@ -63,6 +63,9 @@ jobs:
     timeout-minutes: 30
     env:
       ART_PIPELINE_TOKEN: ${{ secrets.ART_PIPELINE_TOKEN }}
+      # Audit 7.3: optional; when set, the pipeline RPCs run as service_role
+      # (and anon can then lose EXECUTE on them, see docs/BACKEND_PENDING.md).
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       SHOWCASE_PAGES_PROJECT: ${{ vars.SHOWCASE_PAGES_PROJECT }}

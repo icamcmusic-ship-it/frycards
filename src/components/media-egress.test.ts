@@ -163,7 +163,8 @@ test('every SafeImage call site declares the width it renders into', () => {
       expect(match[0], `${file} renders a SafeImage with no boxWidth`).toMatch(/boxWidth=/);
     }
   }
-  expect(sites).toBeGreaterThan(20);
+  // 20 since the My Packs tile moved to PackArt (its own fallback wrapper).
+  expect(sites).toBeGreaterThanOrEqual(20);
 });
 
 test('the generator derives exactly the rungs the app asks for', () => {

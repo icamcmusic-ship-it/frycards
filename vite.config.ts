@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, loadEnv, type HtmlTagDescriptor, type Plugin } from 'vite';
+import { configDefaults } from 'vitest/config';
 
 /**
  * Head hints that need build-time knowledge: preload the two upright latin
@@ -76,7 +77,7 @@ export default defineConfig(({ mode, command }) => {
       // Web fonts are never inlined as data: URIs (the Full-Art subsets are
       // under the 4 kB default), so a lazy @font-face stays a URL the browser
       // fetches only when a card uses it, and adds nothing to eager CSS.
-      assetsInlineLimit: (file: string) => (/\.(woff2?|ttf)$/.test(file) ? false : undefined),
+      assetsInlineLimit: (file: string) => (/\.woff2?$/.test(file) ? false : undefined),
       rollupOptions: {
         output: {
           // Finding 2.1: route-level lazy() splits the screens; this keeps the
@@ -106,6 +107,9 @@ export default defineConfig(({ mode, command }) => {
       // `@vitest-environment jsdom` docblock, so only the DOM suites pay for
       // it.
       environment: 'node',
+      // Agent worktrees under .claude/ are other branches' checkouts; their
+      // suites read this checkout's files and fail on its changes.
+      exclude: [...configDefaults.exclude, '.claude/**'],
     },
     server: {
       // HMR/file watching can be disabled via DISABLE_HMR to save CPU in

@@ -54,7 +54,6 @@ import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { GENERATED_CARDS } from '../src/game/generated-cards';
 import { deriveCardMechanics } from '../src/game/poker/cardpool';
-import { deriveEdited } from '../src/meta/cardEditor';
 import { SHOWCASE_SET, mechanicsFromDef } from '../src/meta/submissions';
 import type { CardTemplate } from '../src/types';
 

@@ -87,7 +87,8 @@ export const LOCATION_TEMPLATES: Record<LocationRuleId, LocationTemplate> = {
     name: 'Bomb Pot',
     tag: 'Chaos',
     params: [1, 2],
-    text: (p = 1) => `Everyone antes ${fmtUnits(p)}; no blinds and no pre-flop betting.`,
+    text: (p = 1) =>
+      `Everyone antes ${fmtUnits(p)}; no blinds and no pre-flop betting. The dealer acts first on the flop.`,
   },
   pineapple: {
     id: 'pineapple',

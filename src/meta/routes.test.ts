@@ -73,10 +73,10 @@ describe('access rules', () => {
 });
 
 describe('isCpuLocked', () => {
-  test('guests keep quick match, only the creator account is unlocked', () => {
+  test('CPU play is open to guests and every account (audit 5.4)', () => {
     expect(isCpuLocked(null, true)).toBe(false);
     expect(isCpuLocked({ role: 'creator' }, false)).toBe(false);
-    expect(isCpuLocked({ role: 'player' }, false)).toBe(true);
-    expect(isCpuLocked(null, false)).toBe(true);
+    expect(isCpuLocked({ role: 'player' }, false)).toBe(false);
+    expect(isCpuLocked(null, false)).toBe(false);
   });
 });

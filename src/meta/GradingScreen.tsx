@@ -29,7 +29,7 @@
  * The slab artwork lives in `GradedSlab.tsx`.
  */
 import { asVariant, type CardVariant, VARIANT_META, variantMult } from './variants';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useEscapeClose, useFocusTrap } from '../components/useFocusTrap';
 import { useRouteTab } from './useHashRouter';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';

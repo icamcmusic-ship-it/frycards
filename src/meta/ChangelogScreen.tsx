@@ -86,6 +86,96 @@ export interface ChangelogEntry {
 // headline, so the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: '35.7',
+    name: 'Season 2 & New Card Faces',
+    date: 'October 2026',
+    tagline: 'A second season, a colour pack every week and three new premium card styles.',
+    items: [
+      {
+        title: 'Season 2 is lined up',
+        body: 'Season 2 — Red Tide starts the moment Season 1 ends on 10 November, with a full 25-tier free pass. From now on the next season is always ready before the current one ends.',
+        category: 'gameplay',
+        icon: Trophy,
+        route: { screen: 'battlepass', label: 'SEE THE PASS' },
+      },
+      {
+        title: 'A colour pack every week',
+        body: 'One colour pack is on the shelf each week — Void, Ember, Shadow, Light, Root, Gale and Tide take turns — and it leaves when the week ends.',
+        category: 'collection',
+        icon: Package,
+        route: { screen: 'store', label: 'SEE THIS WEEK\u2019S PACK' },
+      },
+      {
+        title: 'Full-Art info pull-tab',
+        body: 'Full-Art cards open with their art first: the name stays up top and the rules fold away. Tap the card or its chevron to read it, or press and hold to tuck it again. Settings \u2192 CARD TEXT can show every card\u2019s text all the time.',
+        category: 'collection',
+        icon: Eye,
+        route: { screen: 'settings', label: 'CARD TEXT SETTING' },
+      },
+      {
+        title: 'Mythic \u201cOpening Credits\u201d',
+        body: 'Mythic cards play their art like a film\u2019s opening titles, with the name and rules set as credits. The credits fold away so the art can play, and come back with a tap.',
+        category: 'collection',
+        icon: Sparkles,
+      },
+      {
+        title: 'Ultra-Rare \u201cContraband Crate\u201d',
+        body: 'Ultra-Rare cards ship in a black crate frame with hazard stripes, a stencilled name and a road-sign cost tag, and their art is shown whole, uncropped.',
+        category: 'collection',
+        icon: Layers,
+      },
+      {
+        title: 'Text that reads over the art',
+        body: 'Names and flavour text over Full-Art and Mythic art pick a light or dark ink to suit the picture (Mythic follows its video as it plays), and the hardest-to-read lines get a soft backing.',
+        category: 'qol',
+        icon: Palette,
+      },
+      {
+        title: 'Card balance',
+        body: 'Three changes from the latest balance run.',
+        category: 'balance',
+        icon: Scale,
+        changes: [
+          {
+            label: 'Swirling Ink Cloud',
+            before: '\u26054 Burn',
+            after: 'cheaper \u26053, takes chips (Erode), still Warded',
+          },
+          {
+            label: 'Sovereign of the Dying Star',
+            before: 'build: Erode one opponent',
+            after: 'build: Tax up to three opponents (stronger at full tables)',
+          },
+          {
+            label: 'Bomb Pot',
+            before: 'dealer acts last on the flop',
+            after: 'dealer acts first on the flop (weaker for the dealer)',
+          },
+        ],
+      },
+      {
+        title: 'Deck Builder shows Full-Art text',
+        body: 'In the Deck Builder (and when picking cards to sell) every card shows its name, cost and rules, and holding a card no longer stops it being added.',
+        category: 'qol',
+        icon: Wrench,
+        route: { screen: 'decks', label: 'BUILD A DECK' },
+      },
+      {
+        title: 'Fixes',
+        body: 'Pack reveals no longer squeeze the flavour text into a narrow column or leave the art short of its window. On your first table visit the tutorial and a rival\u2019s cast no longer pile up on top of each other. The day 5 login reward shows its bonus pack. CPU matches are open to every account.',
+        category: 'qol',
+        icon: Wrench,
+      },
+      {
+        title: 'Credits',
+        body: 'A new Credits page lists the fonts, art and icons the game uses and the people who made them.',
+        category: 'qol',
+        icon: ScrollText,
+        route: { screen: 'credits', label: 'SEE THE CREDITS' },
+      },
+    ],
+  },
+  {
     version: '35.6',
     name: 'Card Variants & Card Backs',
     date: 'October 2026',

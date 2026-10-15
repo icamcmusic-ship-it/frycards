@@ -21,7 +21,7 @@ import { RARITIES } from '../types';
 import { fmtCredits, quicksellPrice } from './economy';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 import { PackArt } from './pack/PackArt';
-import { packArtUrl, packColor } from './pack/packArt';
+import { colorGroupFromName, packArtUrl, packColor } from './pack/packArt';
 import {
   TEAR_COMMIT,
   leakColor,
@@ -403,7 +403,11 @@ function TearStage({
   const baseName = packName.replace(/\s*×\d+$/, '');
   const art = [packArtUrl(baseName, 'wrapper'), packImageUrl].filter((u): u is string => !!u);
   const stripArt = [packArtUrl(baseName, 'strip'), ...art];
-  const wrapColor = packColor({ pack_group: null, pack_tier: '', acquisition: '' });
+  const wrapColor = packColor({
+    pack_group: colorGroupFromName(baseName),
+    pack_tier: '',
+    acquisition: '',
+  });
 
   // Defense-in-depth: nothing unmounts this stage before the timer fires
   // today, but nothing guarantees that stays true — an uncleared timer would

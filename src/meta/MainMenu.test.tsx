@@ -60,15 +60,12 @@ const tileLabels = () =>
 afterEach(cleanup);
 
 describe('MainMenu tile order', () => {
-  test('a locked account sees PLAY after every live tile, and it opens How to Play', () => {
+  test('a player account gets PLAY first too (audit 5.4: CPU play is open)', () => {
     const onNavigate = mount({ profile: profile('player') as never });
-    const labels = tileLabels();
-    expect(labels[0]).toBe('COLLECTION');
-    expect(labels.at(-1)).toBe('PLAY');
-    expect(screen.getByText('COMING SOON!')).toBeTruthy();
-
+    expect(tileLabels()[0]).toBe('PLAY');
+    expect(screen.queryByText('COMING SOON!')).toBeNull();
     fireEvent.click(screen.getByText('PLAY').closest('button')!);
-    expect(onNavigate).toHaveBeenCalledWith('howtoplay');
+    expect(onNavigate).toHaveBeenCalledWith('play');
   });
 
   test('the creator account keeps PLAY first, and it starts the play flow', () => {

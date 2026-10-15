@@ -40,6 +40,18 @@ export const INK_DARK = '#141414';
 
 /** WCAG AA for body-size text. */
 export const MIN_CONTRAST = 4.5;
+/** Audit 1.6: below this even in its best ink, a region gets a scrim behind
+ * it (FA_SCRIM); the audit fails on a region under it with no scrim. */
+export const SCRIM_CONTRAST = 3;
+
+/** The FA_SCRIM code for a card: one letter per region under
+ * SCRIM_CONTRAST (n = name, t = tag, q = quote), '' when none. */
+export function scrimCode(r: Record<'name' | 'tag' | 'quote', { ratio: number }>): string {
+  return (['name', 'tag', 'quote'] as const)
+    .filter((k) => r[k].ratio < SCRIM_CONTRAST)
+    .map((k) => k[0])
+    .join('');
+}
 
 /** A text region, as fractions (0–1) of the card's art box, which on both
  * full-bleed templates is the whole card. */

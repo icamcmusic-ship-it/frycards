@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/utils';
-import { AlertTriangle, Coins, Ticket, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Coins, Ticket, TrendingUp } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { fmtCredits, fmtVouchers } from './economy';
 import { fetchCardMarketValue } from '../lib/supabase';
@@ -172,20 +172,28 @@ function TabStrip({
     return () => ro.disconnect();
   }, [measure]);
   return (
-    <div
-      ref={ref}
-      role="tablist"
-      aria-label={ariaLabel}
-      onKeyDown={onKeyDown}
-      onScroll={measure}
-      data-fade-left={edges.left || undefined}
-      data-fade-right={edges.right || undefined}
-      className={cn(
-        'tab-strip flex flex-nowrap gap-1.5 overflow-x-auto pt-2 pr-2 pb-1 -mt-2',
-        className,
+    <div className={cn('relative min-w-0', className)}>
+      <div
+        ref={ref}
+        role="tablist"
+        aria-label={ariaLabel}
+        onKeyDown={onKeyDown}
+        onScroll={measure}
+        data-fade-left={edges.left || undefined}
+        data-fade-right={edges.right || undefined}
+        className="tab-strip flex flex-nowrap gap-1.5 overflow-x-auto pt-2 pr-2 pb-1 -mt-2"
+      >
+        {children}
+      </div>
+      {/* Audit 2.4: the fade alone didn't say more tabs hide off screen. */}
+      {edges.right && (
+        <span
+          aria-hidden
+          className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center w-5 h-5 rounded-full bg-[var(--c-ink)] text-[var(--c-yellow)]"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </span>
       )}
-    >
-      {children}
     </div>
   );
 }
@@ -368,6 +376,12 @@ export function xpForLevel(level: number): number {
   return 20 * (level - 1) * level;
 }
 
+/** Mirror of the server's level_for_xp: the highest level whose threshold
+ * `xp` has reached. */
+export function levelForXp(xp: number): number {
+  return Math.max(1, Math.floor((1 + Math.sqrt(1 + Math.max(0, xp) / 5)) / 2));
+}
+
 /**
  * XP earned INTO the current level, and the size of that level's band.
  *
@@ -397,9 +411,12 @@ export function LevelBadge({
   xp: number;
   compact?: boolean;
 }) {
+  // Audit 2.5: the server levels up on the same XP grant (grant_xp), so a full
+  // bar under an old badge is only this session's profile lagging the xp
+  // write. Show the level the XP has already earned instead of a "READY"
+  // state with nothing to claim.
+  level = Math.max(level, levelForXp(xp));
   const { into, band } = levelProgress(level, xp);
-  // A full bar that hasn't levelled yet (the level-up lands on the next
-  // reward) read as broken: say so instead (U25).
   const ready = into >= band;
   return (
     <div className="flex items-center gap-2">

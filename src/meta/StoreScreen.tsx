@@ -680,12 +680,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     </span>
                   </div>
                   <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative bg-[var(--c-ink)]">
-                    <SafeImage
-                      boxWidth={320}
-                      src={pack.image_url}
-                      alt={pack.name}
-                      className="w-full h-full object-contain"
-                      fallbackText={pack.name}
+                    {/* Colour packs have no art yet: the styled wrapper, not a
+                        grey "no image" box. */}
+                    <PackArt
+                      candidates={packIconCandidates(pack)}
+                      name={pack.name}
+                      color={packColor(pack)}
+                      fit="contain"
                     />
                     <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font fs-xs px-1.5 ink-border-sm flex items-center gap-1">
                       <Package className="w-3 h-3" /> {pack.card_count} CARDS

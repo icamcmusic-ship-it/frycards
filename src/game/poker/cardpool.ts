@@ -106,6 +106,9 @@ export const REPRINTS: Record<string, CardOverrides> = {
   // it with 8 Void Events in the pool. Two vanilla ★1 Void Events carry it.
   flesh_to_bone: { tier: 2, effect: { kw: 'Snuff' }, mods: [] },
   hammerhead_silhouette: { tier: 2, effect: { kw: 'Snuff' }, mods: [] },
+  // Audit 2026-10-14 §3.1: a ★4 Burn (a situational effect) won 6.7% of its
+  // casts against a 34.3% baseline. Now a cheaper ★3 Erode that keeps Warded.
+  swirling_ink_cloud: { tier: 3, effect: { kw: 'Erode' }, mods: [{ kw: 'Warded' }] },
 };
 
 // ---------------------------------------------------------------------------
@@ -360,6 +363,10 @@ export const LEADER_ABILITY_OVERRIDES: Record<string, Partial<Record<0 | 1, Effe
   // The weakest Leader in every sim draw: its build was Pass, which
   // scrambled its own hand for chips. A Straddle builds nerve and pressure.
   legendary_diver: { 1: 'Straddle' },
+  // Audit 2026-10-14 §3.2: strong heads-up, 9.1% win share at 6 seats. Its
+  // build was Erode (one target); a Tax build hits up to three opponents, so
+  // both abilities now scale with the table.
+  sovereign_of_the_dying_star: { 1: 'Tax' },
 };
 
 function ability(

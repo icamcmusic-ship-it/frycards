@@ -9,6 +9,25 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v35.7 — Season 2, weekly colour packs, new premium faces (second-pass audit)
+
+- **Season 2 — Red Tide** starts when Season 1 ends (2026-11-10), same length
+  and tiers; a cron authors each next season 14 days ahead.
+- **Weekly colour pack**: one of the seven colour packs is on sale per ISO
+  week; packs with no art use the styled CSS wrapper.
+- Card faces: Full-Art info pull-tab (name always shown, tap / hold, Settings
+  → CARD TEXT), Mythic "Opening Credits", Ultra-Rare "Contraband Crate"
+  (uncropped 4:3 art), adaptive ink over art and Mythic video, scrims under
+  the lowest-contrast lines; pack-reveal column/art fix.
+- Balance: Swirling Ink Cloud ★4 Burn → ★3 Erode (Warded kept); Sovereign of
+  the Dying Star's build ability Erode → Tax; Bomb Pot's dealer acts first on
+  the flop. `sim:poker` target 4 now misses on a rule beyond ±4 pts whose
+  excess over the ±2 band is significant at 90% (Open Hand now flagged).
+- Deck Builder and sell picker show every face's text; holding a card no
+  longer cancels adding it. First-visit coach no longer stacks with a cast
+  spotlight; pre-actions labelled; day 5 login chip shows its pack; CPU play
+  open to all accounts; new Credits screen.
+
 ### v35.6 — Card variants, nine card backs, one showcase (PR #174)
 
 - **Card variants**: a cosmetic version of a card, rolled per pack card

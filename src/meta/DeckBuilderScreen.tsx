@@ -45,7 +45,7 @@ import {
   trimTier5,
   withoutOffColour,
 } from './deckEdits';
-import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
+import { CardFace, CardInfoMode, CardInspectorModal } from '../components/CardFaceV4';
 import { rarityChip } from './rarity';
 import { POOL, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/poker/cardpool';
 import { CardDef, isPower, tierLabel } from '../game/poker/cards';
@@ -198,7 +198,17 @@ export function validateDeckList(
   return [...new Map(issues.map((i) => [i.text, i])).values()];
 }
 
-export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
+/** Audit 1.3: every face opens with its text here (name, cost, rules), as
+ * at the table — a tucked Full-Art hid what the player was adding. */
+export function DeckBuilderScreen(props: { onBack: () => void }) {
+  return (
+    <CardInfoMode.Provider value="open">
+      <DeckBuilderScreenInner {...props} />
+    </CardInfoMode.Provider>
+  );
+}
+
+function DeckBuilderScreenInner({ onBack }: { onBack: () => void }) {
   const { decks, refreshDecks, dataLoading } = useMeta();
   // Q7: each list's record on this device, keyed by its exact code.
   // U34: when each deck code last sat at a table.

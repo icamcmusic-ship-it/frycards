@@ -28,6 +28,48 @@ export function motionReduced(): boolean {
   }
 }
 
+/**
+ * Audit 1.8: one shared motion watcher for every Mythic face (a single
+ * MutationObserver on <html data-motion> plus a single matchMedia listener),
+ * created on first subscribe and torn down with the last.
+ */
+const motionSubs = new Set<() => void>();
+let motionTeardown: (() => void) | null = null;
+function subscribeMotion(fn: () => void): () => void {
+  motionSubs.add(fn);
+  if (!motionTeardown && typeof document !== 'undefined') {
+    const fire = () => motionSubs.forEach((f) => f());
+    const mo = typeof MutationObserver !== 'undefined' ? new MutationObserver(fire) : null;
+    mo?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-motion'] });
+    let mq: MediaQueryList | null = null;
+    try {
+      mq = window.matchMedia?.('(prefers-reduced-motion: reduce)') ?? null;
+    } catch {
+      mq = null;
+    }
+    mq?.addEventListener?.('change', fire);
+    motionTeardown = () => {
+      mo?.disconnect();
+      mq?.removeEventListener?.('change', fire);
+    };
+  }
+  return () => {
+    motionSubs.delete(fn);
+    if (motionSubs.size === 0 && motionTeardown) {
+      motionTeardown();
+      motionTeardown = null;
+    }
+  };
+}
+
+/** Audit 1.7: drop a face's ink vars (the effect was disabled or unmounted),
+ * so a swapped-in card never inherits the previous card's ink. */
+export function clearInkVars(el: HTMLElement): void {
+  el.style.removeProperty('--mc-ink');
+  el.style.removeProperty('--mc-ink-halo');
+  delete el.dataset.ink;
+}
+
 /** Apply an ink to a face: CSS vars only, so no React re-render per frame. */
 export function setInkVars(el: HTMLElement, ink: 'light' | 'dark'): void {
   el.style.setProperty('--mc-ink', ink === 'dark' ? INK_DARK : INK_LIGHT);
@@ -56,9 +98,12 @@ export function useVideoInk(
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    if (!enabled) return;
+    if (!enabled) {
+      clearInkVars(root);
+      return;
+    }
     setInkVars(root, staticInk);
-    if (typeof IntersectionObserver === 'undefined') return;
+    if (typeof IntersectionObserver === 'undefined') return () => clearInkVars(root);
     let ink = staticInk;
     let visible = false;
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -135,21 +180,13 @@ export function useVideoInk(
     });
     io.observe(root);
     document.addEventListener('visibilitychange', update);
-    let mq: MediaQueryList | null = null;
-    try {
-      mq = window.matchMedia?.('(prefers-reduced-motion: reduce)') ?? null;
-    } catch {
-      mq = null;
-    }
-    mq?.addEventListener?.('change', update);
-    const mo = new MutationObserver(update);
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-motion'] });
+    const offMotion = subscribeMotion(update);
     return () => {
       stop();
       io.disconnect();
-      mo.disconnect();
-      mq?.removeEventListener?.('change', update);
+      offMotion();
       document.removeEventListener('visibilitychange', update);
+      clearInkVars(root);
     };
   }, [rootRef, enabled, staticInk]);
 }

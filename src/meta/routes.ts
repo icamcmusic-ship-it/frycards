@@ -26,6 +26,7 @@ export const META_SCREENS = [
   'history',
   'settings',
   'changelog',
+  'credits',
   'news',
   'submissions',
   'howtoplay',

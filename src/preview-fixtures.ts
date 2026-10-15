@@ -49,6 +49,7 @@
  * Dev-only: nothing in `src/main.tsx`'s import graph reaches this file.
  */
 import { POOL } from './game/poker/cardpool';
+import { supabase } from './lib/supabase';
 
 /** Stable ISO timestamps — `new Date()` here would make two runs of the audit
  * differ in ways that have nothing to do with the layout. */
@@ -795,6 +796,17 @@ export function installPreviewFixtures(): void {
   if (installed) return;
   installed = true;
   const real = globalThis.fetch.bind(globalThis);
+
+  // Audit 1.12: the harness must never open realtime sockets to production
+  // (subscribeTopic's market/shops/news feeds, user-table listeners). Every
+  // channel is an inert stand-in: chainable, never connects.
+  const inert: Record<string, unknown> = {};
+  for (const k of ['on', 'subscribe', 'unsubscribe', 'send', 'track', 'untrack'])
+    inert[k] = () => inert;
+  const client = supabase as unknown as Record<string, unknown>;
+  client.channel = () => inert;
+  client.removeChannel = async () => 'ok';
+  client.removeAllChannels = async () => [];
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;

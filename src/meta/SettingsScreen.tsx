@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
+  BookOpen,
   Bot,
   Check,
   Eye,
   GraduationCap,
   Palette,
+  ScrollText,
   Sparkles,
   Timer,
   Waves,
@@ -57,6 +59,7 @@ import {
 } from './matchPrefs';
 import { restartCoach } from './coachPractice';
 import { usePersistedState } from './usePersistedState';
+import { saveCardTextPref, useCardTextPref } from '../components/cardInfoMode';
 import { MODES, MODE_IDS, MAX_SEATS, MIN_SEATS, type ModeId } from '../game/poker/constants';
 import { FORMATS, FORMAT_IDS, type FormatId } from '../game/poker/formats';
 
@@ -72,13 +75,16 @@ export function SettingsScreen({
   motionMode,
   onMotionModeChange,
   onBack,
+  onOpenCredits,
 }: {
   currentTheme: ThemeChoice;
   onThemeChange: (theme: ThemeChoice) => void;
   motionMode: MotionMode;
   onMotionModeChange: (mode: MotionMode) => void;
   onBack: () => void;
+  onOpenCredits?: () => void;
 }) {
+  const cardText = useCardTextPref();
   const themeList = Object.values(THEMES);
   const {
     profile,
@@ -292,6 +298,38 @@ export function SettingsScreen({
               <div className="relative w-28 h-7 ink-border-sm bg-[var(--c-paper)] overflow-hidden">
                 <span className="settings-motion-demo absolute top-1 left-1 w-5 h-5 bg-[var(--c-yellow)] ink-border-sm" />
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card text (audit 3.6): how Full-Art faces open outside the table. */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <BookOpen className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">CARD TEXT</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              Full-Art cards can tuck their rules away to show off the art. TUCKED keeps that look
+              (tap a card to open it); ALWAYS SHOW opens every card's name, cost and rules. The
+              table and the Deck Builder always show the text.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ['auto', 'TUCKED', 'Art first; tap to read'],
+                  ['open', 'ALWAYS SHOW', 'Every card opens with its text'],
+                ] as const
+              ).map(([id, label, blurb]) => (
+                <PopButton
+                  key={id}
+                  color={cardText === id ? 'yellow' : 'steel'}
+                  ariaPressed={cardText === id}
+                  onClick={() => saveCardTextPref(id)}
+                >
+                  <OptionLabel label={label} blurb={blurb} />
+                </PopButton>
+              ))}
             </div>
           </div>
         </div>
@@ -686,6 +724,23 @@ export function SettingsScreen({
                 <Notice text={error} />
               </div>
             )}
+          </div>
+        )}
+
+        {onOpenCredits && (
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-4">
+              <ScrollText className="w-6 h-6 text-[var(--c-ink)]" />
+              <h2 className="heading-font text-lg">CREDITS</h2>
+            </div>
+            <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[11px] font-bold text-[var(--c-steel)] max-w-xl">
+                The fonts, art and icons Fry Cards ships, with their designers and licences.
+              </p>
+              <PopButton color="steel" onClick={onOpenCredits}>
+                VIEW CREDITS
+              </PopButton>
+            </div>
           </div>
         )}
 

@@ -566,7 +566,7 @@ stack** a small buff.
 | Night Game      | No Quick Events this hand (Ambush cards still respond)                                                       | Neutral           |
 | Dealer's Choice | The dealer gets one free Peek (one card) on any of its turns; the shortest stack gets one too                | Favors the dealer |
 | House Rake      | The dealer antes 1 and collects 1 from the pot at the end of the hand                                        | Favors the dealer |
-| Bomb Pot        | Everyone antes 1 (or 2); no blinds and no pre-flop betting — straight to the flop                            | Chaos             |
+| Bomb Pot        | Everyone antes 1 (or 2); no blinds and no pre-flop betting — straight to the flop; the dealer acts first     | Chaos             |
 | Pineapple       | Three hole cards each; discard one after the flop                                                            | Structural        |
 | Straddle Night  | Under the gun posts a live double blind (not heads-up); the shortest stack's first power is one step cheaper | Position          |
 | Reverse Order   | Betting goes counter-clockwise; the shortest stack's first power is one step cheaper                         | Position          |

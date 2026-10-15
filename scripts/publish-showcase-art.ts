@@ -71,8 +71,13 @@ import {
 } from './lib/showcase';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
-const SUPABASE_KEY =
+const PUBLISHABLE_KEY =
   process.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_oA36yEu7RVuGR2V65ZzYZA_jhOn52bN';
+/** Audit 7.3: the pipeline RPCs move to service_role only once the workflow
+ * has SUPABASE_SERVICE_ROLE_KEY (docs/BACKEND_PENDING.md); until then the
+ * token (now rate-limited) on the publishable key still works. */
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_KEY = SERVICE_KEY || PUBLISHABLE_KEY;
 const TOKEN = process.env.ART_PIPELINE_TOKEN || '';
 const PROJECT = process.env.SHOWCASE_PAGES_PROJECT || 'frycards-showcase';
 const BASE = publicBase(PROJECT, process.env.SHOWCASE_ART_BASE_URL);
@@ -92,6 +97,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSessi
 const { data, error } = await supabase.rpc('art_pipeline_jobs', { p_token: TOKEN, p_limit: LIMIT });
 if (error) {
   console.error('art_pipeline_jobs failed:', error.message);
+  process.exit(1);
+}
+// The gate answers a bad token (or the rate-limit lockout) with an error
+// field instead of raising, so the failed attempt is recorded.
+if (data && typeof data === 'object' && 'error' in data) {
+  console.error('art_pipeline_jobs refused:', (data as { error: string }).error);
   process.exit(1);
 }
 const jobs = parseJobs(data);
@@ -343,6 +354,10 @@ if (results.length > 0) {
     console.error('art_pipeline_report failed:', rep.error.message);
     process.exit(1);
   }
+  if (typeof rep.data === 'number' && rep.data < 0) {
+    console.error('art_pipeline_report refused: bad token or rate limited');
+    process.exit(1);
+  }
   console.log(`Reported ${rep.data} card result(s).`);
 }
 if (cosmeticResults.length > 0) {
@@ -352,6 +367,10 @@ if (cosmeticResults.length > 0) {
   });
   if (rep.error) {
     console.error('cosmetics_mirror_report failed:', rep.error.message);
+    process.exit(1);
+  }
+  if (typeof rep.data === 'number' && rep.data < 0) {
+    console.error('cosmetics_mirror_report refused: bad token or rate limited');
     process.exit(1);
   }
   console.log(`Repointed ${rep.data} cosmetic image(s).`);

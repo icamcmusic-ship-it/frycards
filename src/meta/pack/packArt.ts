@@ -56,6 +56,13 @@ const GROUP_COLORS: Record<string, string> = {
   color_shadow: '#5B3E8F',
   color_void: '#2B2D42',
 };
+/** "Void Pack" → "color_void": the colour pack's group from its name, for
+ * places that only know the pack's name (the opening animation). */
+export function colorGroupFromName(name: string): string | null {
+  const m = /^(void|ember|shadow|light|root|gale|tide) pack\b/i.exec(name.trim());
+  return m ? `color_${m[1].toLowerCase()}` : null;
+}
+
 export function packColor(p: Pick<PackType, 'pack_group' | 'pack_tier' | 'acquisition'>): string {
   if (p.pack_group && GROUP_COLORS[p.pack_group]) return GROUP_COLORS[p.pack_group];
   if (p.acquisition === 'daily_free' || p.pack_tier === 'daily') return '#22C55E';
