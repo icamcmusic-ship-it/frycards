@@ -86,6 +86,27 @@ export interface ChangelogEntry {
 // headline, so the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: '35.8',
+    name: 'Card Shine',
+    date: 'October 2026',
+    tagline: 'Every rarity now catches the light its own way when you tilt it.',
+    items: [
+      {
+        title: 'A shine for every rarity',
+        body: 'Tilt a card in the inspector (or your phone) and it catches the light: Common has Grease Glare, Uncommon a Fryer Sheen, Rare a Chip-Stack Holo over the art, Super-Rare a Colour Bleed in the card\u2019s own colour, Ultra-Rare a Contraband Cosmos sparkle on the crate, Mythic an Opening Night Prism and Full-Art a Headliner Oil Slick. Foil copies add a Grease-Fire Reverse frame and Serialized prints a brushed Pit Boss Plate.',
+        category: 'collection',
+        icon: Sparkles,
+        route: { screen: 'collection', label: 'OPEN COLLECTION' },
+      },
+      {
+        title: 'Shine where it counts',
+        body: 'Pack reveals light the card up as it flips, with a sweep of light for Ultra-Rare and above. Collection cards shine on hover or focus; table cards stay plain until you inspect them. The shine never covers card text, and Reduced Motion shows a still, readable pose.',
+        category: 'qol',
+        icon: Sparkles,
+      },
+    ],
+  },
+  {
     version: '35.7',
     name: 'Season 2 & New Card Faces',
     date: 'October 2026',

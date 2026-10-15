@@ -3014,13 +3014,16 @@ function CardFacePlain({
         className="flex items-center justify-between gap-1 min-w-0 pr-1"
         style={{ fontSize: size === 'full' ? 7.5 : size === 'standard' ? 5.5 : 5 }}
       >
-        <span className="fa-bill min-w-0 flex-1 break-words leading-tight">
+        <span data-holo-protect="" className="fa-bill min-w-0 flex-1 break-words leading-tight">
           {faBillText(def, cfg.showSetSuffix)}
         </span>
         {costMark}
       </div>
       <h3
         className={cn('fa-name m-0', nameScrim?.className)}
+        // HoloLayer cuts a hard hole here: the oil slick washed out the
+        // coloured headliner title.
+        data-holo-protect=""
         title={def.name}
         data-text={def.name}
         style={{ ...nameScrim?.style, fontSize: faNamePx, marginTop: size === 'full' ? 4 : 2 }}
@@ -3030,6 +3033,7 @@ function CardFacePlain({
       {faTag && (
         <div
           aria-hidden
+          data-holo-protect=""
           className={cn('fa-tag', tagScrim?.className)}
           style={{
             ...tagScrim?.style,

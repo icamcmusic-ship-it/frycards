@@ -47,6 +47,8 @@ import {
 import { cn } from '../lib/utils';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { CARD_SIZES, CardFace } from '../components/CardFaceV4';
+import { HoloLayer, tierForRarity } from '../components/holo/HoloLayer';
+import { useHoloTilt } from '../components/holo/useHoloTilt';
 import { collectionCsv, downloadText } from './csv';
 import {
   loadWishlist,
@@ -174,6 +176,13 @@ const CollectionTile = React.memo(function CollectionTile({
     () => onInspect(def, kind === 'foil' || (kind === 'variant' && !!variantFoil), serial, variant),
     [onInspect, def, kind, serial, variant, variantFoil],
   );
+  // Holo foil runs on hover / keyboard focus only; off-hover the tile is the
+  // plain face (foil copies keep CardFace's cheap static shimmer).
+  const reduced = useReducedMotion();
+  const holoRef = useRef<HTMLDivElement>(null);
+  const holo = useHoloTilt(holoRef, { reduced });
+  const [live, setLive] = useState(false);
+  const isFoil = kind === 'foil' || (kind === 'variant' && !!variantFoil);
   return (
     <div
       style={{
@@ -182,28 +191,47 @@ const CollectionTile = React.memo(function CollectionTile({
         padding: 8,
         margin: -8,
       }}
+      onPointerEnter={() => setLive(true)}
+      onPointerLeave={() => setLive(false)}
+      onFocus={() => {
+        setLive(true);
+        holo.current?.set({ act: 0.6 });
+      }}
+      onBlur={() => {
+        setLive(false);
+        holo.current?.set({ act: 0 });
+      }}
     >
-      <CardFace
-        def={def}
-        size={size}
-        count={kind !== 'serialized' ? count : undefined}
-        foil={kind === 'foil' || (kind === 'variant' && !!variantFoil)}
-        variant={kind === 'variant' ? variant : undefined}
-        serial={serial}
-        dimmed={kind === 'normal' && count === 0}
-        badge={
-          isNew
-            ? '● NEW'
-            : kind === 'variant' && variant
-              ? `◆ ${VARIANT_META[variant].short}`
-              : wished
-                ? '♥ WISH'
-                : spare
-                  ? `${spare} SPARE`
-                  : undefined
-        }
-        onClick={onClick}
-      />
+      <div ref={holoRef} className="relative" style={{ width: w, height: h }}>
+        <CardFace
+          def={def}
+          size={size}
+          count={kind !== 'serialized' ? count : undefined}
+          foil={kind === 'foil' || (kind === 'variant' && !!variantFoil)}
+          variant={kind === 'variant' ? variant : undefined}
+          serial={serial}
+          dimmed={kind === 'normal' && count === 0}
+          badge={
+            isNew
+              ? '● NEW'
+              : kind === 'variant' && variant
+                ? `◆ ${VARIANT_META[variant].short}`
+                : wished
+                  ? '♥ WISH'
+                  : spare
+                    ? `${spare} SPARE`
+                    : undefined
+          }
+          onClick={onClick}
+        />
+        {live && (
+          <HoloLayer
+            tier={tierForRarity(def.rarity)}
+            finish={serial ? 'serialized' : isFoil ? 'foil' : null}
+            colour={def.colors?.[0]}
+          />
+        )}
+      </div>
     </div>
   );
 });

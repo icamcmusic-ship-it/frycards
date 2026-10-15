@@ -8,6 +8,8 @@ import { PackPull, quicksellMany } from '../lib/supabase';
 import { CardDef } from '../game/poker/cards';
 import { POOL, POOL_BY_ID } from '../game/poker/cardpool';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
+import { tierForRarity } from '../components/holo/HoloLayer';
+import { LiveHolo } from '../components/holo/LiveHolo';
 import { PopButton, Notice } from './ui';
 import { Card3DInspector } from '../components/Card3DInspector';
 import { cn } from '../lib/utils';
@@ -844,6 +846,23 @@ function RevealStage({
                     : undefined
                 }
               />
+              {currentShown && !current.converted_to_credits && (
+                // Holo foil on the revealed card only: the light ramps in
+                // with the flip, UR and above get one automatic sweep once
+                // it lands, and the key unmounts it on the next card.
+                <LiveHolo
+                  key={index}
+                  tier={tierForRarity(current.rarity)}
+                  finish={current.serialized ? 'serialized' : current.foil ? 'foil' : null}
+                  colour={currentDef?.colors?.[0]}
+                  reduced={reducedMotion}
+                  sweepAfterMs={
+                    rarityRank(current.rarity) >= rarityRank('Ultra-Rare')
+                      ? flipSecs * 1000
+                      : undefined
+                  }
+                />
+              )}
               {currentShown && isWishlisted(current.card_id, wishUid) && <WishlistHit />}
               {currentShown && current.foil && !current.converted_to_credits && (
                 <FoilShimmer reducedMotion={reducedMotion} />

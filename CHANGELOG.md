@@ -9,6 +9,26 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v35.8 — Card shine per rarity
+
+- **Holo foil per rarity** (`src/components/holo/`): every texture is
+  procedural (SVG turbulence, seeded sparkle), driven by a spring tilt that
+  writes CSS variables (no React render per move) and follows device
+  orientation. Common **Grease Glare**, Uncommon **Fryer Sheen**, Rare
+  **Chip-Stack Holo** (art window), Super-Rare **Colour Bleed** (card colour),
+  Ultra-Rare **Contraband Cosmos** (crate frame + stamp glint), Mythic
+  **Opening Night Prism**, Full-Art **Headliner Oil Slick**; foil copies add
+  **Grease-Fire Reverse** (frame only), Serialized **Pit Boss Plate**.
+- Where it runs: the inspector (replaces its glare / foil / UR glint / Mythic
+  glow); the pack reveal (revealed card only, ramps in with the flip, one
+  auto-sweep for UR+); Collection tiles on hover/focus only; table hand and
+  board cards stay plain until inspected. Reduced motion (OS or in-app) shows
+  a static pose. CSS is injected on first use (eager CSS budget unchanged).
+- Readability: every text line and `[data-holo-protect]` element (the
+  Full-Art headliner title) is a hard hole in every layer, glare included;
+  Mythic's text box is fully masked. `audit:cardface` gains a holo pass that
+  fails if a full-strength foil changes text pixels or lowers text contrast.
+
 ### v35.7 — Season 2, weekly colour packs, new premium faces (second-pass audit)
 
 - **Season 2 — Red Tide** starts when Season 1 ends (2026-11-10), same length

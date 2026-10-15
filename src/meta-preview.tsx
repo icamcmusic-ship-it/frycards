@@ -447,7 +447,13 @@ const screen = params.get('screen') ?? 'collection';
 if (params.get('role') === 'creator') profile.role = 'creator';
 
 // A non-Leader card with some metadata rows, for the 3D inspector preview.
-const inspectDef = POOL.find((c) => c.type !== 'Leader')!;
+// `&irarity=<rarity>` reprints it at that rarity (each tier's holo foil),
+// `&finish=normal|foil|serial` picks the copy.
+const inspectRarity = params.get('irarity');
+const inspectFinish = params.get('finish') ?? 'foil';
+const inspectDef = ((d) => (inspectRarity ? ({ ...d, rarity: inspectRarity } as typeof d) : d))(
+  POOL.find((c) => c.type !== 'Leader')!,
+);
 
 // `?screen=variants`: one variant (`&v=`) on a framed and a full-bleed card of
 // its colour, at every size (`view=front`), in the 3D inspector (`view=3d`),
@@ -564,7 +570,8 @@ createRoot(document.getElementById('root')!).render(
     ) : screen === 'inspect' ? (
       <Card3DInspector
         def={inspectDef}
-        foil
+        foil={inspectFinish === 'foil'}
+        serial={inspectFinish === 'serial' ? { number: 7, cap: 50 } : undefined}
         canToggleFoil
         meta={[
           { label: 'Rarity', value: inspectDef.rarity ?? 'Common' },
