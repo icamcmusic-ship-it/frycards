@@ -7,9 +7,12 @@
  * before v7.2: the guaranteed-foil slot type and the per-slot-vs-per-pack foil
  * rate.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { PackType } from '../lib/supabase';
 import {
+  expectedQuicksellValue,
   expectedRarities,
   packBlurb,
   packCardCount,
@@ -275,5 +278,48 @@ describe('store copy generated from slot_config (A4)', () => {
     const p = { ...live, slot_config: [live.slot_config[0]] } as PackType;
     expect(packGuaranteeBadge(p)).toBeNull();
     expect(packBlurb(p)).toBe('4 cards.');
+  });
+});
+
+// The Collector Pack's slot_config, read from the migration that seeds it, so
+// this mirror and the server can never disagree.
+describe('Collector Pack (20261015000400)', () => {
+  const sql = readFileSync(
+    join(__dirname, '../../supabase/migrations/20261015000400_collector_pack_and_bundles.sql'),
+    'utf8',
+  );
+  const slots = JSON.parse(/'(\[\{"count":2[\s\S]*?\])'::jsonb/.exec(sql)![1]);
+  const collector = {
+    ...pack(),
+    name: 'Volume #1 Collector Pack',
+    card_count: 5,
+    foil_chance: 0.0118,
+    price_credits: 1499,
+    pack_tier: 'collector',
+    slot_config: slots,
+  } as PackType;
+
+  test('5 cards, one guaranteed foil, a UR+ badge generated from slot_config', () => {
+    expect(packCardCount(collector)).toBe(5);
+    expect(packFoilChance(collector).guaranteed).toBe(1);
+    expect(packGuarantee(collector)).toBe('Ultra-Rare');
+    expect(packGuaranteeBadge(collector)).toBe('UR+ GUARANTEED');
+    expect(packContentsLines(collector)).toContain('1× Ultra-Rare to Mythic');
+  });
+
+  test('every slot sums to 1 and the collector slot cannot roll below UR', () => {
+    for (const row of packOdds(collector)) {
+      expect(Object.values(row.weights).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 6);
+    }
+    const coll = packOdds(collector).find((r) => r.label === 'COLLECTOR')!;
+    for (const r of Object.keys(coll.weights))
+      expect(RARITY_ORDER.indexOf(r)).toBeGreaterThanOrEqual(RARITY_ORDER.indexOf('Ultra-Rare'));
+  });
+
+  test('priced between the Booster and the Box on expected value', () => {
+    // Booster 599 returns ~60%, Box 3799 ~76% (see the migration header).
+    const ratio = expectedQuicksellValue(collector) / 1499;
+    expect(ratio).toBeGreaterThan(0.6);
+    expect(ratio).toBeLessThan(0.76);
   });
 });

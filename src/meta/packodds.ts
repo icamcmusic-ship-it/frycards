@@ -262,10 +262,18 @@ export function packBlurb(pack: PackType & { allowed_colors?: string[] | null })
   return s;
 }
 
-/** Badge text, e.g. "RARE+ GUARANTEED", or null. */
+/** Short badge names for the hyphenated rarities, so a tile badge fits. */
+const BADGE_ABBR: Record<string, string> = {
+  'Super-Rare': 'SR',
+  'Ultra-Rare': 'UR',
+  'Full-Art': 'FA',
+  'Alt-Art': 'AA',
+};
+
+/** Badge text, e.g. "RARE+ GUARANTEED" or "UR+ GUARANTEED", or null. */
 export function packGuaranteeBadge(pack: PackType): string | null {
   const g = packGuarantee(pack);
-  return g ? `${g.toUpperCase()}+ GUARANTEED` : null;
+  return g ? `${BADGE_ABBR[g] ?? g.toUpperCase()}+ GUARANTEED` : null;
 }
 
 /** "What's inside" lines, one per slot row. */

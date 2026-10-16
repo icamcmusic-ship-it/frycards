@@ -66,6 +66,7 @@ export function colorGroupFromName(name: string): string | null {
 export function packColor(p: Pick<PackType, 'pack_group' | 'pack_tier' | 'acquisition'>): string {
   if (p.pack_group && GROUP_COLORS[p.pack_group]) return GROUP_COLORS[p.pack_group];
   if (p.acquisition === 'daily_free' || p.pack_tier === 'daily') return '#22C55E';
+  if (p.pack_tier === 'collector') return '#E0457B';
   if (p.pack_tier === 'box' || /box/i.test(p.pack_tier || '')) return '#A855F7';
   return '#FFD23F';
 }
