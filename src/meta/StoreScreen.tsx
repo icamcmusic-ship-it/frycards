@@ -45,7 +45,16 @@ import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 import { PackArt } from './pack/PackArt';
 import { packColor, packIconCandidates } from './pack/packArt';
 import { PackTile, StoreHero, WhatsInside, leavingIn } from './pack/StoreParts';
-import { fetchDailyDeals, type DailyDeal, type StorePack } from '../lib/storeApi';
+import {
+  bundlePrice,
+  fetchDailyDeals,
+  fetchShopBundles,
+  purchaseBundle,
+  type DailyDeal,
+  type ShopBundle,
+  type StorePack,
+} from '../lib/storeApi';
+import { BundleTile } from './pack/BundleTile';
 import { loadWishlist } from './wishlist';
 import { packCardCount } from './packodds';
 
@@ -198,6 +207,34 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     };
   }, []);
   const dealPct = (id: string) => deals.find((d) => d.pack_id === id)?.pct;
+  // Bundles (20261015000400): N sealed packs at a fixed price.
+  const [bundles, setBundles] = useState<ShopBundle[]>([]);
+  useEffect(() => {
+    let live = true;
+    void fetchShopBundles().then((b) => live && setBundles(b));
+    return () => {
+      live = false;
+    };
+  }, []);
+  /** The bundle for `count` copies of `pack`, if one is on sale. */
+  const bundleFor = (pack: PackType, count: number) =>
+    bundles.find((b) => b.pack_type_id === pack.id && b.pack_qty === count);
+  /** Per-click request ids, kept until the server answers, so a retry after a
+   * dropped connection replays the first purchase instead of paying twice. */
+  const bundleReq = useRef(new Map<string, string>());
+  const bundleRequestId = (key: string) => {
+    let id = bundleReq.current.get(key);
+    if (!id) {
+      id = crypto.randomUUID();
+      bundleReq.current.set(key, id);
+    }
+    return id;
+  };
+  /** Charged total for a ×N buy & open: the bundle price when one exists. */
+  const bulkPrice = (pack: PackType, count: number, cur: 'credits' | 'vouchers') => {
+    const b = bundleFor(pack, count);
+    return b ? bundlePrice(b, pack, cur, dealPct(pack.id))?.price : undefined;
+  };
 
   // Standalone tiles render one-to-one. Grouped tiles (rows sharing a
   // pack_group — used when multiple set variants of a pack were live)
@@ -285,8 +322,20 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyId('bulk:' + pack.id + ':' + count);
+    const bundle = bundleFor(pack, count);
+    const reqKey = `open:${bundle?.id}:${currency}`;
     try {
-      const { data, error } = await buyAndOpenPacks(pack.id, count, currency);
+      // "Open 10" at the 10-pack bundle price when that bundle is on sale.
+      const { data, error } = bundle
+        ? await purchaseBundle(bundle.id, currency, bundleRequestId(reqKey), true).then((r) => ({
+            data:
+              r.data && r.data.cards
+                ? { ...r.data, cards: r.data.cards, packs_opened: r.data.packs_opened ?? count }
+                : null,
+            error: r.error,
+          }))
+        : await buyAndOpenPacks(pack.id, count, currency);
+      if (bundle) bundleReq.current.delete(reqKey);
       if (error || !data) {
         setError(error || 'Pack opening failed.');
         return;
@@ -300,6 +349,37 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       refreshProfile();
       refreshCollection();
     } catch {
+      setError('Something went wrong — check your connection and try again.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleBuyBundle = async (
+    bundle: ShopBundle,
+    pack: PackType,
+    currency: 'credits' | 'vouchers',
+  ) => {
+    if (!profile || busyId) return;
+    setError('');
+    setNotice('');
+    setBusyId('bundle:' + bundle.id);
+    const reqKey = `inv:${bundle.id}:${currency}`;
+    try {
+      const { data, error } = await purchaseBundle(bundle.id, currency, bundleRequestId(reqKey));
+      bundleReq.current.delete(reqKey);
+      if (error || !data) {
+        setError(error || 'Bundle purchase failed.');
+        return;
+      }
+      setNotice(
+        `${bundle.name} bought: ${data.quantity} × ${pack.name} added to MY PACKS for ${
+          currency === 'credits' ? fmtCredits(data.price_paid) : fmtVouchers(data.price_paid)
+        }.`,
+      );
+      await Promise.all([refreshProfile(), refreshInventory()]);
+    } catch {
+      // Network failure: the request id is kept, so pressing again is a safe retry.
       setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
@@ -613,6 +693,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       bulkCap={bulkCapFor}
                       onBuy={handleOpenPack}
                       onBuyBulk={handleOpenPacksBulk}
+                      bulkPrice={bulkPrice}
                       onSaveForLater={handleBuyToInventory}
                       onViewOdds={setOddsPack}
                     />
@@ -635,6 +716,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                   bulkCap={bulkCapFor}
                   onBuy={handleOpenPack}
                   onBuyBulk={handleOpenPacksBulk}
+                  bulkPrice={bulkPrice}
                   onSaveForLater={handleBuyToInventory}
                   onViewOdds={setOddsPack}
                 />
@@ -650,6 +732,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                   bulkCap={bulkCapFor}
                   onBuy={handleOpenPack}
                   onBuyBulk={handleOpenPacksBulk}
+                  bulkPrice={bulkPrice}
                   onSaveForLater={handleBuyToInventory}
                   onViewOdds={setOddsPack}
                 />
@@ -660,6 +743,27 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                 </div>
               )}
             </div>
+            {bundles.some((b) => packById.has(b.pack_type_id)) && (
+              <>
+                <h2 className="heading-font text-sm mt-6 mb-2">BUNDLES</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {bundles.map((b) => {
+                    const pack = packById.get(b.pack_type_id);
+                    return pack ? (
+                      <BundleTile
+                        key={b.id}
+                        bundle={b}
+                        pack={pack}
+                        profile={profile}
+                        busyId={busyId}
+                        dealPct={dealPct(pack.id)}
+                        onBuy={handleBuyBundle}
+                      />
+                    ) : null;
+                  })}
+                </div>
+              </>
+            )}
           </>
         ) : tab === 'my_packs' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
