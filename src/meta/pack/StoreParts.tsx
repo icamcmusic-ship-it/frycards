@@ -164,6 +164,7 @@ export function PackTile({
   onSaveForLater,
   onViewOdds,
   bulkCap,
+  bulkPrice,
 }: {
   key?: React.Key;
   variants: StorePack[];
@@ -176,6 +177,8 @@ export function PackTile({
   onSaveForLater: (pack: PackType, currency: Currency) => void;
   onViewOdds: (pack: PackType) => void;
   bulkCap: (pack: PackType) => number;
+  /** Charged total for ×N when a bundle covers it (the 10-pack price). */
+  bulkPrice?: (pack: PackType, count: number, currency: Currency) => number | undefined;
 }) {
   const [idx, setIdx] = useState(0);
   const grouped = variants.length > 1;
@@ -190,7 +193,8 @@ export function PackTile({
   const unit =
     dealPrice(currency === 'credits' ? pack.price_credits : pack.price_vouchers, pct) ?? 0;
   const baseUnit = (currency === 'credits' ? pack.price_credits : pack.price_vouchers) ?? 0;
-  const total = unit * qty;
+  const bundled = qty > 1 ? bulkPrice?.(pack, qty, currency) : undefined;
+  const total = bundled ?? unit * qty;
   const wallet = profile ? (currency === 'credits' ? profile.credits : profile.vouchers) : 0;
   const short = profile ? Math.max(0, total - wallet) : 0;
   const busyKey = qty === 1 ? pack.id : `bulk:${pack.id}:${qty}`;
@@ -223,6 +227,18 @@ export function PackTile({
           </span>
         )}
       </div>
+      {pack.pack_tier === 'collector' && (
+        // Premium band: inline so it adds nothing to the eager CSS budget.
+        <div
+          className="heading-font fs-xs text-center py-0.5 text-[#111]"
+          style={{
+            background:
+              'repeating-linear-gradient(135deg,#E0457B 0 10px,#FFD23F 10px 20px,#7DD3FC 20px 30px)',
+          }}
+        >
+          ★ COLLECTOR EDITION ★
+        </div>
+      )}
       <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative bg-[#111]">
         <PackArt
           candidates={packIconCandidates(pack)}
@@ -327,7 +343,7 @@ export function PackTile({
           ) : (
             <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
               {qty === 1 ? 'BUY & OPEN' : `BUY & OPEN ${qty}`} ·
-              {pct ? <s className="opacity-60">{baseUnit * qty}</s> : null}
+              {pct || bundled != null ? <s className="opacity-60">{baseUnit * qty}</s> : null}
               {money(total)}
             </span>
           )}

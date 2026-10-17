@@ -422,6 +422,27 @@ const GRADED_CARDS = [
 // The fixture tables
 // ---------------------------------------------------------------------------
 const TABLES: Record<string, unknown[]> = {
+  // 20261015000400 bundles, on the preview Booster (meta-preview.tsx).
+  shop_bundles: [
+    {
+      id: 'booster_3',
+      name: 'Booster 3-Pack',
+      pack_type_id: 'preview-booster',
+      pack_qty: 3,
+      price_credits: 1619,
+      price_vouchers: 16,
+      sort_order: 1,
+    },
+    {
+      id: 'booster_10',
+      name: 'Booster 10-Pack',
+      pack_type_id: 'preview-booster',
+      pack_qty: 10,
+      price_credits: 4799,
+      price_vouchers: 48,
+      sort_order: 2,
+    },
+  ],
   seasons: [
     {
       id: SEASON_ID,
@@ -636,6 +657,17 @@ const SHOP_FLOOR = {
 };
 
 const RPCS: Record<string, unknown> = {
+  // Answers the bundle buy so its confirmation can be measured. Nothing is
+  // written: `?bought=booster_10` on meta-preview shows the resulting shelf.
+  purchase_bundle: {
+    ok: true,
+    bundle_id: 'booster_10',
+    quantity: 10,
+    opened: false,
+    price_paid: 4799,
+    credits: 7701,
+    vouchers: 6,
+  },
   get_shop_customers: SHOP_FLOOR,
   daily_pack_deals: [
     {
@@ -772,7 +804,7 @@ const RPCS: Record<string, unknown> = {
  * these answer with a PostgREST-shaped error so the screen shows its own error
  * state rather than a success it never had. */
 const WRITE_RPC =
-  /^(buy_|sell_|claim_|create_|cancel_|open_|place_|equip_|set_|send_|respond_|remove_|save_|submit_|report_|rate_|update_|close_|reopen_|withdraw_|admin_|creator_|settle_|quicksell_|reveal_|crack_|preview_mystery_pool|record_match_result)/;
+  /^(buy_|purchase_|sell_|claim_|create_|cancel_|open_|place_|equip_|set_|send_|respond_|remove_|save_|submit_|report_|rate_|update_|close_|reopen_|withdraw_|admin_|creator_|settle_|quicksell_|reveal_|crack_|preview_mystery_pool|record_match_result)/;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

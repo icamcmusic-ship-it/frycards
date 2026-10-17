@@ -86,6 +86,29 @@ export interface ChangelogEntry {
 // headline, so the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: '36.1',
+    name: 'Collector Pack & Bundles',
+    date: 'October 2026',
+    tagline:
+      'A premium pack with an Ultra-Rare in every one, and booster bundles at up to 20% off.',
+    items: [
+      {
+        title: 'Collector Pack',
+        body: 'Five cards for 1,499 credits or 15 vouchers: one slot is always Ultra-Rare, Full-Art or Mythic, and one card is always foil. The guarantee is rolled on the server, and WHAT’S INSIDE shows the exact odds.',
+        category: 'collection',
+        icon: Sparkles,
+        route: { screen: 'store', label: 'SEE THE COLLECTOR PACK' },
+      },
+      {
+        title: 'Booster bundles',
+        body: 'Buy 3 Booster Packs for 1,619 credits (10% off) or 10 for 4,799 (20% off). They go straight into MY PACKS. BUY & OPEN ×10 now charges the 10-pack price too, and a retried purchase never charges twice.',
+        category: 'qol',
+        icon: Package,
+        route: { screen: 'store', label: 'SEE BUNDLES' },
+      },
+    ],
+  },
+  {
     version: '36.0',
     name: 'Table Fixes',
     date: 'October 2026',
