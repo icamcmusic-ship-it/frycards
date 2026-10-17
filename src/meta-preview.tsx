@@ -360,6 +360,65 @@ packTypes.push({
   } as object),
 });
 
+// The Collector Pack (migration 20261015000400): slot_config as seeded.
+packTypes.push({
+  ...packTypes[0],
+  id: 'preview-collector',
+  name: 'Volume #1 Collector Pack',
+  description: null,
+  card_count: 5,
+  guaranteed_rarity: 'Ultra-Rare',
+  price_credits: 1499,
+  price_vouchers: 15,
+  pack_tier: 'collector',
+  slot_config: [
+    {
+      count: 2,
+      slot_type: 'synergy',
+      foil_eligible: true,
+      rarity_weights: { Uncommon: 0.5, Rare: 0.42, 'Super-Rare': 0.08 },
+      guaranteed_min_rarity: 'Uncommon',
+    },
+    {
+      count: 1,
+      slot_type: 'chase',
+      foil_eligible: true,
+      rarity_weights: {
+        Rare: 0.65,
+        'Super-Rare': 0.17,
+        'Ultra-Rare': 0.11,
+        'Full-Art': 0.05,
+        Mythic: 0.02,
+      },
+      guaranteed_min_rarity: 'Rare',
+    },
+    {
+      count: 1,
+      slot_type: 'foil',
+      foil_eligible: true,
+      rarity_weights: {
+        Rare: 0.6,
+        'Super-Rare': 0.28,
+        'Ultra-Rare': 0.08,
+        'Full-Art': 0.03,
+        Mythic: 0.01,
+      },
+      foil_chance_override: 1,
+      guaranteed_min_rarity: 'Rare',
+    },
+    {
+      count: 1,
+      slot_type: 'collector',
+      foil_eligible: true,
+      rarity_weights: { 'Ultra-Rare': 0.75, 'Full-Art': 0.17, Mythic: 0.08 },
+      guaranteed_min_rarity: 'Ultra-Rare',
+    },
+  ],
+  time_limited: false,
+  pack_group: null,
+  ...({ available_until: null, allowed_colors: null } as object),
+} as PackType);
+
 const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar'] as const)
   .map((item_type, i) => ({
     id: `preview-cosmetic-${i}`,
@@ -412,6 +471,9 @@ const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar']
 // numbered-print plates. The audit's whole job is measuring populated layouts
 // at phone width; three of them had no population to measure.
 const inventory = packTypes.map((p, i) => ({ pack_type_id: p.id, quantity: 1 + i * 2 }));
+// `?bought=booster_10`: My Packs as it reads after the 10-pack bundle lands.
+if (new URLSearchParams(window.location.search).get('bought') === 'booster_10')
+  inventory[0].quantity += 10;
 const cosmetics = shopItems.slice(0, 3).map((s, i) => ({ shop_item_id: s.id, is_foil: i === 0 }));
 const serializedCards = POOL.filter((c) => c.type !== 'Leader')
   .slice(0, 4)
