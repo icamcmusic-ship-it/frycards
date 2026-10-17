@@ -4,6 +4,10 @@
  * real openings (real roll_weighted_rarity), bundles debit their price, a
  * short wallet is refused without side effects, and a retried request id
  * never grants twice. Applied twice (idempotent).
+ *
+ * grant_pack_contents here is the 20261012000020 one. The live 20261013000010
+ * version adds variant rolls but keeps the same slot loop: weights through
+ * roll_weighted_rarity(weights, floor), and a `foil` slot is always foil.
  */
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';

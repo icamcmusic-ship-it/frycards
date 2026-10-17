@@ -17,6 +17,8 @@
 --    deal never makes the bundle the worse buy.
 --
 -- No semicolons inside string literals (the MCP apply path splits on them).
+-- Applied live 2026-10-17 one statement per apply_migration call: the MCP
+-- apply path hung on every multi-statement payload of this file.
 
 insert into public.pack_types (name, description, card_count, guaranteed_rarity, image_url,
   foil_chance, has_foil_slot, price_credits, price_vouchers, pack_tier, slot_config, is_active,

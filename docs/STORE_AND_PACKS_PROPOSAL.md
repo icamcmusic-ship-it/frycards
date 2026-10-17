@@ -166,7 +166,7 @@ The client already looks for these files (`src/meta/pack/packArt.ts`). Upload th
 
 Hero `<campaign>` is the featured pack's slug (for example `hero_ember_pack.webp`), or `daily_deal` when the hero is today's deal pack.
 
-Slugs needed today: `volume_1_booster_pack`, `volume_1_booster_box`, `daily_free_pack`, `season_pass_reward_pack`, `deck_box`, `ember_pack`, `tide_pack`, `root_pack`, `gale_pack`, `light_pack`, `shadow_pack`, `void_pack`.
+Slugs needed today: `volume_1_booster_pack`, `volume_1_collector_pack`, `volume_1_booster_box`, `daily_free_pack`, `season_pass_reward_pack`, `deck_box`, `ember_pack`, `tide_pack`, `root_pack`, `gale_pack`, `light_pack`, `shadow_pack`, `void_pack`.
 
 ### Daily deal and colour packs (migration `20261012000020`)
 
@@ -179,3 +179,18 @@ Slugs needed today: `volume_1_booster_pack`, `volume_1_booster_box`, `daily_free
   ```
 
   The Store shows a "LEAVING IN 3D" ribbon from `available_until`, and every buy RPC refuses the pack once it has passed.
+
+### Collector Pack and bundles (migration `20261015000400`)
+
+- `Volume #1 Collector Pack`: 5 cards, 1,499 cr / 15 v, `pack_tier = 'collector'`. One `collector` slot (Ultra-Rare 75%, Full-Art 17%, Mythic 8%, floor Ultra-Rare) and one guaranteed foil. Its expected quicksell value is 61% of its price, between the Booster (60%) and the Box (76%).
+- `shop_bundles`: Booster 3-Pack (1,619 cr / 16 v, 10% off) and Booster 10-Pack (4,799 cr / 48 v, 20% off), bought through `purchase_bundle(bundle_id, currency, request_id, open)` into My Packs. To add a bundle, insert a `shop_bundles` row. To retire one, set `is_active = false`.
+- Until art lands, both use the CSS wrapper fallback (the Collector wrapper is pink, `#E0457B`). Art drop-in paths:
+
+| Path | Size | Used for |
+|---|---|---|
+| `https://frycards-art.pages.dev/Packs/volume_1_collector_pack/icon.webp` | 800x1000 | Collector Pack store tile and My Packs |
+| `https://frycards-art.pages.dev/Packs/volume_1_collector_pack/wrapper.webp` | 770x960 | Collector Pack tear wrapper |
+| `https://frycards-art.pages.dev/Packs/volume_1_collector_pack/strip.webp` | 770x960 (top 15% is the strip) | Collector Pack tear strip |
+| `https://frycards-art.pages.dev/Packs/volume_1_booster_pack/icon.webp` | 800x1000 | Also shown on both bundle tiles |
+
+  Dedicated bundle key art (`bundle_<slug>.webp`, 1200x800) is not wired yet. The tiles use the bundled pack's icon.

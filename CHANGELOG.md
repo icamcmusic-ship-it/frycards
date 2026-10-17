@@ -9,6 +9,33 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v36.1 — Collector Pack and booster bundles
+
+- **Collector Pack** (`Volume #1 Collector Pack`, 5 cards, 1,499 cr / 15 v):
+  two synergy (Uncommon+), one chase (Rare+), one guaranteed-foil Rare+ and
+  one `collector` slot that rolls Ultra-Rare 75% / Full-Art 17% / Mythic 8%
+  with `guaranteed_min_rarity = 'Ultra-Rare'`, so `grant_pack_contents`
+  enforces the floor server-side. The tile's `UR+ GUARANTEED` badge, blurb
+  and odds are generated from `slot_config` (packodds.ts, tested against the
+  migration). Pricing by expected quicksell value: Booster 357 cr for 599
+  (60%), Collector 917 for 1,499 (61%), Box 2,879 for 3,799 (76%). It is the
+  quick route to a UR+, but it never beats the Box on value.
+- **Bundles** (`shop_bundles`, `purchase_bundle(bundle, currency,
+  request_id, open)`): Booster 3-Pack 1,619 cr / 16 v (10% off) and Booster
+  10-Pack 4,799 cr / 48 v (20% off), returning 66% and 74%, both still under
+  the Box. Packs go to MY PACKS. The RPC is SECURITY DEFINER with
+  `search_path = public`, locks the profile row and debits atomically, and
+  charges the lower of the bundle price and today's deal price x quantity.
+  `bundle_purchases` is unique per (user, request_id), so a retry replays the
+  first result without a second debit or grant. BUY & OPEN ×10 on the
+  Booster uses the 10-pack price (`p_open = true`).
+- Store: a BUNDLES row (strike-through value, SAVE X% ribbon, cost per card)
+  using the CSS wrapper fallback until art lands, and a premium band on the
+  Collector tile drawn with an inline style (no new eager CSS).
+- Migration `20261015000400_collector_pack_and_bundles.sql`, tests in
+  `supabase/store-bundles.test.ts` (400 server openings all UR+ with a foil,
+  debits, insufficient funds, retry replay).
+
 ### v36.0 — Table fixes: one card sheet, no dead ends
 
 - **One card sheet** (`src/components/CastSheet.tsx`): tapping a card in your
